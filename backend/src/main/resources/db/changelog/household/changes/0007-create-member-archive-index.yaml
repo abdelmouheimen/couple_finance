@@ -1,0 +1,16 @@
+databaseChangeLog:
+  - changeSet:
+      id: household-0007-create-member-archive-index
+      author: couplefinance
+      comment: >
+        ix_member_archive serves the archive-reader lookup of HouseholdContext resolution (BR-HH-10): finding the
+        dissolved households a user left whose archive_access_until has not expired
+        (database-schema.md §5.3). Partial: most rows have no archive access.
+      changes:
+        - sql:
+            sql: >
+              CREATE INDEX ix_member_archive ON household.household_member (user_id)
+              WHERE archive_access_until IS NOT NULL
+      rollback:
+        - sql:
+            sql: DROP INDEX household.ix_member_archive

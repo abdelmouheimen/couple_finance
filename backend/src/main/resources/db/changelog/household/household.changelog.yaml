@@ -12,3 +12,5 @@ databaseChangeLog:
       file: db/changelog/household/changes/0005-create-period-rule.yaml
   - include:
       file: db/changelog/household/changes/0006-create-audit-event.yaml
+  - include:
+      file: db/changelog/household/changes/0007-create-member-archive-index.yaml
