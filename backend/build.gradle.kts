@@ -46,6 +46,8 @@ dependencies {
     testImplementation("org.springframework.modulith:spring-modulith-starter-test")
     testImplementation("org.testcontainers:testcontainers-junit-jupiter")
     testImplementation("org.testcontainers:testcontainers-postgresql")
+    // Property-based tests for Money (architecture.md §8: "jqwik ... for Money, expense items, parsers").
+    testImplementation("net.jqwik:jqwik:1.9.3")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
