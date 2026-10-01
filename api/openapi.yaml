@@ -56,6 +56,40 @@ paths:
       summary: Create a household
       tags:
       - Households
+  /api/v1/households/me:
+    get:
+      description: "Returns the household of the authenticated user, derived server-side.\
+        \ A former member of a dissolved household reads it (status DISSOLVED) until\
+        \ the archive access expires."
+      operationId: getCurrentHousehold
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Household"
+          description: The caller's household
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: AUTHENTICATION_REQUIRED
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: EMAIL_NOT_VERIFIED
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: "HOUSEHOLD_NOT_FOUND: no household and no archive access"
+      summary: Get the current household
+      tags:
+      - Households
 components:
   schemas:
     CreateHouseholdRequest:

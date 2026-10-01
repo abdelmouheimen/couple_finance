@@ -33,7 +33,8 @@ class LiquibaseMigrationIntegrationTest {
                 "household-0003-create-household",
                 "household-0004-create-household-member",
                 "household-0005-create-period-rule",
-                "household-0006-create-audit-event");
+                "household-0006-create-audit-event",
+                "household-0007-create-member-archive-index");
     }
 
     @Test
