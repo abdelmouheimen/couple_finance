@@ -17,7 +17,7 @@ class LiquibaseMigrationIntegrationTest {
 
     @Test
     void master_changelog_is_applied_on_startup_in_module_dependency_order() {
-        List<String> applied = jdbc.sql("SELECT id FROM databasechangelog ORDER BY orderexecuted")
+        List<String> applied = jdbc.sql("SELECT id FROM databasechangelog WHERE id NOT LIKE 'test-%' ORDER BY orderexecuted")
                 .query(String.class)
                 .list();
 
