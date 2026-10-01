@@ -1,5 +1,8 @@
 package com.couplefinance.shared.security;
 
+import com.couplefinance.shared.ratelimit.RateLimitFilter;
+import com.couplefinance.shared.ratelimit.RateLimiter;
+import com.couplefinance.shared.ratelimit.RateLimiter.Stage;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -9,6 +12,7 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.web.servlet.HandlerExceptionResolver;
 
@@ -34,7 +38,8 @@ public class SecurityConfiguration {
     @Bean
     SecurityFilterChain apiSecurityFilterChain(
             HttpSecurity http,
-            @Qualifier("handlerExceptionResolver") HandlerExceptionResolver exceptionResolver) throws Exception {
+            @Qualifier("handlerExceptionResolver") HandlerExceptionResolver exceptionResolver,
+            RateLimiter rateLimiter) throws Exception {
         AuthenticationEntryPoint problemEntryPoint =
                 (request, response, ex) -> exceptionResolver.resolveException(request, response, null, ex);
         AccessDeniedHandler problemAccessDeniedHandler =
@@ -46,6 +51,14 @@ public class SecurityConfiguration {
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .logout(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                // Spring Security's cache-control writer sends "no-cache, no-store, max-age=0, must-revalidate"
+                // on every response, so no authenticated response is cacheable (security.md section 5).
+                .headers(headers -> headers.cacheControl(Customizer.withDefaults()))
+                // Rate limiting: per IP before token authentication, per user right after it.
+                .addFilterBefore(new RateLimitFilter(rateLimiter, Stage.IP, exceptionResolver),
+                        BearerTokenAuthenticationFilter.class)
+                .addFilterAfter(new RateLimitFilter(rateLimiter, Stage.USER, exceptionResolver),
+                        BearerTokenAuthenticationFilter.class)
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
                         .anyRequest().authenticated())

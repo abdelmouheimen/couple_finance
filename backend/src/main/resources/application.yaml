@@ -39,6 +39,24 @@ couplefinance:
       #   COUPLEFINANCE_SECURITY_JWT_JWK_SET_URI  JWKS endpoint of the issuer; unset = no key trusted, every token rejected
       #   COUPLEFINANCE_SECURITY_JWT_ISSUER       expected iss claim (optional)
       audience: couplefinance-api
+  # API hardening conventions (security.md section 5). Values are configurable defaults, not business constants.
+  rate-limit:
+    enabled: true
+    # In-memory buckets per instance; bound on tracked keys per profile and stage (LRU eviction).
+    max-tracked-keys: 100000
+    # Per-IP limits use the container-resolved client address: behind a reverse proxy set
+    # SERVER_FORWARD_HEADERS_STRATEGY (e.g. NATIVE) so clients do not share the proxy's bucket.
+    profiles:
+      default:
+        ip: {capacity: 300, period: 1m}
+        user: {capacity: 600, period: 1m}
+    # Stricter profiles (auth, invitation redemption, receipt upload) are added with those features:
+    #   routes: [{pattern: "/api/v1/auth/**", profile: auth}]
+    routes: []
+  pagination:
+    # COUPLEFINANCE_PAGINATION_CURSOR_KEY: base64 of 32 random bytes (e.g. `openssl rand -base64 32`).
+    # Unset = random per-process key (cursors do not survive restarts or span instances): set it in production.
+    cursor-key:
   household:
     defaults:
       currency: EUR
