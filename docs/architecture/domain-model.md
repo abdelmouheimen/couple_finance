@@ -136,7 +136,7 @@ calendar, lifecycle (dissolution, archive, purge). Provides `HouseholdContext` f
 | Field | Type | Notes |
 |---|---|---|
 | `id` | `HouseholdId` | |
-| `name` | `String` | 1–60 chars. |
+| `name` | `String` | 1–100 chars, trimmed (BR-HH-16). |
 | `currency` | `CurrencyCode` | Immutable once referenced (BR-HH-06, see §11). |
 | `timezone` | `ZoneId` | Only for "today" (BR-HH-05). |
 | `periodSchedule` | `List<PeriodStartChange>` | `(effectiveFrom: LocalDate, startDay: 1..28)`; drives the calendar (BR-HH-07). |

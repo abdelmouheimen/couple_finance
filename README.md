@@ -64,7 +64,10 @@ on exit.
 | http://localhost:8080/swagger-ui.html | Swagger UI (local profile only) |
 | http://localhost:8080/v3/api-docs.yaml | Generated OpenAPI spec (local and test profiles only) |
 
-Every other endpoint requires authentication (none exists yet, so they answer `401`). All errors are
+Every other endpoint requires a bearer access token (JWT, ES256). Token issuance (login) is not implemented yet:
+set `COUPLEFINANCE_SECURITY_JWT_JWK_SET_URI` (and optionally `COUPLEFINANCE_SECURITY_JWT_ISSUER`) to the JWKS of
+an issuer you control; without it no key is trusted and every protected endpoint answers `401`. Tokens must carry
+`sub` = an existing, verified user id and `aud` = `couplefinance-api`. All errors are
 [RFC 9457 Problem Details](https://www.rfc-editor.org/rfc/rfc9457) with a stable `code` property.
 
 ## Build and test

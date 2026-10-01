@@ -192,7 +192,7 @@ Columns: `id uuid`, `user_id uuid`, `purpose text` (`EMAIL_VERIFY`, `PASSWORD_RE
 | Column | Type | Null | Notes |
 |---|---|---|---|
 | `id` | `uuid` | N | |
-| `name` | `text` | N | 1–60 chars. |
+| `name` | `text` | N | 1–100 chars, trimmed (BR-HH-16). |
 | `currency` | `char(3)` | N | |
 | `timezone` | `text` | N | IANA id, validated by the application (`ZoneId`). |
 | `status` | `text` | N | `ACTIVE`, `DISSOLVED`, `DELETED`. |
@@ -230,7 +230,9 @@ Columns: `id uuid`, `user_id uuid`, `purpose text` (`EMAIL_VERIFY`, `PASSWORD_RE
 ### 5.4 `household.period_rule`
 
 Columns: `household_id uuid`, `effective_from date`, `start_day smallint`, `created_at`, `created_by`.
-**PK** `(household_id, effective_from)` · **FK** `household_id → household` · **CK** `start_day BETWEEN 1 AND 28`.
+**PK** `(household_id, effective_from)` · **FK** `household_id → household ON DELETE CASCADE`;
+`created_by → identity.user_account` (not the composite member FK: membership and rule are inserted in the same
+transaction without a guaranteed order) · **CK** `start_day BETWEEN 1 AND 28`.
 The schedule from which periods are generated (BR-HH-07).
 
 ### 5.5 `household.budget_period`

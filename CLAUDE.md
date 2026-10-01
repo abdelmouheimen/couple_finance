@@ -31,7 +31,9 @@ Run from `backend/` (JDK 25 toolchain; Docker must be running for tests):
 | Run against a throw-away Testcontainers database | `./gradlew bootTestRun` |
 
 Integration tests use `@IntegrationTest` (`com.couplefinance.support`): one cached Spring context + one
-PostgreSQL container for the whole suite — reuse it rather than adding new context configurations.
+PostgreSQL container for the whole suite — reuse it rather than adding new context configurations. Use
+`TestUsers` to seed accounts and `TestTokens` to send real signed access tokens (never bypass token validation
+in integration tests). Tests share the database: create fresh users/households per test and scope assertions to them.
 
 ---
 

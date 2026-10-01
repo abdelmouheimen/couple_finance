@@ -39,7 +39,8 @@ of this document applies either way).
 |---|---|
 | Registration | Email + password; verified email required before creating/joining a household. Registration responses do not reveal whether an email is already registered (confirmation email sent in both cases). |
 | Password storage | Argon2id; breached-password check (k-anonymity) **[proposal]**; min 10 chars. |
-| Access token | JWT (EdDSA/ES256), **15 min**, claims `sub`, `sid`, `iat`, `exp`, `aud`. **No household id** — membership resolved per request. |
+| Access token | JWT signed with **ES256** (EdDSA may be added later), **15 min**, claims `sub`, `sid`, `iat`, `exp`, `aud`. **No household id** — membership resolved per request. |
+| Validation (implemented) | Resource server with keys from a JWKS endpoint (`couplefinance.security.jwt.jwk-set-uri`; none configured = every token rejected). Required: valid ES256 signature, `exp` present and not past (60 s skew), `sub` = user id, `aud` contains `couplefinance-api`, `iss` when configured. The user must exist and not be deleted (else 401) and be `ACTIVE` (else 403 `EMAIL_NOT_VERIFIED`). Token issuance (login) is not implemented yet. |
 | Revocation window | Access tokens stay valid up to 15 min after logout-all / password reset / account deletion (accepted). **Sensitive endpoints** (export, account deletion, dissolution, join approval, consent changes) additionally check that `sid` is not revoked. |
 | Refresh token | Opaque 256-bit, stored hashed, 30-day sliding, rotated on each use. **Reuse detection with a 30 s grace window**: presenting the just-rotated token within the window returns the same successor instead of revoking (handles parallel refreshes). Reuse outside the window revokes the session. |
 | Client | **Single-flight refresh** in the app: concurrent 401s wait on one refresh call. |
