@@ -24,3 +24,7 @@ node_modules/
 # OS
 .DS_Store
 Thumbs.db
+
+# Local working notes (not versioned)
+b6-investigation.md
+backlog-analysis.md
