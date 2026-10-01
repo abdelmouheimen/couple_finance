@@ -1,0 +1,35 @@
+databaseChangeLog:
+  - changeSet:
+      id: infra-0003-create-idempotency-key
+      author: couplefinance
+      comment: >
+        Idempotency keys of creating POSTs (BR-EXP-13, database-schema.md §12.1). The primary key (user_id, key)
+        is the concurrency control: the insert that claims a key decides which request executes. No foreign key
+        to the user (technical table, purged after 24 h). Stored response bodies may be PERSONAL data and are
+        only replayed to the owning user.
+        ix_idempotency_expiry serves the purge job (DELETE ... WHERE expires_at <= now).
+      changes:
+        - sql:
+            sql: |
+              CREATE TABLE infra.idempotency_key (
+                  user_id         uuid        NOT NULL,
+                  key             text        NOT NULL,
+                  operation       text        NOT NULL,
+                  request_hash    bytea       NOT NULL,
+                  status          text        NOT NULL,
+                  response_status smallint,
+                  response_body   jsonb,
+                  created_at      timestamptz NOT NULL,
+                  expires_at      timestamptz NOT NULL,
+                  CONSTRAINT pk_idempotency_key PRIMARY KEY (user_id, key),
+                  CONSTRAINT ck_idempotency_key_status CHECK (status IN ('IN_PROGRESS', 'DONE')),
+                  CONSTRAINT ck_idempotency_key_response
+                      CHECK ((status = 'DONE') = (response_status IS NOT NULL)),
+                  CONSTRAINT ck_idempotency_key_length CHECK (char_length(key) BETWEEN 1 AND 100),
+                  CONSTRAINT ck_idempotency_key_hash CHECK (octet_length(request_hash) = 32),
+                  CONSTRAINT ck_idempotency_key_expiry CHECK (expires_at > created_at)
+              );
+              CREATE INDEX ix_idempotency_expiry ON infra.idempotency_key (expires_at);
+      rollback:
+        - sql:
+            sql: DROP TABLE infra.idempotency_key

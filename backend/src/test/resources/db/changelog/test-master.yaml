@@ -17,3 +17,15 @@ databaseChangeLog:
                 name text NOT NULL,
                 version bigint NOT NULL DEFAULT 0
               )
+  - changeSet:
+      id: test-0002-create-idempotent-probe
+      author: couplefinance
+      comment: Counts executions of an idempotent creating endpoint (Issue #4).
+      changes:
+        - sql:
+            sql: >
+              CREATE TABLE test_support.idempotent_probe (
+                id uuid PRIMARY KEY,
+                owner_user_id uuid NOT NULL,
+                name text NOT NULL
+              )

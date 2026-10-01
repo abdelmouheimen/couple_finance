@@ -4,3 +4,5 @@ databaseChangeLog:
       file: db/changelog/infra/changes/0001-create-extensions.yaml
   - include:
       file: db/changelog/infra/changes/0002-create-infra-schema.yaml
+  - include:
+      file: db/changelog/infra/changes/0003-create-idempotency-key.yaml
