@@ -16,14 +16,23 @@ class LiquibaseMigrationIntegrationTest {
     JdbcClient jdbc;
 
     @Test
-    void master_changelog_is_applied_on_startup() {
+    void master_changelog_is_applied_on_startup_in_module_dependency_order() {
         List<String> applied = jdbc.sql("SELECT id FROM databasechangelog ORDER BY orderexecuted")
                 .query(String.class)
                 .list();
 
         assertThat(applied).containsExactly(
                 "infra-0001-create-btree-gist-extension",
-                "infra-0002-create-infra-schema");
+                "infra-0002-create-infra-schema",
+                "identity-0001-create-identity-schema",
+                "identity-0002-create-user-account",
+                "household-0001-create-household-schema",
+                "household-0002-create-currency",
+                "household-0002-seed-currencies",
+                "household-0003-create-household",
+                "household-0004-create-household-member",
+                "household-0005-create-period-rule",
+                "household-0006-create-audit-event");
     }
 
     @Test

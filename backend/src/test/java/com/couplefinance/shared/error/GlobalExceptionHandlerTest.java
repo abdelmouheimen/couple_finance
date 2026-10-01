@@ -15,6 +15,8 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.assertj.MockMvcTester;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -29,6 +31,10 @@ class GlobalExceptionHandlerTest {
 
     @Autowired
     MockMvcTester mvc;
+
+    /** The slice does not load the identity module; requests here authenticate with {@code user(..)}. */
+    @MockitoBean
+    JwtDecoder jwtDecoder;
 
     @Test
     void invalid_request_body_is_a_validation_problem_listing_each_field() {

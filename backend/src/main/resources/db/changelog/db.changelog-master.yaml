@@ -5,3 +5,7 @@
 databaseChangeLog:
   - include:
       file: db/changelog/infra/infra.changelog.yaml
+  - include:
+      file: db/changelog/identity/identity.changelog.yaml
+  - include:
+      file: db/changelog/household/household.changelog.yaml

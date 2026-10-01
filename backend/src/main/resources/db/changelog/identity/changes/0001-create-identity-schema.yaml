@@ -1,0 +1,10 @@
+databaseChangeLog:
+  - changeSet:
+      id: identity-0001-create-identity-schema
+      author: couplefinance
+      changes:
+        - sql:
+            sql: CREATE SCHEMA IF NOT EXISTS identity
+      rollback:
+        - sql:
+            sql: DROP SCHEMA IF EXISTS identity

@@ -1,0 +1,36 @@
+databaseChangeLog:
+  - changeSet:
+      id: household-0004-create-household-member
+      author: couplefinance
+      comment: >
+        Memberships (database-schema.md §5.3). The primary key (household_id, user_id) is also the target of the
+        composite foreign keys used by other modules (S4).
+        uq_member_seat_active: at most two active members per household (BR-HH-01, P6).
+        uq_member_user_active: one active household per user (BR-HH-02); also serves the per-request lookup of
+        the user's household.
+        ix_member_archive is deferred until dissolution exists (no speculative index).
+      changes:
+        - sql:
+            sql: |
+              CREATE TABLE household.household_member (
+                  household_id         uuid        NOT NULL,
+                  user_id              uuid        NOT NULL,
+                  seat                 smallint    NOT NULL,
+                  joined_at            timestamptz NOT NULL,
+                  left_at              timestamptz,
+                  archive_access_until timestamptz,
+                  CONSTRAINT pk_household_member PRIMARY KEY (household_id, user_id),
+                  CONSTRAINT fk_household_member_household FOREIGN KEY (household_id)
+                      REFERENCES household.household (id) ON DELETE CASCADE,
+                  CONSTRAINT fk_household_member_user FOREIGN KEY (user_id) REFERENCES identity.user_account (id),
+                  CONSTRAINT ck_household_member_seat CHECK (seat IN (1, 2)),
+                  CONSTRAINT ck_household_member_left CHECK (left_at IS NULL OR left_at >= joined_at),
+                  CONSTRAINT ck_household_member_archive CHECK (archive_access_until IS NULL OR left_at IS NOT NULL)
+              );
+              CREATE UNIQUE INDEX uq_member_seat_active ON household.household_member (household_id, seat)
+                  WHERE left_at IS NULL;
+              CREATE UNIQUE INDEX uq_member_user_active ON household.household_member (user_id)
+                  WHERE left_at IS NULL;
+      rollback:
+        - sql:
+            sql: DROP TABLE household.household_member
