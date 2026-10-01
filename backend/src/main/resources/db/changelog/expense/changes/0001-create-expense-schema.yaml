@@ -1,0 +1,10 @@
+databaseChangeLog:
+  - changeSet:
+      id: expense-0001-create-expense-schema
+      author: couplefinance
+      changes:
+        - sql:
+            sql: CREATE SCHEMA IF NOT EXISTS expense
+      rollback:
+        - sql:
+            sql: DROP SCHEMA IF EXISTS expense

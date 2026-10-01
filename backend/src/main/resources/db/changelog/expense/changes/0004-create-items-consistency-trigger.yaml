@@ -1,0 +1,61 @@
+databaseChangeLog:
+  - changeSet:
+      id: expense-0004-create-items-consistency-trigger
+      author: couplefinance
+      comment: >
+        ct_expense_items_consistent (database-schema.md section 7.2, BR-EXP-08): deferred constraint trigger
+        checked at commit for every touched expense: EXPENSE/REFUND have 1-10 items summing exactly to the amount,
+        TRANSFER has none. Deferred because an expense and its items are written by several statements of one
+        transaction. Enforces the money invariant even against bugs or manual SQL. The item lookup uses
+        uq_expense_item_position (leading expense_id).
+      changes:
+        - sql:
+            splitStatements: false
+            sql: |
+              CREATE FUNCTION expense.check_expense_items_consistent() RETURNS trigger
+              LANGUAGE plpgsql AS $$
+              DECLARE
+                  v_expense_id uuid;
+                  v_kind       text;
+                  v_amount     bigint;
+                  v_count      integer;
+                  v_sum        bigint;
+              BEGIN
+                  IF TG_TABLE_NAME = 'expense_item' THEN
+                      v_expense_id := CASE WHEN TG_OP = 'DELETE' THEN OLD.expense_id ELSE NEW.expense_id END;
+                  ELSE
+                      v_expense_id := CASE WHEN TG_OP = 'DELETE' THEN OLD.id ELSE NEW.id END;
+                  END IF;
+                  SELECT kind, amount_minor INTO v_kind, v_amount FROM expense.expense WHERE id = v_expense_id;
+                  IF NOT FOUND THEN
+                      RETURN NULL; -- the expense itself was deleted (items cascade)
+                  END IF;
+                  SELECT count(*), COALESCE(sum(amount_minor), 0) INTO v_count, v_sum
+                      FROM expense.expense_item WHERE expense_id = v_expense_id;
+                  IF v_kind IN ('EXPENSE', 'REFUND') THEN
+                      IF v_count < 1 OR v_count > 10 OR v_sum <> v_amount THEN
+                          RAISE EXCEPTION 'expense items do not match the expense amount'
+                              USING ERRCODE = '23514', CONSTRAINT = 'ct_expense_items_consistent';
+                      END IF;
+                  ELSIF v_count <> 0 THEN
+                      RAISE EXCEPTION 'a transfer has no items'
+                          USING ERRCODE = '23514', CONSTRAINT = 'ct_expense_items_consistent';
+                  END IF;
+                  RETURN NULL;
+              END;
+              $$;
+              CREATE CONSTRAINT TRIGGER ct_expense_items_consistent_expense
+                  AFTER INSERT OR UPDATE OR DELETE ON expense.expense
+                  DEFERRABLE INITIALLY DEFERRED FOR EACH ROW
+                  EXECUTE FUNCTION expense.check_expense_items_consistent();
+              CREATE CONSTRAINT TRIGGER ct_expense_items_consistent_item
+                  AFTER INSERT OR UPDATE OR DELETE ON expense.expense_item
+                  DEFERRABLE INITIALLY DEFERRED FOR EACH ROW
+                  EXECUTE FUNCTION expense.check_expense_items_consistent();
+      rollback:
+        - sql:
+            splitStatements: false
+            sql: |
+              DROP TRIGGER ct_expense_items_consistent_item ON expense.expense_item;
+              DROP TRIGGER ct_expense_items_consistent_expense ON expense.expense;
+              DROP FUNCTION expense.check_expense_items_consistent();

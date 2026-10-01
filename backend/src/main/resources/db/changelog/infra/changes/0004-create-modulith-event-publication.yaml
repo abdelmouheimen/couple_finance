@@ -1,0 +1,34 @@
+databaseChangeLog:
+  - changeSet:
+      id: infra-0004-create-modulith-event-publication
+      author: couplefinance
+      comment: >
+        Spring Modulith event publication registry (transactional outbox, database-schema.md section 12.3),
+        standard v2 PostgreSQL DDL placed in schema "modulith" (spring.modulith.events.jdbc.schema; schema
+        auto-creation is disabled, Liquibase owns it). Indexes are those of the standard DDL: the hash index on
+        serialized_event serves the registry's lookup of a publication by event, the completion_date index serves
+        its cleanup and incomplete-publication queries. The archive table is not created: completed publications
+        are retained in place (UPDATE completion mode) and purged after 7 days.
+      changes:
+        - sql:
+            sql: |
+              CREATE SCHEMA IF NOT EXISTS modulith;
+              CREATE TABLE modulith.event_publication (
+                  id                     uuid        NOT NULL,
+                  listener_id            text        NOT NULL,
+                  event_type             text        NOT NULL,
+                  serialized_event       text        NOT NULL,
+                  publication_date       timestamptz NOT NULL,
+                  completion_date        timestamptz,
+                  status                 text,
+                  completion_attempts    int,
+                  last_resubmission_date timestamptz,
+                  PRIMARY KEY (id)
+              );
+              CREATE INDEX event_publication_serialized_event_hash_idx
+                  ON modulith.event_publication USING hash (serialized_event);
+              CREATE INDEX event_publication_by_completion_date_idx
+                  ON modulith.event_publication (completion_date);
+      rollback:
+        - sql:
+            sql: DROP SCHEMA modulith CASCADE

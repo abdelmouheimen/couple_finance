@@ -25,6 +25,7 @@ class LiquibaseMigrationIntegrationTest {
                 "infra-0001-create-btree-gist-extension",
                 "infra-0002-create-infra-schema",
                 "infra-0003-create-idempotency-key",
+                "infra-0004-create-modulith-event-publication",
                 "identity-0001-create-identity-schema",
                 "identity-0002-create-user-account",
                 "household-0001-create-household-schema",
@@ -38,7 +39,12 @@ class LiquibaseMigrationIntegrationTest {
                 "household-0008-create-budget-period",
                 "categorization-0001-create-categorization-schema",
                 "categorization-0002-create-category",
-                "categorization-0003-seed-system-categories");
+                "categorization-0003-seed-system-categories",
+                "expense-0001-create-expense-schema",
+                "expense-0002-create-expense",
+                "expense-0003-create-expense-item",
+                "expense-0004-create-items-consistency-trigger",
+                "expense-0005-create-audit-event");
     }
 
     @Test

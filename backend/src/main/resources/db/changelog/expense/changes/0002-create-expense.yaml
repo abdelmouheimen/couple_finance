@@ -1,0 +1,79 @@
+databaseChangeLog:
+  - changeSet:
+      id: expense-0002-create-expense
+      author: couplefinance
+      comment: >
+        Expense aggregate root (database-schema.md section 7.1). Composite foreign keys pin every user role to a
+        member of the same household (S4) and the currency to the household currency (S3).
+        uq_expense_household_id is the target of the item and refund foreign keys. uq_expense_receipt: one expense
+        per receipt (BR-RCP-15). ck_expense_personal_owner: a PERSONAL expense belongs to its payer and creator
+        (BR-EXP-07). The read-side indexes of section 7.1 (history, personal, duplicate, refunds, deleted) are
+        deferred to the issues that introduce the queries they serve (no speculative index).
+      changes:
+        - sql:
+            sql: |
+              CREATE TABLE expense.expense (
+                  id                          uuid        NOT NULL,
+                  household_id                uuid        NOT NULL,
+                  kind                        text        NOT NULL,
+                  amount_minor                bigint      NOT NULL,
+                  currency                    char(3)     NOT NULL,
+                  expense_date                date        NOT NULL,
+                  paid_by_user_id             uuid        NOT NULL,
+                  recipient_user_id           uuid,
+                  owner_user_id               uuid,
+                  merchant_display            text,
+                  merchant_key                text,
+                  merchant_normaliser_version smallint,
+                  note                        text,
+                  receipt_id                  uuid,
+                  refund_of_expense_id        uuid,
+                  source                      text        NOT NULL,
+                  created_at                  timestamptz NOT NULL,
+                  created_by                  uuid        NOT NULL,
+                  updated_at                  timestamptz NOT NULL,
+                  updated_by                  uuid        NOT NULL,
+                  deleted_at                  timestamptz,
+                  deleted_by                  uuid,
+                  version                     bigint      NOT NULL DEFAULT 0,
+                  CONSTRAINT pk_expense PRIMARY KEY (id),
+                  CONSTRAINT uq_expense_household_id UNIQUE (household_id, id),
+                  CONSTRAINT fk_expense_currency FOREIGN KEY (household_id, currency)
+                      REFERENCES household.household (id, currency),
+                  CONSTRAINT fk_expense_paid_by FOREIGN KEY (household_id, paid_by_user_id)
+                      REFERENCES household.household_member (household_id, user_id),
+                  CONSTRAINT fk_expense_recipient FOREIGN KEY (household_id, recipient_user_id)
+                      REFERENCES household.household_member (household_id, user_id),
+                  CONSTRAINT fk_expense_owner FOREIGN KEY (household_id, owner_user_id)
+                      REFERENCES household.household_member (household_id, user_id),
+                  CONSTRAINT fk_expense_created_by FOREIGN KEY (household_id, created_by)
+                      REFERENCES household.household_member (household_id, user_id),
+                  CONSTRAINT fk_expense_updated_by FOREIGN KEY (household_id, updated_by)
+                      REFERENCES household.household_member (household_id, user_id),
+                  CONSTRAINT fk_expense_deleted_by FOREIGN KEY (household_id, deleted_by)
+                      REFERENCES household.household_member (household_id, user_id),
+                  CONSTRAINT fk_expense_refund_of FOREIGN KEY (household_id, refund_of_expense_id)
+                      REFERENCES expense.expense (household_id, id),
+                  CONSTRAINT ck_expense_kind CHECK (kind IN ('EXPENSE', 'REFUND', 'TRANSFER')),
+                  CONSTRAINT ck_expense_source CHECK (source IN ('MANUAL', 'RECEIPT', 'MERGE', 'COPY')),
+                  CONSTRAINT ck_expense_amount CHECK (amount_minor > 0 AND amount_minor <= 1000000000000000),
+                  CONSTRAINT ck_expense_personal_owner CHECK (
+                      owner_user_id IS NULL OR (owner_user_id = paid_by_user_id AND owner_user_id = created_by)),
+                  CONSTRAINT ck_expense_transfer_shape CHECK (
+                      kind <> 'TRANSFER' OR (owner_user_id IS NULL AND recipient_user_id IS NOT NULL
+                          AND recipient_user_id <> paid_by_user_id AND refund_of_expense_id IS NULL
+                          AND receipt_id IS NULL)),
+                  CONSTRAINT ck_expense_recipient_transfer_only CHECK (kind = 'TRANSFER' OR recipient_user_id IS NULL),
+                  CONSTRAINT ck_expense_refund_kind CHECK (refund_of_expense_id IS NULL OR kind = 'REFUND'),
+                  CONSTRAINT ck_expense_refund_not_self CHECK (refund_of_expense_id IS DISTINCT FROM id),
+                  CONSTRAINT ck_expense_merchant_pair CHECK ((merchant_display IS NULL) = (merchant_key IS NULL)),
+                  CONSTRAINT ck_expense_merchant_version CHECK (
+                      (merchant_key IS NULL) = (merchant_normaliser_version IS NULL)),
+                  CONSTRAINT ck_expense_deleted CHECK ((deleted_at IS NULL) = (deleted_by IS NULL)),
+                  CONSTRAINT ck_expense_note CHECK (char_length(note) <= 500),
+                  CONSTRAINT ck_expense_merchant_display CHECK (char_length(merchant_display) <= 120)
+              );
+              CREATE UNIQUE INDEX uq_expense_receipt ON expense.expense (receipt_id) WHERE receipt_id IS NOT NULL;
+      rollback:
+        - sql:
+            sql: DROP TABLE expense.expense

@@ -37,6 +37,8 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.springframework.boot:spring-boot-starter-liquibase")
     implementation("org.springframework.modulith:spring-modulith-starter-core")
+    // Transactional event publication registry / outbox (architecture.md section 5, ADR-001).
+    implementation("org.springframework.modulith:spring-modulith-starter-jdbc")
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:$springdocVersion")
     // Rate limiting (security.md section 5); approved for Issue 6, in-memory buckets only.
     implementation("com.bucket4j:bucket4j_jdk17-core:8.20.0")

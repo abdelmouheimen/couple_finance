@@ -16,6 +16,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.validation.FieldError;
@@ -115,6 +116,26 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                                 messageOf(error))))
                 .toList();
         return handleExceptionInternal(ex, validationProblem(violations), headers, status, request);
+    }
+
+    /**
+     * A custom deserializer (e.g. {@code Money}, BR-MON-03) rejects a value with an {@link ApplicationException};
+     * Jackson wraps it. Unwrap it so that the client gets the stable code of the rule, not a generic
+     * {@code MALFORMED_REQUEST}.
+     */
+    @Override
+    protected @Nullable ResponseEntity<Object> handleHttpMessageNotReadable(
+            HttpMessageNotReadableException ex, HttpHeaders headers, HttpStatusCode status, WebRequest request) {
+        Throwable cause = ex.getCause();
+        for (int depth = 0; cause != null && depth < 10; depth++, cause = cause.getCause()) {
+            if (cause instanceof ApplicationException application) {
+                ErrorCode code = application.errorCode();
+                ProblemDetail problem = ProblemDetail.forStatusAndDetail(code.status(), application.getMessage());
+                problem.setProperty(CODE, code.code());
+                return handleExceptionInternal(ex, problem, headers, code.status(), request);
+            }
+        }
+        return super.handleHttpMessageNotReadable(ex, headers, status, request);
     }
 
     /** Adds {@code code} and {@code instance} to every framework-generated problem. */

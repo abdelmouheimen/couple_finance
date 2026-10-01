@@ -196,6 +196,79 @@ paths:
       summary: "Rename, archive or unarchive a custom category"
       tags:
       - Categories
+  /api/v1/expenses:
+    post:
+      description: "Creates an EXPENSE in the caller's household. The household comes\
+        \ from the authenticated user. The ETag header carries the version. Send an\
+        \ Idempotency-Key to retry safely: the same key and request return the original\
+        \ response (24 h); the same key with a different request is a 422; the same\
+        \ key while the first request is running is a 409."
+      operationId: createExpense
+      parameters:
+      - description: Client-generated key (1-100 printable ASCII characters) making
+          the creation safe to retry.
+        in: header
+        name: Idempotency-Key
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateExpenseRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Expense"
+          description: Expense created
+        "400":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: "VALIDATION_FAILED, MALFORMED_REQUEST, INVALID_AMOUNT_FORMAT,\
+            \ TOO_MANY_DECIMALS, AMOUNT_NOT_POSITIVE, AMOUNT_EXCEEDS_MAXIMUM, CURRENCY_MISMATCH,\
+            \ EXPENSE_DATE_OUT_OF_RANGE, EXPENSE_ITEM_COUNT_INVALID, EXPENSE_ITEM_DUPLICATE_CATEGORY,\
+            \ EXPENSE_ITEMS_SUM_MISMATCH, EXPENSE_CATEGORY_ARCHIVED, EXPENSE_PAID_BY_INVALID,\
+            \ EXPENSE_PERSONAL_PAYER_MISMATCH, EXPENSE_MERCHANT_INVALID or IDEMPOTENCY_KEY_INVALID"
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: AUTHENTICATION_REQUIRED
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: EMAIL_NOT_VERIFIED or HOUSEHOLD_READ_ONLY
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: HOUSEHOLD_NOT_FOUND or CATEGORY_NOT_FOUND (also for a category
+            of another household)
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: REQUEST_IN_PROGRESS
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: IDEMPOTENCY_KEY_REUSED
+      summary: Create an expense
+      tags:
+      - Expenses
   /api/v1/households:
     post:
       description: Creates a household whose creator — the authenticated user — becomes
@@ -348,6 +421,70 @@ components:
           minLength: 1
       required:
       - name
+    CreateExpenseItemRequest:
+      type: object
+      properties:
+        amount:
+          $ref: "#/components/schemas/Money"
+          description: "Strictly positive, in the household currency."
+        categoryId:
+          type: string
+          format: uuid
+          description: "A system category or a category of the household, not archived."
+        label:
+          type: string
+          maxLength: 60
+          minLength: 0
+      required:
+      - amount
+      - categoryId
+    CreateExpenseRequest:
+      type: object
+      properties:
+        amount:
+          $ref: "#/components/schemas/Money"
+          description: "Total amount, in the household currency, strictly positive."
+        date:
+          type: string
+          format: date
+          description: "Calendar date of the expense (YYYY-MM-DD): at most 1 day after\
+            \ today in the household time zone, at most 5 years old."
+          example: 2026-05-14
+        items:
+          type: array
+          description: "Category breakdown: 1 to 10 items, one per category, summing\
+            \ exactly to the amount."
+          items:
+            $ref: "#/components/schemas/CreateExpenseItemRequest"
+          maxItems: 10
+          minItems: 0
+        merchant:
+          type: string
+          description: "Merchant name, stored as given."
+          maxLength: 120
+          minLength: 0
+        note:
+          type: string
+          maxLength: 500
+          minLength: 0
+        paidByUserId:
+          type: string
+          format: uuid
+          description: A current member of the household. Must be the caller for a
+            PERSONAL expense.
+        sharingType:
+          type: string
+          default: SHARED
+          description: "SHARED (default) or PERSONAL (visible only to its owner, the\
+            \ caller)."
+          enum:
+          - SHARED
+          - PERSONAL
+      required:
+      - amount
+      - date
+      - items
+      - paidByUserId
     CreateHouseholdRequest:
       type: object
       properties:
@@ -378,6 +515,84 @@ components:
           minLength: 1
       required:
       - name
+    Expense:
+      type: object
+      properties:
+        amount:
+          $ref: "#/components/schemas/Money"
+        createdAt:
+          type: string
+          format: date-time
+        createdBy:
+          type: string
+          format: uuid
+        date:
+          type: string
+          format: date
+        id:
+          type: string
+          format: uuid
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExpenseItem"
+        kind:
+          type: string
+          enum:
+          - EXPENSE
+        merchant:
+          type: string
+        note:
+          type: string
+        paidByUserId:
+          type: string
+          format: uuid
+        sharingType:
+          type: string
+          enum:
+          - SHARED
+          - PERSONAL
+        source:
+          type: string
+          enum:
+          - MANUAL
+        version:
+          type: integer
+          format: int64
+          description: "Version, also sent as ETag."
+      required:
+      - amount
+      - createdAt
+      - createdBy
+      - date
+      - id
+      - items
+      - kind
+      - paidByUserId
+      - sharingType
+      - source
+      - version
+    ExpenseItem:
+      type: object
+      properties:
+        amount:
+          $ref: "#/components/schemas/Money"
+        categoryId:
+          type: string
+          format: uuid
+        id:
+          type: string
+          format: uuid
+        label:
+          type: string
+        position:
+          type: integer
+          format: int32
+      required:
+      - amount
+      - categoryId
+      - id
+      - position
     FieldViolation:
       type: object
       properties:
@@ -421,6 +636,21 @@ components:
       - periodStartDay
       - status
       - timezone
+    Money:
+      type: object
+      description: An exact amount of a currency.
+      properties:
+        amount:
+          type: string
+          description: Plain decimal string with at most the minor-unit decimals of
+            the currency.
+          example: "12.50"
+          pattern: "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+        currency:
+          type: string
+          description: ISO 4217 currency code.
+          example: EUR
+          pattern: "^[A-Z]{3}$"
     Problem:
       type: object
       description: RFC 9457 Problem Details with a stable `code`.
