@@ -27,6 +27,23 @@ spring:
       - org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration
   lifecycle:
     timeout-per-shutdown-phase: 20s
+  jackson:
+    deserialization:
+      # Unknown JSON properties are rejected (security.md §5): a client can never smuggle e.g. a user id.
+      fail-on-unknown-properties: true
+
+couplefinance:
+  security:
+    jwt:
+      # Access-token validation (security.md §3). Set per environment:
+      #   COUPLEFINANCE_SECURITY_JWT_JWK_SET_URI  JWKS endpoint of the issuer; unset = no key trusted, every token rejected
+      #   COUPLEFINANCE_SECURITY_JWT_ISSUER       expected iss claim (optional)
+      audience: couplefinance-api
+  household:
+    defaults:
+      currency: EUR
+      timezone: Europe/Paris
+      period-start-day: 1
 
 server:
   shutdown: graceful
@@ -53,4 +70,5 @@ springdoc:
   swagger-ui:
     enabled: false
   paths-to-match: /api/**
+  default-produces-media-type: application/json
   writer-with-order-by-keys: true

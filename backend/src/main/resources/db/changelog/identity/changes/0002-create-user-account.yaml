@@ -1,0 +1,41 @@
+databaseChangeLog:
+  - changeSet:
+      id: identity-0002-create-user-account
+      author: couplefinance
+      comment: >
+        User accounts (database-schema.md §4.1). Deleted accounts stay as tombstones with personal data erased,
+        so historical references keep resolving to "former member" (BR-DAT).
+        uq_user_account_email: login lookup; case-insensitive without citext; tombstones never block re-registration.
+      changes:
+        - sql:
+            sql: |
+              CREATE TABLE identity.user_account (
+                  id                uuid        NOT NULL,
+                  email             text,
+                  email_verified_at timestamptz,
+                  password_hash     text,
+                  display_name      text,
+                  locale            text        NOT NULL,
+                  status            text        NOT NULL,
+                  created_at        timestamptz NOT NULL,
+                  updated_at        timestamptz NOT NULL,
+                  deleted_at        timestamptz,
+                  version           bigint      NOT NULL DEFAULT 0,
+                  CONSTRAINT pk_user_account PRIMARY KEY (id),
+                  CONSTRAINT ck_user_account_status
+                      CHECK (status IN ('PENDING_VERIFICATION', 'ACTIVE', 'DELETED')),
+                  CONSTRAINT ck_user_account_deleted_at CHECK ((status = 'DELETED') = (deleted_at IS NOT NULL)),
+                  CONSTRAINT ck_user_account_erased
+                      CHECK (status <> 'DELETED' OR (email IS NULL AND password_hash IS NULL AND display_name IS NULL)),
+                  CONSTRAINT ck_user_account_credentials
+                      CHECK (status = 'DELETED' OR (email IS NOT NULL AND password_hash IS NOT NULL)),
+                  CONSTRAINT ck_user_account_verified CHECK (status <> 'ACTIVE' OR email_verified_at IS NOT NULL),
+                  CONSTRAINT ck_user_account_display_name
+                      CHECK (display_name IS NULL OR char_length(display_name) BETWEEN 1 AND 60),
+                  CONSTRAINT ck_user_account_locale CHECK (char_length(locale) BETWEEN 2 AND 35)
+              );
+              CREATE UNIQUE INDEX uq_user_account_email ON identity.user_account (lower(email))
+                  WHERE status <> 'DELETED';
+      rollback:
+        - sql:
+            sql: DROP TABLE identity.user_account

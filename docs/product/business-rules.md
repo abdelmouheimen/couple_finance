@@ -1,6 +1,6 @@
 # CoupleFinance — Business Rules
 
-Version **0.3** — 2026-09-28 (v0.2: Staff Engineer review, see
+Version **0.4** — 2026-10-01 (v0.4: household creation, Issue #1; v0.2: Staff Engineer review, see
 [architecture.md §13](../architecture/architecture.md#13-review-findings-resolution); v0.3: domain model and schema
 decisions, see [ADR-006](../architecture/adr/006-domain-model-and-persistence.md)).
 
@@ -51,6 +51,7 @@ Related decisions: [ADR-002 household lifecycle](../architecture/adr/002-househo
 | BR-HH-13 | **Join with data (merge).** A user who is the sole member of household S may join household T bringing their data, if both use the same currency. The joiner chooses, before approval, what happens to S's SHARED expenses: bring them as SHARED (visible to the partner), convert them to PERSONAL, or not bring them (exported, then deleted with S). PERSONAL expenses stay PERSONAL. Categories are mapped by case-insensitive name, otherwise created in T. Household merchant rules of T win on conflict. S's budgets are discarded; S's savings goals move to T. The merge is atomic; S is deleted afterwards. |
 | BR-HH-14 | A user who joins **without** data keeps their previous single-member household in `DISSOLVED` read-only state for 30 days (export offered), then it is deleted. |
 | BR-HH-15 | Deleting an account dissolves the user's household first (BR-HH-09); data then follows BR-DAT. |
+| BR-HH-16 | **Creation.** Only an authenticated user with an `ACTIVE` account (verified email) and no active household (BR-HH-02) can create a household; the creator is always the authenticated user, never a value sent by the client. The creator becomes the first active member (seat 1) with the same rights as any future member (BR-HH-03 — no owner role). The name is trimmed and must have 1–100 characters. Currency, timezone and period start day are optional and default to configured values (EUR, Europe/Paris, 1). Household, membership, period rule and audit event are created atomically. |
 
 ## 3. Expenses (BR-EXP)
 

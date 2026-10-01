@@ -1,0 +1,10 @@
+databaseChangeLog:
+  - changeSet:
+      id: household-0001-create-household-schema
+      author: couplefinance
+      changes:
+        - sql:
+            sql: CREATE SCHEMA IF NOT EXISTS household
+      rollback:
+        - sql:
+            sql: DROP SCHEMA IF EXISTS household

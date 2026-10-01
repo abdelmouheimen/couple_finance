@@ -1,0 +1,47 @@
+databaseChangeLog:
+  - changeSet:
+      id: household-0002-create-currency
+      author: couplefinance
+      comment: >
+        Supported currencies (database-schema.md §5.1): minor units and maximum expense amount per currency
+        (BR-MON-07, order of magnitude EUR 1,000,000).
+      changes:
+        - sql:
+            sql: |
+              CREATE TABLE household.currency (
+                  code              char(3)  NOT NULL,
+                  minor_units       smallint NOT NULL,
+                  max_expense_minor bigint   NOT NULL,
+                  active            boolean  NOT NULL,
+                  CONSTRAINT pk_currency PRIMARY KEY (code),
+                  CONSTRAINT ck_currency_code CHECK (code ~ '^[A-Z]{3}$'),
+                  CONSTRAINT ck_currency_minor_units CHECK (minor_units BETWEEN 0 AND 4),
+                  CONSTRAINT ck_currency_max_expense CHECK (max_expense_minor > 0)
+              );
+      rollback:
+        - sql:
+            sql: DROP TABLE household.currency
+
+  - changeSet:
+      id: household-0002-seed-currencies
+      author: couplefinance
+      context: all
+      changes:
+        - sql:
+            sql: |
+              INSERT INTO household.currency (code, minor_units, max_expense_minor, active) VALUES
+                  ('EUR', 2,    100000000, true),
+                  ('USD', 2,    100000000, true),
+                  ('GBP', 2,    100000000, true),
+                  ('CHF', 2,    100000000, true),
+                  ('CAD', 2,    150000000, true),
+                  ('SEK', 2,   1000000000, true),
+                  ('NOK', 2,   1000000000, true),
+                  ('DKK', 2,    750000000, true),
+                  ('PLN', 2,    400000000, true),
+                  ('JPY', 0,    150000000, true),
+                  ('MAD', 2,   1000000000, true),
+                  ('TND', 3,   3000000000, true);
+      rollback:
+        - sql:
+            sql: DELETE FROM household.currency

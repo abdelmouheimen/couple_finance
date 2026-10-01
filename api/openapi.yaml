@@ -9,8 +9,161 @@ servers:
   url: /
 security:
 - bearerAuth: []
-paths: {}
+paths:
+  /api/v1/households:
+    post:
+      description: Creates a household whose creator — the authenticated user — becomes
+        its first active member. A user can belong to only one active household.
+      operationId: createHousehold
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateHouseholdRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Household"
+          description: Household created
+        "400":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: "VALIDATION_FAILED, MALFORMED_REQUEST, UNSUPPORTED_CURRENCY\
+            \ or INVALID_TIMEZONE"
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: AUTHENTICATION_REQUIRED
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: EMAIL_NOT_VERIFIED
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: ALREADY_IN_HOUSEHOLD
+      summary: Create a household
+      tags:
+      - Households
 components:
+  schemas:
+    CreateHouseholdRequest:
+      type: object
+      properties:
+        currency:
+          type: string
+          description: ISO 4217 currency code. Defaults to EUR.
+          example: EUR
+          pattern: "[A-Z]{3}"
+        name:
+          type: string
+          description: "Household name, trimmed."
+          example: Notre foyer
+          maxLength: 100
+          minLength: 1
+        periodStartDay:
+          type: integer
+          format: int32
+          description: Day of month on which budget periods start (1-28). Defaults
+            to 1.
+          example: 1
+          maximum: 28
+          minimum: 1
+        timezone:
+          type: string
+          description: IANA time-zone id used to compute "today". Defaults to Europe/Paris.
+          example: Europe/Paris
+          maxLength: 64
+          minLength: 1
+      required:
+      - name
+    FieldViolation:
+      type: object
+      properties:
+        field:
+          type: string
+        message:
+          type: string
+    Household:
+      type: object
+      properties:
+        createdAt:
+          type: string
+          format: date-time
+        currency:
+          type: string
+          example: EUR
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: Notre foyer
+        periodStartDay:
+          type: integer
+          format: int32
+          example: 1
+        status:
+          type: string
+          enum:
+          - ACTIVE
+          - DISSOLVED
+          example: ACTIVE
+        timezone:
+          type: string
+          example: Europe/Paris
+      required:
+      - createdAt
+      - currency
+      - id
+      - name
+      - periodStartDay
+      - status
+      - timezone
+    Problem:
+      type: object
+      description: RFC 9457 Problem Details with a stable `code`.
+      properties:
+        code:
+          type: string
+          description: Stable machine-readable error code.
+          example: VALIDATION_FAILED
+        detail:
+          type: string
+          example: The request contains invalid values.
+        errors:
+          type: array
+          description: Invalid fields; present for VALIDATION_FAILED.
+          items:
+            $ref: "#/components/schemas/FieldViolation"
+        instance:
+          type: string
+          example: /api/v1/households
+        status:
+          type: integer
+          format: int32
+          example: 400
+        title:
+          type: string
+          example: Bad Request
+        type:
+          type: string
+          example: about:blank
+      required:
+      - code
+      - status
+      - title
   securitySchemes:
     bearerAuth:
       bearerFormat: JWT

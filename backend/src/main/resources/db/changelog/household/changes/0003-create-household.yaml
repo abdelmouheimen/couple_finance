@@ -1,0 +1,39 @@
+databaseChangeLog:
+  - changeSet:
+      id: household-0003-create-household
+      author: couplefinance
+      comment: >
+        Household aggregate root (database-schema.md §5.2). uq_household_id_currency is the target of the composite
+        (household_id, currency) foreign keys that pin monetary rows to the household currency (P7, S3).
+        ix_household_purge is deferred until the purge job exists (no speculative index).
+      changes:
+        - sql:
+            sql: |
+              CREATE TABLE household.household (
+                  id                  uuid        NOT NULL,
+                  name                text        NOT NULL,
+                  currency            char(3)     NOT NULL,
+                  timezone            text        NOT NULL,
+                  status              text        NOT NULL,
+                  tracking_start_date date        NOT NULL,
+                  dissolved_at        timestamptz,
+                  purge_at            timestamptz,
+                  created_at          timestamptz NOT NULL,
+                  created_by          uuid        NOT NULL,
+                  updated_at          timestamptz NOT NULL,
+                  updated_by          uuid        NOT NULL,
+                  version             bigint      NOT NULL DEFAULT 0,
+                  CONSTRAINT pk_household PRIMARY KEY (id),
+                  CONSTRAINT uq_household_id_currency UNIQUE (id, currency),
+                  CONSTRAINT fk_household_currency FOREIGN KEY (currency) REFERENCES household.currency (code),
+                  CONSTRAINT fk_household_created_by FOREIGN KEY (created_by) REFERENCES identity.user_account (id),
+                  CONSTRAINT fk_household_updated_by FOREIGN KEY (updated_by) REFERENCES identity.user_account (id),
+                  CONSTRAINT ck_household_name CHECK (char_length(name) BETWEEN 1 AND 100 AND name = btrim(name)),
+                  CONSTRAINT ck_household_timezone CHECK (char_length(timezone) BETWEEN 1 AND 64),
+                  CONSTRAINT ck_household_status CHECK (status IN ('ACTIVE', 'DISSOLVED', 'DELETED')),
+                  CONSTRAINT ck_household_dissolved CHECK (status = 'ACTIVE' OR dissolved_at IS NOT NULL),
+                  CONSTRAINT ck_household_purge CHECK (status <> 'DISSOLVED' OR purge_at IS NOT NULL)
+              );
+      rollback:
+        - sql:
+            sql: DROP TABLE household.household

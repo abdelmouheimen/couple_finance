@@ -35,6 +35,8 @@ Phases: **MVP** → **V1** → **V2** (see [vision.md](vision.md#7-scope-by-phas
 
 **Acceptance criteria**
 - At most two active members (BR-HH-01); one active household per user (BR-HH-02).
+- Creation per BR-HH-16 (`POST /api/v1/households`, Issue #1): only the name is required; currency, timezone and
+  period start day default to EUR, Europe/Paris and 1.
 - Invitation rules BR-HH-04 (≥ 128-bit code, 7 days, approval step, rate limits).
 - Merge rules BR-HH-13; the joiner explicitly chooses what happens to their SHARED expenses and is told
   the partner will see anything brought as SHARED.

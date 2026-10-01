@@ -178,7 +178,7 @@ Purge:     scheduler deletes dissolved households after purge_at
 - REST over HTTPS, JSON, base path `/api/v1`.
 - **OpenAPI 3.1** generated from code (springdoc), committed to `api/openapi.yaml`, diffed in CI; breaking-change
   check (e.g. `oasdiff`) against the last release; TypeScript client generated from it.
-- Resources: `/households/me`, `/households/me/invitations`, `/households/me/join-requests`,
+- Resources: `POST /households` (create), `/households/me`, `/households/me/invitations`, `/households/me/join-requests`,
   `/households/me/dissolution`, `/expenses`, `/receipts`, `/categories`, `/budgets/{periodStart}`,
   `/savings-goals`, `/analytics/periods/{periodStart}?scope=HOUSEHOLD|PERSONAL`, `/insights`, `/me/consents`.
   The household is **derived from the authenticated user**.

@@ -1,0 +1,26 @@
+databaseChangeLog:
+  - changeSet:
+      id: household-0005-create-period-rule
+      author: couplefinance
+      comment: >
+        Budget period start-day schedule (database-schema.md §5.4, BR-HH-07). The primary key serves the lookup of a
+        household's rules. created_by references the user account rather than the membership: both rows are
+        inserted in the same transaction and Hibernate does not guarantee their insert order.
+      changes:
+        - sql:
+            sql: |
+              CREATE TABLE household.period_rule (
+                  household_id   uuid        NOT NULL,
+                  effective_from date        NOT NULL,
+                  start_day      smallint    NOT NULL,
+                  created_at     timestamptz NOT NULL,
+                  created_by     uuid        NOT NULL,
+                  CONSTRAINT pk_period_rule PRIMARY KEY (household_id, effective_from),
+                  CONSTRAINT fk_period_rule_household FOREIGN KEY (household_id)
+                      REFERENCES household.household (id) ON DELETE CASCADE,
+                  CONSTRAINT fk_period_rule_created_by FOREIGN KEY (created_by) REFERENCES identity.user_account (id),
+                  CONSTRAINT ck_period_rule_start_day CHECK (start_day BETWEEN 1 AND 28)
+              );
+      rollback:
+        - sql:
+            sql: DROP TABLE household.period_rule
