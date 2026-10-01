@@ -1,0 +1,7 @@
+# Master changelog. Includes one changelog per module, in dependency order (database.md §5):
+#   infra → identity → household → categorization → expense → receipt → budget → savings → ai
+# Each module changelog lives in db/changelog/<module>/ and starts with the CREATE SCHEMA changeset.
+# Merged changesets are immutable: fix mistakes with new changesets.
+databaseChangeLog:
+  - include:
+      file: db/changelog/infra/infra.changelog.yaml

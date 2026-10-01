@@ -1,0 +1,56 @@
+# Base configuration, valid for every environment.
+#
+# No credentials here (CLAUDE.md §6). Outside the `local` profile the database is configured through the
+# environment: SPRING_DATASOURCE_URL, SPRING_DATASOURCE_USERNAME, SPRING_DATASOURCE_PASSWORD.
+spring:
+  application:
+    name: couplefinance
+  threads:
+    virtual:
+      enabled: true
+  jpa:
+    open-in-view: false
+    hibernate:
+      # Liquibase owns the schema; Hibernate only checks that entities match it.
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+    # Liquibase otherwise sends usage analytics to its vendor at every startup (outbound call + startup delay).
+    analytics-enabled: false
+  autoconfigure:
+    exclude:
+      # No authentication mechanism until the identity module exists; never generate a default in-memory user.
+      - org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+
+server:
+  shutdown: graceful
+  error:
+    include-stacktrace: never
+    include-message: never
+    include-binding-errors: never
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+
+springdoc:
+  # Documentation endpoints are disabled by default and enabled in the local and test profiles.
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+  paths-to-match: /api/**
+  writer-with-order-by-keys: true

@@ -1,0 +1,5 @@
+# Test profile: database comes from Testcontainers (@ServiceConnection); OpenAPI generation enabled for the
+# contract test.
+springdoc:
+  api-docs:
+    enabled: true

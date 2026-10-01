@@ -1,0 +1,25 @@
+# Local development services. Development-only defaults; override them in infra/.env (see .env.example).
+# Start: docker compose -f infra/docker-compose.yml up -d
+name: couplefinance
+
+services:
+  postgres:
+    # Same major version as the Testcontainers image used by the backend tests.
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-couplefinance}
+      POSTGRES_USER: ${POSTGRES_USER:-couplefinance}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-couplefinance}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres-data:

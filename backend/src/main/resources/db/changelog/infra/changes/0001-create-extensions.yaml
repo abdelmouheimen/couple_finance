@@ -1,0 +1,13 @@
+databaseChangeLog:
+  - changeSet:
+      id: infra-0001-create-btree-gist-extension
+      author: couplefinance
+      comment: >
+        btree_gist backs the exclusion constraint that forbids overlapping budget periods
+        (household.budget_period, database-schema.md §5.5).
+      changes:
+        - sql:
+            sql: CREATE EXTENSION IF NOT EXISTS btree_gist
+      rollback:
+        - sql:
+            sql: DROP EXTENSION IF EXISTS btree_gist

@@ -1,0 +1,26 @@
+# Build output
+build/
+out/
+.gradle/
+.kotlin/
+
+# IDEs
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+
+# Local configuration and secrets (see infra/.env.example)
+.env
+*.env.local
+infra/.env
+
+# Mobile (when initialised)
+node_modules/
+.expo/
+
+# OS
+.DS_Store
+Thumbs.db

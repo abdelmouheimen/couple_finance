@@ -1,0 +1,13 @@
+databaseChangeLog:
+  - changeSet:
+      id: infra-0002-create-infra-schema
+      author: couplefinance
+      comment: >
+        Technical schema for cross-module infrastructure tables (idempotency keys, ShedLock),
+        database-schema.md §12. Tables are added by later changesets when first needed.
+      changes:
+        - sql:
+            sql: CREATE SCHEMA IF NOT EXISTS infra
+      rollback:
+        - sql:
+            sql: DROP SCHEMA IF EXISTS infra

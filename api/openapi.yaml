@@ -1,0 +1,18 @@
+openapi: 3.1.0
+info:
+  description: REST API of the CoupleFinance mobile app. Errors use RFC 9457 Problem
+    Details with a stable `code` property.
+  title: CoupleFinance API
+  version: v1
+servers:
+- description: Current host
+  url: /
+security:
+- bearerAuth: []
+paths: {}
+components:
+  securitySchemes:
+    bearerAuth:
+      bearerFormat: JWT
+      scheme: bearer
+      type: http

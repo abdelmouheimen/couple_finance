@@ -1,0 +1,17 @@
+# Local development against infra/docker-compose.yml.
+# The credentials below are development-only defaults of the local Docker Compose database (CLAUDE.md §6).
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:${POSTGRES_PORT:5432}/${POSTGRES_DB:couplefinance}
+    username: ${POSTGRES_USER:couplefinance}
+    password: ${POSTGRES_PASSWORD:couplefinance}
+
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
+
+logging:
+  level:
+    com.couplefinance: debug
