@@ -1,0 +1,27 @@
+databaseChangeLog:
+  - changeSet:
+      id: categorization-0003-seed-system-categories
+      author: couplefinance
+      comment: >
+        The 12 system categories of BR-CAT-01 with fixed UUIDs (other modules reference them by id, without FK).
+        System rows have a code and no stored name: the display name is translated per user locale (BR-CAT-03).
+        Icon keys and colours are neutral defaults (not specified by the approved documentation).
+      changes:
+        - sql:
+            sql: |
+              INSERT INTO categorization.category (id, system_code, icon, color, sort_order) VALUES
+                ('019a0000-0000-7000-8000-000000000001', 'GROCERIES', 'cart', '#4CAF50', 1),
+                ('019a0000-0000-7000-8000-000000000002', 'HOUSING', 'home', '#795548', 2),
+                ('019a0000-0000-7000-8000-000000000003', 'UTILITIES', 'bolt', '#FFC107', 3),
+                ('019a0000-0000-7000-8000-000000000004', 'TRANSPORT', 'car', '#2196F3', 4),
+                ('019a0000-0000-7000-8000-000000000005', 'RESTAURANTS', 'restaurant', '#FF5722', 5),
+                ('019a0000-0000-7000-8000-000000000006', 'HEALTH', 'heart', '#E91E63', 6),
+                ('019a0000-0000-7000-8000-000000000007', 'LEISURE', 'gamepad', '#9C27B0', 7),
+                ('019a0000-0000-7000-8000-000000000008', 'SHOPPING', 'bag', '#00BCD4', 8),
+                ('019a0000-0000-7000-8000-000000000009', 'TRAVEL', 'plane', '#3F51B5', 9),
+                ('019a0000-0000-7000-8000-000000000010', 'CHILDREN', 'child', '#8BC34A', 10),
+                ('019a0000-0000-7000-8000-000000000011', 'GIFTS', 'gift', '#F06292', 11),
+                ('019a0000-0000-7000-8000-000000000012', 'OTHER', 'dots', '#9E9E9E', 12);
+      rollback:
+        - sql:
+            sql: DELETE FROM categorization.category WHERE household_id IS NULL

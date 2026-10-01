@@ -10,6 +10,192 @@ servers:
 security:
 - bearerAuth: []
 paths:
+  /api/v1/categories:
+    get:
+      description: "System categories followed by the household's own, ordered by\
+        \ sort order. Archived categories are flagged and excluded unless includeArchived\
+        \ is true. Readable by archive readers of a dissolved household."
+      operationId: listCategories
+      parameters:
+      - description: Include archived categories (flagged archived = true).
+        in: query
+        name: includeArchived
+        required: false
+        schema:
+          type: boolean
+          default: false
+      - in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+          format: int32
+      - in: query
+        name: cursor
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CategoryPage"
+          description: A page of categories
+        "400":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: INVALID_LIMIT or INVALID_CURSOR
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: AUTHENTICATION_REQUIRED
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: EMAIL_NOT_VERIFIED
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: HOUSEHOLD_NOT_FOUND
+      summary: List categories
+      tags:
+      - Categories
+    post:
+      description: Creates an active custom category in the caller's household. The
+        ETag header carries its version.
+      operationId: createCategory
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCategoryRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+          description: Category created
+        "400":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: VALIDATION_FAILED or MALFORMED_REQUEST
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: AUTHENTICATION_REQUIRED
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: EMAIL_NOT_VERIFIED or HOUSEHOLD_READ_ONLY
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: HOUSEHOLD_NOT_FOUND
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: CATEGORY_NAME_ALREADY_EXISTS or CATEGORY_LIMIT_REACHED
+      summary: Create a custom category
+      tags:
+      - Categories
+  /api/v1/categories/{id}:
+    patch:
+      description: "Requires If-Match with the category version (ETag). System categories\
+        \ cannot be modified. Categories are never deleted: archiving is the delete."
+      operationId: updateCategory
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - description: "Version of the category last read, as sent in its ETag."
+        in: header
+        name: If-Match
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCategoryRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+          description: Category updated (or unchanged)
+        "400":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: "VALIDATION_FAILED, MALFORMED_REQUEST or IF_MATCH_INVALID"
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: AUTHENTICATION_REQUIRED
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: "EMAIL_NOT_VERIFIED, HOUSEHOLD_READ_ONLY or SYSTEM_CATEGORY_IMMUTABLE"
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: HOUSEHOLD_NOT_FOUND or RESOURCE_NOT_FOUND (also for a category
+            of another household)
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: CATEGORY_NAME_ALREADY_EXISTS
+        "412":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: VERSION_CONFLICT
+        "428":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: IF_MATCH_REQUIRED
+      summary: "Rename, archive or unarchive a custom category"
+      tags:
+      - Categories
   /api/v1/households:
     post:
       description: Creates a household whose creator — the authenticated user — becomes
@@ -92,6 +278,76 @@ paths:
       - Households
 components:
   schemas:
+    Category:
+      type: object
+      properties:
+        archived:
+          type: boolean
+        archivedAt:
+          type: string
+          format: date-time
+        color:
+          type: string
+          example: "#9E9E9E"
+        icon:
+          type: string
+          example: tag
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          description: Name of a custom category. Absent on system categories.
+          example: Pets
+        sortOrder:
+          type: integer
+          format: int32
+        systemCode:
+          type: string
+          description: Code of a system category; the client displays it translated.
+            Absent on custom categories.
+          example: GROCERIES
+        type:
+          type: string
+          enum:
+          - SYSTEM
+          - CUSTOM
+          example: CUSTOM
+        version:
+          type: integer
+          format: int64
+          description: "Version, also sent as ETag; send it back in If-Match to update."
+      required:
+      - archived
+      - color
+      - icon
+      - id
+      - sortOrder
+      - type
+      - version
+    CategoryPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Category"
+        nextCursor:
+          type: string
+          description: "Opaque cursor of the next page, absent on the last page."
+      required:
+      - items
+    CreateCategoryRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          description: "Category name, trimmed, 1 to 40 characters; unique in the\
+            \ household, case-insensitively."
+          example: Pets
+          minLength: 1
+      required:
+      - name
     CreateHouseholdRequest:
       type: object
       properties:
@@ -198,6 +454,16 @@ components:
       - code
       - status
       - title
+    UpdateCategoryRequest:
+      type: object
+      properties:
+        archived:
+          type: boolean
+          description: "true archives, false unarchives a custom category."
+        name:
+          type: string
+          description: "New name of a custom category, trimmed, 1 to 40 characters."
+          example: Pets
   securitySchemes:
     bearerAuth:
       bearerFormat: JWT

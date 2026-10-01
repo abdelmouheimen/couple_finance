@@ -1,0 +1,8 @@
+# Categorization module (database-schema.md §6.1).
+databaseChangeLog:
+  - include:
+      file: db/changelog/categorization/changes/0001-create-categorization-schema.yaml
+  - include:
+      file: db/changelog/categorization/changes/0002-create-category.yaml
+  - include:
+      file: db/changelog/categorization/changes/0003-seed-system-categories.yaml
