@@ -1,0 +1,30 @@
+databaseChangeLog:
+  - changeSet:
+      id: household-0008-create-budget-period
+      author: couplefinance
+      comment: >
+        Budget period calendar with explicit [period_start, period_end) bounds (database-schema.md §5.5, BR-HH-05,
+        BR-HH-07). The primary key serves the period-containing-a-date lookup (period_start <= date ORDER BY
+        period_start DESC LIMIT 1) and the range listing, both household-scoped, and is the idempotency key of the
+        generator (ON CONFLICT DO NOTHING). uq_budget_period_bounds is the FK target that lets a budget pin its
+        stored end to the calendar. ex_budget_period_no_overlap (gist, btree_gist from infra-0001) is both the
+        no-overlap invariant and its supporting index. Contiguity is guaranteed by the generator.
+      changes:
+        - sql:
+            sql: |
+              CREATE TABLE household.budget_period (
+                  household_id uuid NOT NULL,
+                  period_start date NOT NULL,
+                  period_end   date NOT NULL,
+                  CONSTRAINT pk_budget_period PRIMARY KEY (household_id, period_start),
+                  CONSTRAINT uq_budget_period_bounds UNIQUE (household_id, period_start, period_end),
+                  CONSTRAINT fk_budget_period_household FOREIGN KEY (household_id)
+                      REFERENCES household.household (id) ON DELETE CASCADE,
+                  CONSTRAINT ck_budget_period_order CHECK (period_end > period_start),
+                  CONSTRAINT ck_budget_period_length CHECK (period_end - period_start BETWEEN 15 AND 62),
+                  CONSTRAINT ex_budget_period_no_overlap EXCLUDE USING gist (
+                      household_id WITH =, daterange(period_start, period_end, '[)') WITH &&)
+              );
+      rollback:
+        - sql:
+            sql: DROP TABLE household.budget_period

@@ -14,3 +14,5 @@ databaseChangeLog:
       file: db/changelog/household/changes/0006-create-audit-event.yaml
   - include:
       file: db/changelog/household/changes/0007-create-member-archive-index.yaml
+  - include:
+      file: db/changelog/household/changes/0008-create-budget-period.yaml

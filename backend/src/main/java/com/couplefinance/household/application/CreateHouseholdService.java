@@ -35,14 +35,17 @@ public class CreateHouseholdService {
     private final SupportedCurrencies supportedCurrencies;
     private final HouseholdAuditLog auditLog;
     private final HouseholdDefaults defaults;
+    private final BudgetPeriodCalendarService periodCalendar;
     private final Clock clock;
 
     CreateHouseholdService(HouseholdRepository households, SupportedCurrencies supportedCurrencies,
-                           HouseholdAuditLog auditLog, HouseholdDefaults defaults, Clock clock) {
+                           HouseholdAuditLog auditLog, HouseholdDefaults defaults,
+                           BudgetPeriodCalendarService periodCalendar, Clock clock) {
         this.households = households;
         this.supportedCurrencies = supportedCurrencies;
         this.auditLog = auditLog;
         this.defaults = defaults;
+        this.periodCalendar = periodCalendar;
         this.clock = clock;
     }
 
@@ -71,6 +74,9 @@ public class CreateHouseholdService {
             }
             throw e;
         }
+        // Same transaction: a household never exists without its calendar, and the first period contains the
+        // creation date (BR-HH-05).
+        periodCalendar.ensureCalendar(household.id(), timezone, periodStartDay);
         auditLog.householdCreated(household, creator, createdValues(household), now);
         return household;
     }
