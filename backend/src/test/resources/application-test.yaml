@@ -3,3 +3,6 @@
 springdoc:
   api-docs:
     enabled: true
+spring:
+  liquibase:
+    change-log: classpath:db/changelog/test-master.yaml

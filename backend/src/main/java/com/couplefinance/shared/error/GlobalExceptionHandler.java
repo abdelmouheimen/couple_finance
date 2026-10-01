@@ -3,11 +3,14 @@ package com.couplefinance.shared.error;
 import java.net.URI;
 import java.util.List;
 
+import com.couplefinance.shared.concurrency.VersionETag;
+import jakarta.persistence.OptimisticLockException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.MessageSourceResolvable;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
@@ -50,6 +53,14 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     ResponseEntity<ProblemDetail> handleApplicationException(ApplicationException ex, HttpServletRequest request) {
         log.debug("Application error {}: {}", ex.errorCode().code(), ex.getMessage());
         return problem(ex.errorCode(), ex.getMessage(), request);
+    }
+
+    /** Persistence-level lost update (JPA {@code @Version}): same contract as a stale If-Match (BR-EXP-12). */
+    @ExceptionHandler({OptimisticLockingFailureException.class, OptimisticLockException.class})
+    ResponseEntity<ProblemDetail> handleOptimisticLock(Exception ex, HttpServletRequest request) {
+        log.debug("Optimistic lock failure on {} {}", request.getMethod(), request.getRequestURI());
+        ApplicationException conflict = VersionETag.versionConflict();
+        return problem(conflict.errorCode(), conflict.getMessage(), request);
     }
 
     @ExceptionHandler(AuthenticationException.class)

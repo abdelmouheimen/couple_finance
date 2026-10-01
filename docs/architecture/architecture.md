@@ -187,7 +187,7 @@ Purge:     scheduler deletes dissolved households after purge_at
 - Every monetary aggregate in responses carries `scope` (BR-SCP-03).
 - Errors: RFC 9457 Problem Details with stable `code` and field `errors[]`.
 - Pagination: cursor-based, `limit ≤ 100`.
-- Concurrency: `ETag`/`If-Match`; stale → **412**, missing → **428** (BR-EXP-12). Business-state conflicts
+- Concurrency: `ETag`/`If-Match`; stale → **412** `VERSION_CONFLICT`, missing → **428** `IF_MATCH_REQUIRED`, malformed → **400** `IF_MATCH_INVALID` (BR-EXP-12). Business-state conflicts
   (e.g. receipt already confirmed, household full) → **409** with specific code.
 - Idempotency: `Idempotency-Key` on creating POSTs and on receipt confirmation (BR-EXP-13).
 
