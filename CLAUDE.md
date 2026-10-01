@@ -1204,3 +1204,44 @@ A change is done only when **all** of the following hold:
 - [ ] No secrets, no debug leftovers, no unrelated changes in the diff.
 
 When reporting completion, state what was verified and how; if something could not be run, say so explicitly.
+## Autonomous development orchestration
+
+When explicitly asked to run autonomous backlog development, use the
+`development-orchestrator` subagent.
+
+The orchestrator may continuously select and implement READY GitHub
+Issues through the `issue-developer` subagent.
+
+A READY Issue must:
+
+- be approved;
+- be open;
+- not be blocked;
+- have sufficiently defined acceptance criteria;
+- have all implementation dependencies merged into main;
+- not already have an active Pull Request.
+
+After each Pull Request is created, the orchestrator must refresh the
+GitHub backlog and recalculate eligibility.
+
+Independent Issues may continue while other Pull Requests wait for human
+review.
+
+Dependent Issues must wait until their dependencies are merged into main.
+
+The orchestrator must never:
+
+- merge Pull Requests;
+- enable auto-merge;
+- build dependent work on unmerged feature branches;
+- invent missing requirements;
+- bypass CI or required checks.
+
+The autonomous loop stops when:
+
+- no READY Issue remains;
+- human input is required;
+- a blocking failure occurs;
+- continuing would be unsafe.
+
+Human review and merge remain mandatory.
