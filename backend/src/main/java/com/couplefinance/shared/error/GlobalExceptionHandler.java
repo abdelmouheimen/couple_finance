@@ -4,6 +4,7 @@ import java.net.URI;
 import java.util.List;
 
 import com.couplefinance.shared.concurrency.VersionETag;
+import com.couplefinance.shared.ratelimit.RateLimitExceededException;
 import jakarta.persistence.OptimisticLockException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.jspecify.annotations.Nullable;
@@ -53,6 +54,14 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     ResponseEntity<ProblemDetail> handleApplicationException(ApplicationException ex, HttpServletRequest request) {
         log.debug("Application error {}: {}", ex.errorCode().code(), ex.getMessage());
         return problem(ex.errorCode(), ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(RateLimitExceededException.class)
+    ResponseEntity<ProblemDetail> handleRateLimited(RateLimitExceededException ex, HttpServletRequest request) {
+        ResponseEntity<ProblemDetail> response = problem(ex.errorCode(), ex.getMessage(), request);
+        return ResponseEntity.status(response.getStatusCode())
+                .header(HttpHeaders.RETRY_AFTER, Long.toString(ex.retryAfterSeconds()))
+                .body(response.getBody());
     }
 
     /** Persistence-level lost update (JPA {@code @Version}): same contract as a stale If-Match (BR-EXP-12). */

@@ -186,7 +186,8 @@ Purge:     scheduler deletes dissolved households after purge_at
 - Dates `YYYY-MM-DD`; instants ISO-8601 UTC; periods identified by `periodStart` date.
 - Every monetary aggregate in responses carries `scope` (BR-SCP-03).
 - Errors: RFC 9457 Problem Details with stable `code` and field `errors[]`.
-- Pagination: cursor-based, `limit ≤ 100`.
+- Pagination: cursor-based, `limit ≤ 100` (`cursor`, `limit` query parameters; default 20, values above 100 are capped to 100, below 1 → 400 `INVALID_LIMIT`; response `{items, nextCursor}`, `nextCursor` null on the last page). Cursors are opaque, AES-GCM encrypted and bound to the caller and listing; invalid/foreign cursor → 400 `INVALID_CURSOR`.
+- Rate limiting: Bucket4j in-memory, per IP (before authentication) and per user, profile-based and configurable (`couplefinance.rate-limit.*`); exceeded → 429 `RATE_LIMITED` with `Retry-After`. All responses carry `Cache-Control: no-store`.
 - Concurrency: `ETag`/`If-Match`; stale → **412** `VERSION_CONFLICT`, missing → **428** `IF_MATCH_REQUIRED`, malformed → **400** `IF_MATCH_INVALID` (BR-EXP-12). Business-state conflicts
   (e.g. receipt already confirmed, household full) → **409** with specific code.
 - Idempotency: `Idempotency-Key` on creating POSTs and on receipt confirmation (BR-EXP-13).

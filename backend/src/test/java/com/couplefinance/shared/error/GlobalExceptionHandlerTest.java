@@ -3,6 +3,7 @@ package com.couplefinance.shared.error;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 
+import com.couplefinance.shared.ratelimit.RateLimitConfiguration;
 import com.couplefinance.shared.security.SecurityConfiguration;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
@@ -26,7 +27,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @WebMvcTest(controllers = GlobalExceptionHandlerTest.ProbeController.class)
-@Import({SecurityConfiguration.class, GlobalExceptionHandlerTest.ProbeController.class})
+@Import({SecurityConfiguration.class, RateLimitConfiguration.class, GlobalExceptionHandlerTest.ProbeController.class})
 class GlobalExceptionHandlerTest {
 
     @Autowired
