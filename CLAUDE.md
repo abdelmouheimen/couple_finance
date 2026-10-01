@@ -1206,36 +1206,102 @@ A change is done only when **all** of the following hold:
 When reporting completion, state what was verified and how; if something could not be run, say so explicitly.
 ## Autonomous development orchestration
 
-When explicitly asked to run autonomous backlog development, use the
-`development-orchestrator` subagent.
+Autonomous backlog development is orchestrated **outside Claude** by the
+PowerShell script `scripts/autonomous-development.ps1`.
 
-The orchestrator may continuously select and implement READY GitHub
-Issues through the `issue-developer` subagent.
+```powershell
+.\scripts\autonomous-development.ps1 -DryRun        # analysis only, changes nothing
+.\scripts\autonomous-development.ps1 -MaxIssues 1   # one fresh Claude process, one PR
+```
 
-A READY Issue must:
+Claude sessions must not orchestrate the backlog themselves: they never
+select, chain or start further Issues. The `development-orchestrator`
+subagent is superseded by the external script and must not be used.
 
-- be approved;
-- be open;
-- not be blocked;
-- have sufficiently defined acceptance criteria;
-- have all implementation dependencies merged into main;
-- not already have an active Pull Request.
+### Fresh-context execution
 
-After each Pull Request is created, the orchestrator must refresh the
-GitHub backlog and recalculate eligibility.
+Autonomous backlog development uses one fresh Claude Code process per
+GitHub Issue.
 
-Independent Issues may continue while other Pull Requests wait for human
-review.
+Each Issue implementation must run in an independent Claude Code context.
 
-Dependent Issues must wait until their dependencies are merged into main.
+The Issue developer must not rely on conversation context from previous
+Issues.
 
-The orchestrator must never:
+All required context must be reconstructed from durable project sources:
 
-- merge Pull Requests;
-- enable auto-merge;
-- build dependent work on unmerged feature branches;
-- invent missing requirements;
-- bypass CI or required checks.
+- CLAUDE.md
+- the GitHub Issue
+- referenced BR-xxx rules
+- relevant ADRs
+- relevant documentation
+- current code
+- current tests
+
+Do not load all documentation into every context: read CLAUDE.md, the
+target Issue, its referenced rules and documents, and the relevant
+code/tests. One development context covers the whole Issue lifecycle; do
+not split one Issue into several fresh contexts per layer.
+
+The external development orchestrator is responsible for selecting the
+next READY Issue and starting a new Claude Code process.
+
+One Issue = one development context = one feature/fix branch = one Pull
+Request.
+
+Dependent Issues must not start until their prerequisite implementation
+has been merged into main.
+
+Independent READY Issues may be implemented while other Pull Requests
+wait for human review.
+
+Claude must never merge Pull Requests automatically.
+
+### READY Issues
+
+An Issue is eligible for autonomous implementation only when ALL hold:
+
+1. it is OPEN;
+2. it represents approved implementation work;
+3. it carries the `status:ready` label;
+4. it does not carry the `status:blocked` label;
+5. its acceptance criteria are sufficiently defined;
+6. required human product/architecture decisions are resolved (no
+   unresolved `## Open question` section);
+7. no active Pull Request already implements it;
+8. every implementation dependency listed in its `## Dependencies`
+   section has a Pull Request MERGED into `main`.
+
+A dependency is not satisfied merely because work started, a branch or PR
+exists, the Issue was closed, or Claude says implementation is complete.
+
+Dependencies are declared in the Issue body:
+
+```md
+## Dependencies
+
+None
+```
+
+or bullet lines referencing real Issue numbers, e.g. `- HOUSEHOLD-002 (#8)`.
+Non-bullet notes in that section are informational, not blocking.
+
+Selection order among eligible Issues: dependency order (Issues unblocking
+the most open work first), then `priority:high` / `priority:medium` /
+`priority:low`, then GitHub Issue number as final tie-breaker. Execution
+is sequential: one implementation process at a time unless the human
+explicitly authorizes parallel runs.
+
+### Review loop
+
+Each Issue's diff is reviewed, before commit, by the independent
+read-only `code-reviewer` and `security-reviewer` subagents in addition to
+the issue-developer's mandatory self-review (§4.5). Valid BLOCKER/HIGH
+findings are fixed and re-verified; reviewer suggestions that conflict
+with approved rules, ADRs, the security model or the Issue scope require a
+human decision and stop the Issue.
+
+### Stop conditions
 
 The autonomous loop stops when:
 
@@ -1243,5 +1309,10 @@ The autonomous loop stops when:
 - human input is required;
 - a blocking failure occurs;
 - continuing would be unsafe.
+
+The orchestrator and all agents must never merge Pull Requests, enable
+auto-merge, approve their own Pull Requests, push to `main`, force-push,
+build dependent work on unmerged feature branches, invent missing
+requirements, or bypass branch protection, CI or required checks.
 
 Human review and merge remain mandatory.
