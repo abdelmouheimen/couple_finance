@@ -1,0 +1,54 @@
+databaseChangeLog:
+  - changeSet:
+      id: categorization-0002-create-category
+      author: couplefinance
+      comment: >
+        Category aggregate (database-schema.md §6.1). household_id NULL = system category (code, no stored name).
+        uq_category_name enforces BR-CAT-02 (case-insensitive, per household) and serves the household-scoped name
+        lookup of create/rename. uq_category_sort_order (NULLS NOT DISTINCT so system rows are covered too) makes
+        the concurrent allocation of sort_order safe and, leading with household_id, serves the listing query
+        "categories of a household ordered by sort_order". uq_category_system_code serves the lookup by code.
+        ck_category_system_active: a system category is never archived (BR-CAT-03). No DELETE path exists
+        (BR-CAT-03): the application has no delete operation on this table.
+      changes:
+        - sql:
+            sql: |
+              CREATE TABLE categorization.category (
+                  id           uuid        NOT NULL,
+                  household_id uuid,
+                  system_code  text,
+                  name         text,
+                  icon         text        NOT NULL,
+                  color        text        NOT NULL,
+                  sort_order   smallint    NOT NULL,
+                  archived_at  timestamptz,
+                  created_at   timestamptz,
+                  created_by   uuid,
+                  updated_at   timestamptz,
+                  updated_by   uuid,
+                  version      bigint      NOT NULL DEFAULT 0,
+                  CONSTRAINT pk_category PRIMARY KEY (id),
+                  CONSTRAINT fk_category_household FOREIGN KEY (household_id) REFERENCES household.household (id),
+                  CONSTRAINT fk_category_created_by FOREIGN KEY (created_by) REFERENCES identity.user_account (id),
+                  CONSTRAINT fk_category_updated_by FOREIGN KEY (updated_by) REFERENCES identity.user_account (id),
+                  CONSTRAINT ck_category_system_code CHECK ((household_id IS NULL) = (system_code IS NOT NULL)),
+                  CONSTRAINT ck_category_name_presence CHECK ((household_id IS NULL) = (name IS NULL)),
+                  CONSTRAINT ck_category_name CHECK (name IS NULL
+                      OR (char_length(name) BETWEEN 1 AND 40 AND name = btrim(name))),
+                  CONSTRAINT ck_category_icon CHECK (char_length(icon) BETWEEN 1 AND 40),
+                  CONSTRAINT ck_category_color CHECK (color ~ '^#[0-9A-Fa-f]{6}$'),
+                  CONSTRAINT ck_category_sort_order CHECK (sort_order >= 0),
+                  CONSTRAINT ck_category_system_active CHECK (household_id IS NOT NULL OR archived_at IS NULL),
+                  CONSTRAINT ck_category_audit CHECK (household_id IS NULL
+                      OR (created_at IS NOT NULL AND created_by IS NOT NULL
+                          AND updated_at IS NOT NULL AND updated_by IS NOT NULL))
+              );
+              CREATE UNIQUE INDEX uq_category_system_code ON categorization.category (system_code)
+                  WHERE system_code IS NOT NULL;
+              CREATE UNIQUE INDEX uq_category_name ON categorization.category (household_id, lower(name))
+                  WHERE household_id IS NOT NULL;
+              ALTER TABLE categorization.category ADD CONSTRAINT uq_category_sort_order
+                  UNIQUE NULLS NOT DISTINCT (household_id, sort_order);
+      rollback:
+        - sql:
+            sql: DROP TABLE categorization.category

@@ -1,0 +1,10 @@
+databaseChangeLog:
+  - changeSet:
+      id: categorization-0001-create-categorization-schema
+      author: couplefinance
+      changes:
+        - sql:
+            sql: CREATE SCHEMA IF NOT EXISTS categorization
+      rollback:
+        - sql:
+            sql: DROP SCHEMA IF EXISTS categorization
