@@ -48,6 +48,8 @@ dependencies {
     testImplementation("org.testcontainers:testcontainers-postgresql")
     // Property-based tests for Money (architecture.md §8: "jqwik ... for Money, expense items, parsers").
     testImplementation("net.jqwik:jqwik:1.9.3")
+    // Architecture rules (architecture.md section 8); same version Spring Modulith already resolves transitively.
+    testImplementation("com.tngtech.archunit:archunit:1.4.2")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
