@@ -24,6 +24,7 @@ class LiquibaseMigrationIntegrationTest {
         assertThat(applied).containsExactly(
                 "infra-0001-create-btree-gist-extension",
                 "infra-0002-create-infra-schema",
+                "infra-0003-create-idempotency-key",
                 "identity-0001-create-identity-schema",
                 "identity-0002-create-user-account",
                 "household-0001-create-household-schema",
