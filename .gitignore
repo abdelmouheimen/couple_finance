@@ -4,6 +4,9 @@ out/
 .gradle/
 .kotlin/
 
+# jqwik property-based test database (local shrinking/seed cache)
+.jqwik-database
+
 # IDEs
 .idea/
 *.iml
