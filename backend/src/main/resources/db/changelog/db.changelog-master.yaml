@@ -9,3 +9,5 @@ databaseChangeLog:
       file: db/changelog/identity/identity.changelog.yaml
   - include:
       file: db/changelog/household/household.changelog.yaml
+  - include:
+      file: db/changelog/categorization/categorization.changelog.yaml
