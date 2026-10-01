@@ -36,7 +36,168 @@ PostgreSQL container for the whole suite — reuse it rather than adding new con
 ---
 
 ## 1. How to work
+### GitHub Issue autonomous workflow
 
+Development work is driven by GitHub Issues.
+
+When explicitly asked to implement a GitHub Issue, Claude owns the
+development lifecycle from issue analysis to Pull Request creation.
+
+#### Workflow
+
+1. Read the issue with `gh issue view <number>`.
+2. Read `CLAUDE.md` and all relevant `docs/`.
+3. Inspect existing implementation and tests before changing code.
+4. Check that the working tree is clean.
+5. Checkout `main` and pull the latest changes.
+6. Create a branch from the updated `main`.
+7. Implement only the scope defined by the Issue.
+8. Add/update Liquibase migrations when required.
+9. Update OpenAPI when required.
+10. Add/update tests required by this file and the Issue.
+11. Run relevant tests.
+12. Run the complete affected build/test suite.
+13. Review the complete git diff.
+14. Fix BLOCKER/HIGH issues found during self-review.
+15. Commit using Conventional Commits.
+16. Push the feature branch.
+17. Create a Pull Request.
+18. Link the Pull Request to the Issue with `Closes #<issue-number>`.
+19. Stop and wait for human PR review.
+
+#### Branch naming
+
+Feature:
+
+`feature/<issue-number>-<short-description>`
+
+Example:
+
+`feature/1-create-household`
+
+Bug:
+
+`fix/<issue-number>-<short-description>`
+
+#### Commits
+
+Use Conventional Commits.
+
+Examples:
+
+`feat(household): create household (#1)`
+`fix(expense): enforce household isolation (#17)`
+`test(receipt): add receipt analysis tests (#32)`
+
+Keep commits focused and reviewable.
+
+#### Pull Request requirements
+
+Every Pull Request must contain:
+
+- Issue reference
+- Summary
+- Business rules implemented
+- Technical changes
+- Database changes
+- API/OpenAPI changes
+- Security considerations
+- Tests added
+- Commands executed and their results
+- Known limitations or unresolved risks
+
+The PR body must contain:
+
+`Closes #<issue-number>`
+
+#### Mandatory self-review
+
+Before creating the Pull Request, review the complete diff for:
+
+- business rule violations
+- authorization bypasses
+- household isolation failures
+- security vulnerabilities
+- architecture/module boundary violations
+- transaction problems
+- concurrency/race conditions
+- monetary calculation errors
+- missing database constraints
+- missing tests
+- unnecessary complexity
+- unrelated changes
+- AI trust-boundary violations when applicable
+
+Classify findings as:
+
+- BLOCKER
+- HIGH
+- MEDIUM
+- LOW
+
+BLOCKER and HIGH findings must be fixed before creating the PR.
+
+MEDIUM and LOW findings that are intentionally not fixed must be
+documented in the Pull Request.
+
+#### Failure policy
+
+Never create a Pull Request presented as ready for review when:
+
+- the project does not compile;
+- required tests fail;
+- integration tests fail;
+- architecture tests fail;
+- OpenAPI drift exists;
+- a known BLOCKER/HIGH security issue remains.
+
+Do not bypass, disable, delete, weaken or ignore a failing check merely
+to complete an Issue.
+
+If completion is blocked, stop implementation and report the blocker.
+
+#### Agent permissions
+
+Claude may autonomously:
+
+- create feature/fix branches;
+- modify files;
+- create Liquibase migrations;
+- update OpenAPI;
+- run builds and tests;
+- create commits;
+- push feature/fix branches;
+- create Pull Requests.
+
+Claude MUST NOT autonomously:
+
+- push directly to `main`;
+- merge Pull Requests;
+- force-push `main`;
+- delete protected branches;
+- modify branch protection;
+- disable CI/security checks;
+- merge despite failing checks.
+
+The human reviewer owns the final Pull Request review and merge decision.
+
+#### Architecture decisions
+
+The autonomous GitHub workflow does NOT override the architectural
+approval rules in this file.
+
+If implementation requires:
+
+- changing module boundaries;
+- introducing a framework or major dependency;
+- changing the authorization model;
+- changing the money model;
+- changing the AI trust model;
+- contradicting an ADR;
+- contradicting an approved business rule;
+
+stop and request human approval before implementing that architectural
+change.
 - **Inspect existing patterns before creating new ones.** Before adding a class, endpoint, migration, test or
   utility, look at how the same thing is already done in the codebase and follow it.
 - **Prefer small changes.** One concern per change; keep diffs reviewable.
