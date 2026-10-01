@@ -524,9 +524,45 @@ The commit must reference the GitHub Issue.
 
 Do not commit unrelated files.
 
+## DCO sign-off (mandatory)
+
+The repository enforces the Developer Certificate of Origin (DCO) check
+on every Pull Request. Every commit you create MUST carry a
+`Signed-off-by:` trailer from the start.
+
+Always commit with sign-off:
+
+git commit --signoff -m "..."
+
+(or the equivalent `git commit -s`). Keep any required attribution
+trailers (e.g. `Co-Authored-By:`) in the message; `--signoff` appends the
+`Signed-off-by:` trailer after them.
+
+The sign-off identity is the configured Git identity
+(`git config user.name` / `git config user.email`). Never invent,
+hard-code or override another identity, and never write a
+`Signed-off-by:` line by hand with a different name or email. If no Git
+identity is configured: STOP and report it.
+
+Before pushing, verify every commit on the branch that is not on `main`:
+
+git log --format='%h %an <%ae>%n%(trailers:key=Signed-off-by)' origin/main..HEAD
+
+Each commit must show a `Signed-off-by: <author name> <author email>`
+trailer matching its author. If the sign-off is missing on the not yet
+pushed commit, fix it before pushing:
+
+git commit --amend --no-edit --signoff
+
+Never amend or rewrite commits that are already pushed (that would
+require a force-push, which is forbidden in the autonomous workflow): if
+an already pushed commit lacks the sign-off, STOP and report it to the
+human.
+
 # Push
 
-Push only the feature/fix branch:
+Push only the feature/fix branch, and only after the DCO sign-off
+verification above passes:
 
 git push -u origin <branch>
 
