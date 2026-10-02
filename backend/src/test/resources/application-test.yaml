@@ -7,11 +7,15 @@ spring:
   liquibase:
     change-log: classpath:db/changelog/test-master.yaml
 
-# All integration tests share one client address and one context: the default limits are high enough not to
-# interfere, dedicated tight profiles serve the rate-limit tests on test-support routes only.
+# All integration tests share one client address and one context: the production default (300/min per IP) is
+# exhausted by the suite on fast machines, so the default profile is effectively unlimited here; dedicated tight
+# profiles serve the rate-limit tests on test-support routes only.
 couplefinance:
   rate-limit:
     profiles:
+      default:
+        ip: {capacity: 1000000, period: 1m}
+        user: {capacity: 1000000, period: 1m}
       tight-ip:
         ip: {capacity: 3, period: 1h}
         user: {capacity: 1000, period: 1h}
