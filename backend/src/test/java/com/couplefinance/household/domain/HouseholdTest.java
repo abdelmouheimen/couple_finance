@@ -48,6 +48,14 @@ class HouseholdTest {
     }
 
     @Test
+    void BR_ANA_03_tracking_start_is_earliest_of_creation_and_expense_date() {
+        Household household = create("Notre foyer", 1);
+
+        // initialised to the creation date in the household timezone; expense dates then only lower it (TrackingStart)
+        assertThat(household.trackingStartDate()).isEqualTo(LocalDate.ofInstant(NOW, PARIS));
+    }
+
+    @Test
     void BR_HH_05_today_is_computed_in_the_household_timezone() {
         Household household = create("Notre foyer", 1);
 
