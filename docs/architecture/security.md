@@ -62,7 +62,9 @@ of this document applies either way).
 4. Another household's resource → **404**.
 5. UUIDv7 identifiers.
 6. Test matrix generated from the OpenAPI spec: every endpoint called by a user of household B on household A's
-   resources returns 404.
+   resources returns 404. Implemented by `platform.authz.AuthorizationMatrixIntegrationTest`: every operation
+   must be registered in `OperationRegistry` (an unclassified operation fails the build), so each new endpoint
+   extends the matrix as part of its Definition of Done.
 7. Defence in depth: **PostgreSQL Row-Level Security** on household tables with `app.household_id` and
    `app.user_id` set per transaction — **decided for GA**, optional during MVP development
    (open question: performance validation).
