@@ -93,6 +93,34 @@ final class PrivacyProbes {
                 .hasStatus(HttpStatus.NOT_FOUND);
     }
 
+    static void periodAnalytics(AuthzWorld world, SeededHousehold s) {
+        String uri = "/api/v1/analytics/periods/" + s.periodStart() + "?scope=HOUSEHOLD";
+        // the seeded expenses are dated before the calendar: add a SHARED and a PERSONAL one inside the period
+        assertThat(world.send(s.owner(), Call.with(HttpMethod.POST, "/api/v1/expenses",
+                periodExpense(s, "SHARED", "7.00")))).hasStatus(HttpStatus.CREATED);
+        assertThat(world.send(s.owner(), Call.with(HttpMethod.POST, "/api/v1/expenses",
+                periodExpense(s, "PERSONAL", "99.99")))).hasStatus(HttpStatus.CREATED);
+
+        for (UUID caller : new UUID[] {s.owner(), s.partner()}) {
+            MvcTestResult result = world.get(caller, uri);
+            assertThat(result).hasStatus(HttpStatus.OK);
+            assertNoPrivateData(s, AuthzWorld.text(result), uri);
+            assertThat(AuthzWorld.text(result)).doesNotContain("99.99");
+            JsonNode body = world.body(result);
+            assertThat(body.get("total").get("amount").asString()).as("PERSONAL spending is not a household figure")
+                    .isEqualTo("7.00");
+            assertThat(body.get("budget").get("consumed").get("amount").asString()).isEqualTo("7.00");
+            assertThat(body.get("members")).hasSize(1);
+        }
+    }
+
+    private static String periodExpense(SeededHousehold s, String sharing, String amount) {
+        String money = "{\"amount\":\"" + amount + "\",\"currency\":\"EUR\"}";
+        return "{\"amount\":" + money + ",\"date\":\"" + s.periodStart() + "\",\"paidByUserId\":\"" + s.owner()
+                + "\",\"sharingType\":\"" + sharing + "\",\"items\":[{\"categoryId\":\""
+                + SeededHousehold.SYSTEM_GROCERIES + "\",\"amount\":" + money + "}]}";
+    }
+
     static void suggestions(AuthzWorld world, SeededHousehold s) {
         String uri = "/api/v1/category-suggestions?merchant=" + s.ruleMerchant() + "&sharingType=";
         JsonNode own = world.body(world.get(s.owner(), uri + "PERSONAL"));
