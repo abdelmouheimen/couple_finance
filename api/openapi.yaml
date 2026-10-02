@@ -198,11 +198,12 @@ paths:
       - Categories
   /api/v1/expenses:
     post:
-      description: "Creates an EXPENSE in the caller's household. The household comes\
-        \ from the authenticated user. The ETag header carries the version. Send an\
-        \ Idempotency-Key to retry safely: the same key and request return the original\
-        \ response (24 h); the same key with a different request is a 422; the same\
-        \ key while the first request is running is a 409."
+      description: "Creates an EXPENSE or a REFUND (optionally linked to an original\
+        \ expense) in the caller's household. The household comes from the authenticated\
+        \ user. The ETag header carries the version. Send an Idempotency-Key to retry\
+        \ safely: the same key and request return the original response (24 h); the\
+        \ same key with a different request is a 422; the same key while the first\
+        \ request is running is a 409."
       operationId: createExpense
       parameters:
       - description: Client-generated key (1-100 printable ASCII characters) making
@@ -234,7 +235,10 @@ paths:
             \ TOO_MANY_DECIMALS, AMOUNT_NOT_POSITIVE, AMOUNT_EXCEEDS_MAXIMUM, CURRENCY_MISMATCH,\
             \ EXPENSE_DATE_OUT_OF_RANGE, EXPENSE_ITEM_COUNT_INVALID, EXPENSE_ITEM_DUPLICATE_CATEGORY,\
             \ EXPENSE_ITEMS_SUM_MISMATCH, EXPENSE_CATEGORY_ARCHIVED, EXPENSE_PAID_BY_INVALID,\
-            \ EXPENSE_PERSONAL_PAYER_MISMATCH, EXPENSE_MERCHANT_INVALID or IDEMPOTENCY_KEY_INVALID"
+            \ EXPENSE_PERSONAL_PAYER_MISMATCH, EXPENSE_MERCHANT_INVALID, EXPENSE_REFUND_OF_NOT_ALLOWED,\
+            \ EXPENSE_REFUND_ORIGINAL_INVALID, EXPENSE_REFUND_VISIBILITY_MISMATCH,\
+            \ EXPENSE_REFUND_DATE_BEFORE_ORIGINAL, EXPENSE_REFUND_EXCEEDS_ORIGINAL\
+            \ or IDEMPOTENCY_KEY_INVALID"
         "401":
           content:
             application/problem+json:
@@ -252,8 +256,9 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          description: HOUSEHOLD_NOT_FOUND or CATEGORY_NOT_FOUND (also for a category
-            of another household)
+          description: "HOUSEHOLD_NOT_FOUND, EXPENSE_NOT_FOUND (refundOf unknown,\
+            \ deleted, of another household or personal to the partner) or CATEGORY_NOT_FOUND\
+            \ (also for a category of another household)"
         "409":
           content:
             application/problem+json:
@@ -266,7 +271,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
           description: IDEMPOTENCY_KEY_REUSED
-      summary: Create an expense
+      summary: Create an expense or a refund
       tags:
       - Expenses
   /api/v1/households:
@@ -448,16 +453,25 @@ components:
           type: string
           format: date
           description: "Calendar date of the expense (YYYY-MM-DD): at most 1 day after\
-            \ today in the household time zone, at most 5 years old."
+            \ today in the household time zone, at most 5 years old. A linked refund\
+            \ is dated on or after its original."
           example: 2026-05-14
         items:
           type: array
           description: "Category breakdown: 1 to 10 items, one per category, summing\
-            \ exactly to the amount."
+            \ exactly to the amount. May be omitted only for a REFUND with refundOf:\
+            \ the items then default to the original categories, proportionally."
           items:
             $ref: "#/components/schemas/CreateExpenseItemRequest"
           maxItems: 10
           minItems: 0
+        kind:
+          type: string
+          default: EXPENSE
+          description: EXPENSE (default) or REFUND.
+          enum:
+          - EXPENSE
+          - REFUND
         merchant:
           type: string
           description: "Merchant name, stored as given."
@@ -472,18 +486,22 @@ components:
           format: uuid
           description: A current member of the household. Must be the caller for a
             PERSONAL expense.
+        refundOf:
+          type: string
+          format: uuid
+          description: "Original EXPENSE of the same household that the caller can\
+            \ see, for a REFUND only. Unknown and invisible originals are both a 404."
         sharingType:
           type: string
-          default: SHARED
           description: "SHARED (default) or PERSONAL (visible only to its owner, the\
-            \ caller)."
+            \ caller). A refund with refundOf has the sharing type of its original;\
+            \ another value is rejected."
           enum:
           - SHARED
           - PERSONAL
       required:
       - amount
       - date
-      - items
       - paidByUserId
     CreateHouseholdRequest:
       type: object
@@ -540,6 +558,7 @@ components:
           type: string
           enum:
           - EXPENSE
+          - REFUND
         merchant:
           type: string
         note:
@@ -547,6 +566,10 @@ components:
         paidByUserId:
           type: string
           format: uuid
+        refundOf:
+          type: string
+          format: uuid
+          description: The original expense of a linked REFUND.
         sharingType:
           type: string
           enum:

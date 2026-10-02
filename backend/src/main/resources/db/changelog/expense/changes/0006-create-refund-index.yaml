@@ -1,0 +1,16 @@
+databaseChangeLog:
+  - changeSet:
+      id: expense-0006-create-refund-index
+      author: couplefinance
+      comment: >
+        ix_expense_refunds (database-schema.md section 7.1). Serves the live-refund queries of BR-EXP-03
+        (sum of refunds of an original under its row lock; "has live refunds") and the foreign-key check of
+        fk_expense_refund_of when an original is purged.
+      changes:
+        - sql:
+            sql: >
+              CREATE INDEX ix_expense_refunds ON expense.expense (refund_of_expense_id)
+              WHERE refund_of_expense_id IS NOT NULL
+      rollback:
+        - sql:
+            sql: DROP INDEX expense.ix_expense_refunds

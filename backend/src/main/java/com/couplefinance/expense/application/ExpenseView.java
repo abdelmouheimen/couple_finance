@@ -18,7 +18,8 @@ import org.jspecify.annotations.Nullable;
  * idempotent replay, so it must round-trip through JSON; amounts are {@link Money}.
  */
 public record ExpenseView(UUID id, ExpenseKind kind, Money amount, LocalDate date, UUID paidByUserId,
-        SharingType sharingType, @Nullable String merchant, @Nullable String note, List<ItemView> items,
+        SharingType sharingType, @Nullable String merchant, @Nullable String note, @Nullable UUID refundOf,
+        List<ItemView> items,
         ExpenseSource source, UUID createdBy, Instant createdAt, long version) {
 
     /** One category item of the expense. */
@@ -29,7 +30,8 @@ public record ExpenseView(UUID id, ExpenseKind kind, Money amount, LocalDate dat
                 .map(item -> toView(item, expense, decimals)).toList();
         return new ExpenseView(expense.id(), expense.kind(),
                 Money.ofMinor(expense.amountMinor(), expense.currency(), decimals), expense.expenseDate(),
-                expense.paidByUserId(), expense.sharingType(), expense.merchantDisplay(), expense.note(), items,
+                expense.paidByUserId(), expense.sharingType(), expense.merchantDisplay(), expense.note(),
+                expense.refundOfExpenseId(), items,
                 expense.source(), expense.createdBy(), expense.createdAt(), expense.version());
     }
 

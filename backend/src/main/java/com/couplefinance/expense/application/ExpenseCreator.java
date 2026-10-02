@@ -10,14 +10,17 @@ import com.couplefinance.expense.api.ExpenseCreated;
 import com.couplefinance.expense.domain.Expense;
 import com.couplefinance.expense.domain.ExpenseAuditLog;
 import com.couplefinance.expense.domain.ExpenseErrorCode;
+import com.couplefinance.expense.domain.ExpenseKind;
 import com.couplefinance.expense.domain.ExpenseRepository;
 import com.couplefinance.expense.domain.NewItem;
+import com.couplefinance.expense.domain.SharingType;
 import com.couplefinance.household.api.CurrentHousehold;
 import com.couplefinance.household.api.HouseholdContext;
 import com.couplefinance.household.api.HouseholdLedgerRules;
 import com.couplefinance.household.api.LedgerProfile;
 import com.couplefinance.shared.error.ApplicationException;
 import com.couplefinance.shared.id.UserId;
+import com.couplefinance.shared.money.Money;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -54,18 +57,52 @@ class ExpenseCreator {
         HouseholdContext context = currentHousehold.currentHousehold();
         context.requireWritable(); // BR-HH-10
         LedgerProfile ledger = ledgerRules.profile(context.householdId());
-
-        List<NewItem> items = command.items().stream()
-                .map(item -> new NewItem(item.categoryId(), item.amount(), item.label())).toList();
+        boolean refund = command.kind() == ExpenseKind.REFUND;
+        if (command.refundOfExpenseId() != null && !refund) {
+            throw new ApplicationException(ExpenseErrorCode.EXPENSE_REFUND_OF_NOT_ALLOWED,
+                    "refundOf is only allowed for a REFUND.");
+        }
         UserId paidBy = new UserId(command.paidByUserId());
-        Expense expense = Expense.create(context.householdId(), ledger, clock, command.amount(), command.date(),
-                items, paidBy, command.sharingType(), context.userId(), command.merchant(), command.note());
+
+        Expense original = null;
+        Money alreadyRefunded = Money.zero(ledger.currency(), ledger.decimals());
+        if (command.refundOfExpenseId() != null) {
+            // BR-EXP-03: lock the original row (scoped by household and visibility) before summing its refunds.
+            original = expenses.lockVisibleLiveById(command.refundOfExpenseId(), context.householdId().value(),
+                    context.userId().value())
+                    .orElseThrow(() -> new ApplicationException(ExpenseErrorCode.EXPENSE_NOT_FOUND,
+                            "The expense was not found."));
+            alreadyRefunded = Money.ofMinor(
+                    expenses.sumLiveRefundsMinor(original.id(), context.householdId().value()),
+                    ledger.currency(), ledger.decimals());
+        }
+        SharingType sharing = command.sharingType() != null ? command.sharingType()
+                : original != null ? original.sharingType() : SharingType.SHARED;
+
+        List<NewItem> items;
+        boolean defaultedItems = command.items() == null || command.items().isEmpty();
+        if (defaultedItems && original != null) {
+            items = original.proportionalItems(command.amount()); // BR-EXP-03, BR-MON-06
+        } else {
+            items = command.items() == null ? List.of() : command.items().stream()
+                    .map(item -> new NewItem(item.categoryId(), item.amount(), item.label())).toList();
+        }
+
+        Expense expense = refund
+                ? Expense.createRefund(context.householdId(), ledger, clock, command.amount(), command.date(),
+                        items, paidBy, sharing, context.userId(), command.merchant(), command.note(), original,
+                        alreadyRefunded)
+                : Expense.create(context.householdId(), ledger, clock, command.amount(), command.date(),
+                        items, paidBy, sharing, context.userId(), command.merchant(), command.note());
 
         if (!ledgerRules.isActiveMember(context.householdId(), paidBy)) {
             throw new ApplicationException(ExpenseErrorCode.EXPENSE_PAID_BY_INVALID,
                     "The payer must be a member of the household.");
         }
-        requireUsableCategories(context, items);
+        if (!defaultedItems) {
+            // Defaulted items inherit the original's categories, valid even if archived since (BR-EXP-14).
+            requireUsableCategories(context, items);
+        }
 
         Expense saved = expenses.saveAndFlush(expense);
         audit.created(saved, context.userId());

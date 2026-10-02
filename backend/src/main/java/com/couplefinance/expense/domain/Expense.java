@@ -3,6 +3,7 @@ package com.couplefinance.expense.domain;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -85,6 +86,9 @@ public class Expense {
 
     private String note;
 
+    /** The original expense of a linked REFUND (BR-EXP-03); {@code null} otherwise. */
+    private UUID refundOfExpenseId;
+
     @Enumerated(EnumType.STRING)
     private ExpenseSource source;
 
@@ -95,6 +99,9 @@ public class Expense {
     private Instant updatedAt;
 
     private UUID updatedBy;
+
+    /** Logical deletion marker (BR-EXP-11): a deleted expense is excluded from every live-refund sum. */
+    private Instant deletedAt;
 
     @Version
     private Long version;
@@ -122,6 +129,88 @@ public class Expense {
     public static Expense create(HouseholdId household, LedgerProfile ledger, Clock clock, Money amount,
             LocalDate date, List<NewItem> items, UserId paidBy, SharingType sharing, UserId creator,
             @Nullable String merchant, @Nullable String note) {
+        return build(ExpenseKind.EXPENSE, null, household, ledger, clock, amount, date, items, paidBy, sharing,
+                creator, merchant, note);
+    }
+
+    /**
+     * Creates a manual {@code REFUND} (BR-EXP-02, BR-EXP-03). A refund that is not linked ({@code original ==
+     * null}) behaves like an expense of kind REFUND. A linked refund must have the original's visibility, be dated
+     * on or after the original, and keep the sum of live refunds of the original within its amount.
+     *
+     * @param original        the original, which the caller must have loaded under a row lock and scoped by
+     *                        household and visibility; {@code null} for an unlinked refund
+     * @param alreadyRefunded sum of the live refunds already linked to {@code original}, computed under that lock
+     */
+    public static Expense createRefund(HouseholdId household, LedgerProfile ledger, Clock clock, Money amount,
+            LocalDate date, List<NewItem> items, UserId paidBy, SharingType sharing, UserId creator,
+            @Nullable String merchant, @Nullable String note, @Nullable Expense original,
+            Money alreadyRefunded) {
+        Objects.requireNonNull(household, "household");
+        Objects.requireNonNull(amount, "amount");
+        Objects.requireNonNull(date, "date");
+        Objects.requireNonNull(sharing, "sharing");
+        if (original != null) {
+            original.requireRefundable(household, sharing, date, amount, alreadyRefunded);
+        }
+        return build(ExpenseKind.REFUND, original == null ? null : original.id, household, ledger, clock, amount,
+                date, items, paidBy, sharing, creator, merchant, note);
+    }
+
+    /**
+     * BR-EXP-03 + BR-MON-06: the items of a refund that gives none, one per original category, proportional to the
+     * original items. Each share is the floor of {@code amount * originalItem / originalAmount}; the remainder
+     * (fewer minor units than items) is handed out one unit at a time, first item first. Shares that stay at zero
+     * are dropped (an item is strictly positive), so the result always sums to {@code amount} exactly.
+     */
+    public List<NewItem> proportionalItems(Money amount) {
+        BigInteger total = BigInteger.valueOf(amountMinor);
+        BigInteger refund = BigInteger.valueOf(amount.minorUnits());
+        long[] shares = new long[items.size()];
+        long distributed = 0;
+        for (int i = 0; i < shares.length; i++) {
+            shares[i] = refund.multiply(BigInteger.valueOf(items.get(i).amountMinor())).divide(total)
+                    .longValueExact();
+            distributed += shares[i];
+        }
+        long remainder = amount.minorUnits() - distributed;
+        for (int i = 0; remainder > 0 && i < shares.length; i++, remainder--) {
+            shares[i]++;
+        }
+        List<NewItem> result = new ArrayList<>();
+        for (int i = 0; i < shares.length; i++) {
+            if (shares[i] > 0) {
+                result.add(new NewItem(items.get(i).categoryId(),
+                        Money.ofMinor(shares[i], amount.currency(), amount.amount().scale()), items.get(i).label()));
+            }
+        }
+        return result;
+    }
+
+    /** Domain checks of BR-EXP-03 for a refund of this expense, made under the lock on this row. */
+    private void requireRefundable(HouseholdId household, SharingType sharing, LocalDate refundDate, Money amount,
+            Money alreadyRefunded) {
+        if (!householdId.equals(household.value()) || kind != ExpenseKind.EXPENSE || deletedAt != null) {
+            throw new ApplicationException(ExpenseErrorCode.EXPENSE_REFUND_ORIGINAL_INVALID,
+                    "A refund can only be linked to an expense.");
+        }
+        if (sharing != sharingType()) {
+            throw new ApplicationException(ExpenseErrorCode.EXPENSE_REFUND_VISIBILITY_MISMATCH,
+                    "A refund has the same sharing type as its original expense.");
+        }
+        if (refundDate.isBefore(expenseDate)) {
+            throw new ApplicationException(ExpenseErrorCode.EXPENSE_REFUND_DATE_BEFORE_ORIGINAL,
+                    "A refund cannot be dated before its original expense.");
+        }
+        if (alreadyRefunded.add(amount).minorUnits() > amountMinor) {
+            throw new ApplicationException(ExpenseErrorCode.EXPENSE_REFUND_EXCEEDS_ORIGINAL,
+                    "The refunds of an expense cannot exceed its amount.");
+        }
+    }
+
+    private static Expense build(ExpenseKind kind, @Nullable UUID refundOf, HouseholdId household,
+            LedgerProfile ledger, Clock clock, Money amount, LocalDate date, List<NewItem> items, UserId paidBy,
+            SharingType sharing, UserId creator, @Nullable String merchant, @Nullable String note) {
         Objects.requireNonNull(household, "household");
         Objects.requireNonNull(ledger, "ledger");
         Objects.requireNonNull(clock, "clock");
@@ -145,7 +234,8 @@ public class Expense {
         Expense expense = new Expense();
         expense.id = UuidV7.generate(clock);
         expense.householdId = household.value();
-        expense.kind = ExpenseKind.EXPENSE;
+        expense.kind = kind;
+        expense.refundOfExpenseId = refundOf;
         expense.amountMinor = amount.minorUnits();
         expense.currency = amount.currency().value();
         expense.expenseDate = date;
@@ -252,6 +342,10 @@ public class Expense {
 
     public long amountMinor() {
         return amountMinor;
+    }
+
+    public @Nullable UUID refundOfExpenseId() {
+        return refundOfExpenseId;
     }
 
     public CurrencyCode currency() {

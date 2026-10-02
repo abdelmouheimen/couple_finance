@@ -1,5 +1,6 @@
 package com.couplefinance.expense.application;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -59,17 +60,21 @@ public class CreateExpenseService {
 
     /** Every field that changes the outcome, in canonical text form (the user is the key scope). */
     private static byte[] hash(CreateExpenseCommand command) {
+        List<CreateExpenseCommand.Item> items = command.items() == null ? List.of() : command.items();
         RequestHash.Builder hash = RequestHash.forOperation(OPERATION)
                 .field("amount", command.amount().toDecimalString())
                 .field("currency", command.amount().currency().value())
                 .field("date", command.date().toString())
                 .field("paidBy", command.paidByUserId().toString())
-                .field("sharing", command.sharingType().name())
+                .field("kind", command.kind().name())
+                .field("refundOf", command.refundOfExpenseId() == null ? null
+                        : command.refundOfExpenseId().toString())
+                .field("sharing", command.sharingType() == null ? null : command.sharingType().name())
                 .field("merchant", command.merchant())
                 .field("note", command.note())
-                .field("itemCount", Integer.toString(command.items().size()));
-        for (int i = 0; i < command.items().size(); i++) {
-            CreateExpenseCommand.Item item = command.items().get(i);
+                .field("itemCount", Integer.toString(items.size()));
+        for (int i = 0; i < items.size(); i++) {
+            CreateExpenseCommand.Item item = items.get(i);
             hash.field("item." + i + ".category", item.categoryId().toString())
                     .field("item." + i + ".amount", item.amount().toDecimalString())
                     .field("item." + i + ".currency", item.amount().currency().value())

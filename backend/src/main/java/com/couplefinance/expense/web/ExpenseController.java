@@ -32,8 +32,9 @@ class ExpenseController {
     }
 
     @PostMapping
-    @Operation(operationId = "createExpense", summary = "Create an expense",
-            description = "Creates an EXPENSE in the caller's household. The household comes from the "
+    @Operation(operationId = "createExpense", summary = "Create an expense or a refund",
+            description = "Creates an EXPENSE or a REFUND (optionally linked to an original expense) in the "
+                    + "caller's household. The household comes from the "
                     + "authenticated user. The ETag header carries the version. Send an Idempotency-Key to retry "
                     + "safely: the same key and request return the original response (24 h); the same key with a "
                     + "different request is a 422; the same key while the first request is running is a 409.")
@@ -42,7 +43,9 @@ class ExpenseController {
             + "TOO_MANY_DECIMALS, AMOUNT_NOT_POSITIVE, AMOUNT_EXCEEDS_MAXIMUM, CURRENCY_MISMATCH, "
             + "EXPENSE_DATE_OUT_OF_RANGE, EXPENSE_ITEM_COUNT_INVALID, EXPENSE_ITEM_DUPLICATE_CATEGORY, "
             + "EXPENSE_ITEMS_SUM_MISMATCH, EXPENSE_CATEGORY_ARCHIVED, EXPENSE_PAID_BY_INVALID, "
-            + "EXPENSE_PERSONAL_PAYER_MISMATCH, EXPENSE_MERCHANT_INVALID or IDEMPOTENCY_KEY_INVALID",
+            + "EXPENSE_PERSONAL_PAYER_MISMATCH, EXPENSE_MERCHANT_INVALID, EXPENSE_REFUND_OF_NOT_ALLOWED, "
+            + "EXPENSE_REFUND_ORIGINAL_INVALID, EXPENSE_REFUND_VISIBILITY_MISMATCH, "
+            + "EXPENSE_REFUND_DATE_BEFORE_ORIGINAL, EXPENSE_REFUND_EXCEEDS_ORIGINAL or IDEMPOTENCY_KEY_INVALID",
             content = @Content(mediaType = "application/problem+json",
                     schema = @Schema(implementation = ProblemSchema.class)))
     @ApiResponse(responseCode = "401", description = "AUTHENTICATION_REQUIRED",
@@ -51,7 +54,9 @@ class ExpenseController {
     @ApiResponse(responseCode = "403", description = "EMAIL_NOT_VERIFIED or HOUSEHOLD_READ_ONLY",
             content = @Content(mediaType = "application/problem+json",
                     schema = @Schema(implementation = ProblemSchema.class)))
-    @ApiResponse(responseCode = "404", description = "HOUSEHOLD_NOT_FOUND or CATEGORY_NOT_FOUND (also for a "
+    @ApiResponse(responseCode = "404", description = "HOUSEHOLD_NOT_FOUND, EXPENSE_NOT_FOUND (refundOf unknown, deleted, of another "
+            + "household or "
+            + "personal to the partner) or CATEGORY_NOT_FOUND (also for a "
             + "category of another household)", content = @Content(mediaType = "application/problem+json",
             schema = @Schema(implementation = ProblemSchema.class)))
     @ApiResponse(responseCode = "409", description = "REQUEST_IN_PROGRESS",

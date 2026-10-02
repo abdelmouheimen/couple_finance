@@ -7,6 +7,7 @@ import java.util.UUID;
 import com.couplefinance.expense.application.CreateExpenseCommand;
 import com.couplefinance.expense.domain.Expense;
 import com.couplefinance.expense.domain.ExpenseItem;
+import com.couplefinance.expense.domain.ExpenseKind;
 import com.couplefinance.expense.domain.SharingType;
 import com.couplefinance.shared.money.Money;
 import com.couplefinance.shared.money.MoneySchema;
@@ -22,29 +23,41 @@ import org.jspecify.annotations.Nullable;
  */
 @Schema(name = "CreateExpenseRequest")
 record CreateExpenseRequest(
+        @Schema(description = "EXPENSE (default) or REFUND.", defaultValue = "EXPENSE",
+                requiredMode = Schema.RequiredMode.NOT_REQUIRED)
+        @Nullable ExpenseKind kind,
+
         @Schema(description = "Total amount, in the household currency, strictly positive.",
                 implementation = MoneySchema.class)
         @NotNull Money amount,
 
         @Schema(description = "Calendar date of the expense (YYYY-MM-DD): at most 1 day after today in the "
-                + "household time zone, at most 5 years old.", example = "2026-05-14")
+                + "household time zone, at most 5 years old. A linked refund is dated on or after its original.",
+                example = "2026-05-14")
         @NotNull LocalDate date,
 
-        @Schema(description = "Category breakdown: 1 to 10 items, one per category, summing exactly to the amount.")
-        @NotNull @Size(max = Expense.MAX_ITEMS) List<@NotNull @Valid Item> items,
+        @Schema(description = "Category breakdown: 1 to 10 items, one per category, summing exactly to the amount. "
+                + "May be omitted only for a REFUND with refundOf: the items then default to the original "
+                + "categories, proportionally.", requiredMode = Schema.RequiredMode.NOT_REQUIRED)
+        @Nullable @Size(max = Expense.MAX_ITEMS) List<@NotNull @Valid Item> items,
 
         @Schema(description = "A current member of the household. Must be the caller for a PERSONAL expense.")
         @NotNull UUID paidByUserId,
 
-        @Schema(description = "SHARED (default) or PERSONAL (visible only to its owner, the caller).",
-                defaultValue = "SHARED", requiredMode = Schema.RequiredMode.NOT_REQUIRED)
+        @Schema(description = "SHARED (default) or PERSONAL (visible only to its owner, the caller). A refund with "
+                + "refundOf has the sharing type of its original; another value is rejected.",
+                requiredMode = Schema.RequiredMode.NOT_REQUIRED)
         @Nullable SharingType sharingType,
 
         @Schema(description = "Merchant name, stored as given.", requiredMode = Schema.RequiredMode.NOT_REQUIRED)
         @Nullable @Size(max = Expense.MERCHANT_MAX_LENGTH) String merchant,
 
         @Schema(requiredMode = Schema.RequiredMode.NOT_REQUIRED)
-        @Nullable @Size(max = Expense.NOTE_MAX_LENGTH) String note) {
+        @Nullable @Size(max = Expense.NOTE_MAX_LENGTH) String note,
+
+        @Schema(description = "Original EXPENSE of the same household that the caller can see, for a REFUND only. "
+                + "Unknown and invisible originals are both a 404.", requiredMode = Schema.RequiredMode.NOT_REQUIRED)
+        @Nullable UUID refundOf) {
 
     /** One category item. */
     @Schema(name = "CreateExpenseItemRequest")
@@ -58,9 +71,9 @@ record CreateExpenseRequest(
     }
 
     CreateExpenseCommand toCommand() {
-        return new CreateExpenseCommand(amount, date,
-                items.stream().map(item -> new CreateExpenseCommand.Item(item.categoryId(), item.amount(),
-                        item.label())).toList(),
-                paidByUserId, sharingType == null ? SharingType.SHARED : sharingType, merchant, note);
+        return new CreateExpenseCommand(kind == null ? ExpenseKind.EXPENSE : kind, amount, date,
+                items == null ? null : items.stream().map(item -> new CreateExpenseCommand.Item(item.categoryId(),
+                        item.amount(), item.label())).toList(),
+                paidByUserId, sharingType, merchant, note, refundOf);
     }
 }

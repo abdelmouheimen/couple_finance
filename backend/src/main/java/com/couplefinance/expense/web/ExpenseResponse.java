@@ -26,6 +26,8 @@ record ExpenseResponse(
         SharingType sharingType,
         @Schema(requiredMode = Schema.RequiredMode.NOT_REQUIRED) @Nullable String merchant,
         @Schema(requiredMode = Schema.RequiredMode.NOT_REQUIRED) @Nullable String note,
+        @Schema(description = "The original expense of a linked REFUND.",
+                requiredMode = Schema.RequiredMode.NOT_REQUIRED) @Nullable UUID refundOf,
         List<Item> items,
         ExpenseSource source,
         UUID createdBy,
@@ -42,6 +44,7 @@ record ExpenseResponse(
     static ExpenseResponse from(ExpenseView expense) {
         return new ExpenseResponse(expense.id(), expense.kind(), expense.amount(), expense.date(),
                 expense.paidByUserId(), expense.sharingType(), expense.merchant(), expense.note(),
+                expense.refundOf(),
                 expense.items().stream().map(item -> new Item(item.id(), item.position(), item.categoryId(),
                         item.amount(), item.label())).toList(),
                 expense.source(), expense.createdBy(), expense.createdAt(), expense.version());
