@@ -10,6 +10,68 @@ servers:
 security:
 - bearerAuth: []
 paths:
+  /api/v1/analytics/periods/{periodStart}:
+    get:
+      description: "Total spending of the period, breakdown by category (percentages\
+        \ summing to 100.0, negative net categories shown apart) and by payer, comparison\
+        \ with the previous period, 3-period average and overall budget consumption.\
+        \ Computed on read by the backend from household spending only (BR-SCP-01):\
+        \ no PERSONAL expense contributes to any figure. Only scope=HOUSEHOLD is supported\
+        \ for now. A date that is not the start of a period of the household calendar\
+        \ is a 404. Readable by archive readers of a dissolved household."
+      operationId: getPeriodAnalytics
+      parameters:
+      - description: First day of the budget period (YYYY-MM-DD).
+        in: path
+        name: periodStart
+        required: true
+        schema:
+          type: string
+          format: date
+      - description: HOUSEHOLD is the only supported scope.
+        in: query
+        name: scope
+        required: true
+        schema:
+          type: string
+          enum:
+          - HOUSEHOLD
+          - PERSONAL
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PeriodAnalytics"
+          description: The analytics of the period
+        "400":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: "VALIDATION_FAILED (malformed date, unknown scope) or ANALYTICS_SCOPE_UNSUPPORTED\
+            \ (PERSONAL)"
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: AUTHENTICATION_REQUIRED
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: EMAIL_NOT_VERIFIED
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: HOUSEHOLD_NOT_FOUND or ANALYTICS_PERIOD_NOT_FOUND
+      summary: Household analytics of a budget period
+      tags:
+      - Analytics
   /api/v1/budgets/{periodStart}:
     get:
       description: "The budget of the household's period starting on periodStart.\
@@ -1104,6 +1166,85 @@ paths:
       - Merchant rules
 components:
   schemas:
+    AnalyticsBudgetSummary:
+      type: object
+      properties:
+        consumed:
+          $ref: "#/components/schemas/Money"
+        limit:
+          $ref: "#/components/schemas/Money"
+        percentage:
+          type: string
+          description: "consumed / limit in percent, one decimal (BR-MON-09)."
+          example: "82.5"
+        remaining:
+          $ref: "#/components/schemas/Money"
+          description: limit - consumed; negative when exceeded.
+        status:
+          type: string
+          description: "ON_TRACK below 80.0%, WARNING from 80.0% to 100.0% inclusive,\
+            \ EXCEEDED above."
+          enum:
+          - ON_TRACK
+          - WARNING
+          - EXCEEDED
+    AnalyticsCategoryShare:
+      type: object
+      properties:
+        categoryId:
+          type: string
+          format: uuid
+        percentage:
+          type: string
+          description: "Share of the breakdown in percent, one decimal, largest remainder\
+            \ (BR-ANA-05)."
+          example: "42.5"
+        total:
+          $ref: "#/components/schemas/Money"
+    AnalyticsCategoryTotal:
+      type: object
+      properties:
+        categoryId:
+          type: string
+          format: uuid
+        total:
+          $ref: "#/components/schemas/Money"
+    AnalyticsMemberTotal:
+      type: object
+      properties:
+        total:
+          $ref: "#/components/schemas/Money"
+        userId:
+          type: string
+          format: uuid
+    AnalyticsPreviousPeriod:
+      type: object
+      properties:
+        changePercentage:
+          type: string
+          description: "difference / previous total in percent, one decimal, HALF_EVEN\
+            \ (BR-MON-09); absent unless the previous total is strictly positive."
+          example: "-3.2"
+        difference:
+          $ref: "#/components/schemas/Money"
+          description: This period's total minus the previous one's.
+        periodEnd:
+          type: string
+          format: date
+        periodStart:
+          type: string
+          format: date
+        total:
+          $ref: "#/components/schemas/Money"
+    AnalyticsThreePeriodAverage:
+      type: object
+      properties:
+        average:
+          $ref: "#/components/schemas/Money"
+        periodsUsed:
+          type: integer
+          format: int32
+          description: "Number of periods averaged, 1 to 3."
     Budget:
       type: object
       properties:
@@ -1719,6 +1860,66 @@ components:
           description: ISO 4217 currency code.
           example: EUR
           pattern: "^[A-Z]{3}$"
+    PeriodAnalytics:
+      type: object
+      properties:
+        budget:
+          $ref: "#/components/schemas/AnalyticsBudgetSummary"
+          description: Overall budget of the period; absent when the period has no
+            overall limit.
+        categories:
+          type: array
+          description: "Categories with a net spending of zero or more, largest first,\
+            \ with their share of the sum of these categories; the percentages sum\
+            \ to exactly 100.0 (BR-ANA-05) unless all are zero."
+          items:
+            $ref: "#/components/schemas/AnalyticsCategoryShare"
+        members:
+          type: array
+          description: "Net spending by payer, never by creator (BR-ANA-04)."
+          items:
+            $ref: "#/components/schemas/AnalyticsMemberTotal"
+        negativeCategories:
+          type: array
+          description: "Categories whose net spending is negative (refunds above purchases),\
+            \ shown as-is and excluded from the percentage breakdown (BR-ANA-06)."
+          items:
+            $ref: "#/components/schemas/AnalyticsCategoryTotal"
+        periodEnd:
+          type: string
+          format: date
+          description: End of the period (exclusive).
+        periodStart:
+          type: string
+          format: date
+          description: First day of the period (inclusive).
+        previousPeriod:
+          $ref: "#/components/schemas/AnalyticsPreviousPeriod"
+          description: Comparison with the preceding calendar period; absent when
+            there is none.
+        scope:
+          type: string
+          description: Scope of every figure; PERSONAL spending is never included
+            (BR-SCP-01).
+          enum:
+          - HOUSEHOLD
+        threePeriodAverage:
+          $ref: "#/components/schemas/AnalyticsThreePeriodAverage"
+          description: "BR-ANA-03: average of the up to 3 complete periods preceding\
+            \ this one that start on or after the household tracking start; absent\
+            \ when none is eligible."
+        total:
+          $ref: "#/components/schemas/Money"
+          description: "Net household spending of the period: expenses minus refunds,\
+            \ deleted expenses and transfers excluded."
+      required:
+      - categories
+      - members
+      - negativeCategories
+      - periodEnd
+      - periodStart
+      - scope
+      - total
     Problem:
       type: object
       description: RFC 9457 Problem Details with a stable `code`.
