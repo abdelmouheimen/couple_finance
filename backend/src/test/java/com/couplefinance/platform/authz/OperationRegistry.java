@@ -27,6 +27,10 @@ public final class OperationRegistry {
     private static final String EXEMPT_CATEGORIES =
             "categories are household-wide data; no PERSONAL attribute exists (BR-EXP-07 does not apply)";
 
+    private static final String EXEMPT_INVITATIONS =
+            "invitations hold no PERSONAL financial data (BR-EXP-07 does not apply); only the caller's own"
+                    + " invitations are listed or revoked and the code is returned only at creation (BR-HH-04)";
+
     private OperationRegistry() {
     }
 
@@ -72,6 +76,13 @@ public final class OperationRegistry {
         registry.put("createHousehold", authenticated(s -> Call.with(HttpMethod.POST, "/api/v1/households",
                 "{\"name\":\"Another foyer\"}")));
         registry.put("getCurrentHousehold", authenticated(s -> Call.get("/api/v1/households/me")));
+
+        registry.put("createInvitation", householdWithoutPersonalData(s -> Call.without(HttpMethod.POST,
+                "/api/v1/households/me/invitations"), false, EXEMPT_INVITATIONS));
+        registry.put("listInvitations", householdWithoutPersonalData(s -> Call.get(
+                "/api/v1/households/me/invitations"), false, EXEMPT_INVITATIONS));
+        registry.put("revokeInvitation", householdWithoutPersonalData(s -> Call.without(HttpMethod.DELETE,
+                "/api/v1/households/me/invitations/" + s.target().invitation()), true, EXEMPT_INVITATIONS));
 
         registry.put("listCategories", householdWithoutPersonalData(s -> Call.get("/api/v1/categories"), false,
                 EXEMPT_CATEGORIES));

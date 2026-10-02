@@ -10,6 +10,10 @@ public record Call(HttpMethod method, String uri, @Nullable String body, @Nullab
         return new Call(HttpMethod.GET, uri, null, null);
     }
 
+    public static Call without(HttpMethod method, String uri) {
+        return new Call(method, uri, null, null);
+    }
+
     public static Call with(HttpMethod method, String uri, String body) {
         return new Call(method, uri, body, null);
     }

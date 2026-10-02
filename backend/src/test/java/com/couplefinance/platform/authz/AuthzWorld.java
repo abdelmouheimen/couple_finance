@@ -55,11 +55,17 @@ public final class AuthzWorld {
         return users.active();
     }
 
-    /** A household with two members, a custom category, SHARED and PERSONAL expenses and a PERSONAL rule. */
+    /**
+     * A household with two members, an invitation of the owner, a custom category, SHARED and PERSONAL expenses and a
+     * PERSONAL rule.
+     */
     public SeededHousehold seedHousehold() {
         UUID owner = users.active();
         UUID partner = users.active();
         UUID household = createHousehold(owner);
+        // BR-HH-04: only a single-member household can invite, so the invitation is created before the partner joins.
+        MvcTestResult invitation = send(owner, Call.without(HttpMethod.POST, "/api/v1/households/me/invitations"));
+        assertThat(invitation).hasStatus(HttpStatus.CREATED);
         jdbc.sql("INSERT INTO household.household_member (household_id, user_id, seat, joined_at) "
                 + "VALUES (:household, :user, 2, now())").param("household", household).param("user", partner)
                 .update();
@@ -83,7 +89,7 @@ public final class AuthzWorld {
                 "{\"merchant\":\"" + ruleMerchant + "\",\"categoryId\":\"" + customCategory
                         + "\",\"sharingType\":\"PERSONAL\"}"));
         assertThat(rule).hasStatus(HttpStatus.OK);
-        return new SeededHousehold(household, owner, partner, customCategory, id(shared), id(personal),
+        return new SeededHousehold(household, owner, partner, id(invitation), customCategory, id(shared), id(personal),
                 personalMerchant, personalNote, ruleMerchant);
     }
 
@@ -102,7 +108,7 @@ public final class AuthzWorld {
     public String snapshot(SeededHousehold seeded) {
         StringBuilder all = new StringBuilder();
         for (String table : new String[] {"expense.expense", "expense.expense_item", "expense.audit_event",
-                "categorization.category", "categorization.merchant_rule"}) {
+                "categorization.category", "categorization.merchant_rule", "household.invitation"}) {
             all.append(jdbc.sql("SELECT coalesce(string_agg(t::text, '|' ORDER BY t::text), '') FROM " + table
                     + " t WHERE t.household_id = :h").param("h", seeded.household()).query(String.class).single());
         }
