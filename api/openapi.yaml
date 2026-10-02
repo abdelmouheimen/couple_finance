@@ -444,6 +444,53 @@ paths:
       tags:
       - Expenses
   /api/v1/expenses/{id}:
+    delete:
+      description: "Logical deletion (BR-EXP-11): the expense leaves every list, total,\
+        \ budget and analytic and can be restored for 90 days. Any member deletes\
+        \ a SHARED expense; only the owner a PERSONAL one (the partner gets a 404).\
+        \ An expense with live refunds cannot be deleted (409 EXPENSE_HAS_LIVE_REFUNDS).\
+        \ The deletion is audited and emits ExpenseDeleted. No If-Match is required:\
+        \ deleting is idempotent in effect and a second delete is a 404. Rejected\
+        \ on a dissolved household."
+      operationId: deleteExpense
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "204":
+          description: Expense deleted
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: AUTHENTICATION_REQUIRED
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: EMAIL_NOT_VERIFIED or HOUSEHOLD_READ_ONLY
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: "HOUSEHOLD_NOT_FOUND or EXPENSE_NOT_FOUND (unknown, already\
+            \ deleted, of another household or personal to the partner)"
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: EXPENSE_HAS_LIVE_REFUNDS
+      summary: Delete an expense
+      tags:
+      - Expenses
     get:
       description: "One expense with its items. The ETag header carries the version.\
         \ A deleted expense, an expense of another household and a PERSONAL expense\
@@ -605,6 +652,60 @@ paths:
                 $ref: "#/components/schemas/Problem"
           description: HOUSEHOLD_NOT_FOUND or EXPENSE_NOT_FOUND
       summary: Read the audit trail of an expense
+      tags:
+      - Expenses
+  /api/v1/expenses/{id}/restore:
+    post:
+      description: "Restores a deleted expense within 90 days of its deletion (BR-EXP-11),\
+        \ under the same edit rights as deletion. After 90 days, or when the expense\
+        \ is not deleted, is unknown, belongs to another household or is personal\
+        \ to the partner, the answer is a 404. Restoring a refund re-checks BR-EXP-03\
+        \ against its original (400 EXPENSE_REFUND_ORIGINAL_INVALID when the original\
+        \ is deleted, EXPENSE_REFUND_EXCEEDS_ORIGINAL, EXPENSE_REFUND_DATE_BEFORE_ORIGINAL,\
+        \ EXPENSE_REFUND_VISIBILITY_MISMATCH). Audited; emits ExpenseRestored. The\
+        \ restored expense is returned with its new ETag. Rejected on a dissolved\
+        \ household."
+      operationId: restoreExpense
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Expense"
+          description: Expense restored
+        "400":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: "EXPENSE_REFUND_ORIGINAL_INVALID, EXPENSE_REFUND_EXCEEDS_ORIGINAL,\
+            \ EXPENSE_REFUND_DATE_BEFORE_ORIGINAL or EXPENSE_REFUND_VISIBILITY_MISMATCH"
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: AUTHENTICATION_REQUIRED
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: EMAIL_NOT_VERIFIED or HOUSEHOLD_READ_ONLY
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: HOUSEHOLD_NOT_FOUND or EXPENSE_NOT_FOUND
+      summary: Restore a deleted expense
       tags:
       - Expenses
   /api/v1/households:

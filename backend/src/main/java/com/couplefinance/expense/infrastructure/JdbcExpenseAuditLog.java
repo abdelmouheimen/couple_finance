@@ -1,6 +1,7 @@
 package com.couplefinance.expense.infrastructure;
 
 import java.time.Clock;
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -104,6 +105,41 @@ class JdbcExpenseAuditLog implements ExpenseAuditLog {
                 .param("actor", actor.value())
                 .param("changes", jsonMapper.writeValueAsString(changes))
                 .param("occurredAt", OffsetDateTime.ofInstant(after.updatedAt(), ZoneOffset.UTC))
+                .update();
+    }
+
+    @Override
+    public void deleted(Expense expense, UserId actor) {
+        insertLifecycle(expense, actor, "DELETE", null, expense.deletedAt().toString(), expense.deletedAt());
+    }
+
+    @Override
+    public void restored(Expense expense, UserId actor, Instant deletedAt) {
+        insertLifecycle(expense, actor, "RESTORE", deletedAt.toString(), null, expense.updatedAt());
+    }
+
+    private void insertLifecycle(Expense expense, UserId actor, String action, String oldDeletedAt,
+            String newDeletedAt, Instant occurredAt) {
+        Map<String, Map<String, Object>> changes = new LinkedHashMap<>();
+        Map<String, Object> change = new LinkedHashMap<>();
+        change.put("old", oldDeletedAt);
+        change.put("new", newDeletedAt);
+        changes.put("deletedAt", change);
+        jdbc.sql("""
+                        INSERT INTO expense.audit_event
+                            (id, household_id, entity_type, entity_id, owner_user_id, action, actor_type,
+                             actor_user_id, changes, occurred_at)
+                        VALUES (:id, :householdId, 'EXPENSE', :entityId, :ownerUserId, :action, 'USER', :actor,
+                                CAST(:changes AS jsonb), :occurredAt)
+                        """)
+                .param("id", UuidV7.generate(clock))
+                .param("householdId", expense.householdId())
+                .param("entityId", expense.id())
+                .param("ownerUserId", expense.ownerUserId())
+                .param("action", action)
+                .param("actor", actor.value())
+                .param("changes", jsonMapper.writeValueAsString(changes))
+                .param("occurredAt", OffsetDateTime.ofInstant(occurredAt, ZoneOffset.UTC))
                 .update();
     }
 

@@ -113,6 +113,11 @@ public final class OperationRegistry {
                 "/api/v1/expenses/" + s.target().personalExpense(),
                 AuthzWorld.expenseBody(s.caller(), "PERSONAL", "Edited " + shortId(), null), "\"0\""), true,
                 PrivacyProbes::expenseUpdate));
+        registry.put("deleteExpense", household(s -> Call.without(HttpMethod.DELETE,
+                "/api/v1/expenses/" + s.target().personalExpense()), true, PrivacyProbes::expenseDelete));
+        registry.put("restoreExpense", household(s -> Call.without(HttpMethod.POST,
+                "/api/v1/expenses/" + s.target().personalExpense() + "/restore"), true,
+                PrivacyProbes::expenseRestore));
         return registry;
     }
 

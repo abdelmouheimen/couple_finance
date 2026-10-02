@@ -35,6 +35,29 @@ public interface ExpenseRepository extends Repository<Expense, UUID> {
             @Param("userId") UUID userId);
 
     /**
+     * Loads a DELETED expense of the household that {@code userId} may see (SHARED, or PERSONAL and owned by them)
+     * and locks its row {@code FOR UPDATE} (restore, BR-EXP-11). Live, unknown, foreign-household and
+     * partner-personal expenses are indistinguishable: all are empty.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select e from Expense e
+            where e.id = :id and e.householdId = :householdId and e.deletedAt is not null
+              and (e.ownerUserId is null or e.ownerUserId = :userId)
+            """)
+    Optional<Expense> lockVisibleDeletedById(@Param("id") UUID id, @Param("householdId") UUID householdId,
+            @Param("userId") UUID userId);
+
+    /** Same visibility as {@link #lockVisibleDeletedById} without locking (to find the original to lock first). */
+    @Query("""
+            select e from Expense e
+            where e.id = :id and e.householdId = :householdId and e.deletedAt is not null
+              and (e.ownerUserId is null or e.ownerUserId = :userId)
+            """)
+    Optional<Expense> findVisibleDeletedById(@Param("id") UUID id, @Param("householdId") UUID householdId,
+            @Param("userId") UUID userId);
+
+    /**
      * Reads, without locking, a live expense of the household that {@code userId} may see (SHARED, or PERSONAL and
      * owned by them). Unknown, deleted, foreign-household and partner-personal expenses are indistinguishable: all
      * are empty (BR-EXP-07).

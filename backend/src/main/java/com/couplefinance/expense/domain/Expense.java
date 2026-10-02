@@ -3,6 +3,7 @@ package com.couplefinance.expense.domain;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -56,6 +57,8 @@ public class Expense {
     public static final int MERCHANT_MAX_LENGTH = 120;
     public static final int MAX_AGE_YEARS = 5;
     public static final int MAX_DAYS_AHEAD = 1;
+    /** BR-EXP-11: a deleted expense can be restored for 90 days. */
+    public static final int RESTORE_WINDOW_DAYS = 90;
 
     @Id
     private UUID id;
@@ -102,6 +105,8 @@ public class Expense {
 
     /** Logical deletion marker (BR-EXP-11): a deleted expense is excluded from every live-refund sum. */
     private Instant deletedAt;
+
+    private UUID deletedBy;
 
     @Version
     private Long version;
@@ -423,6 +428,56 @@ public class Expense {
         return true;
     }
 
+    /**
+     * BR-EXP-11 logical deletion, called by the use case with the row locked and the caller's visibility already
+     * checked. BR-EXP-03: an expense with live refunds cannot be deleted ({@code hasLiveRefunds} is read under the
+     * same lock, refund creation locking this row too). The version is incremented at flush (ETag).
+     */
+    public void delete(UserId actor, Clock clock, boolean hasLiveRefunds) {
+        Objects.requireNonNull(actor, "actor");
+        if (deletedAt != null) {
+            throw new ApplicationException(ExpenseErrorCode.EXPENSE_NOT_FOUND, "The expense was not found.");
+        }
+        if (hasLiveRefunds) {
+            throw new ApplicationException(ExpenseErrorCode.EXPENSE_HAS_LIVE_REFUNDS,
+                    "An expense with refunds cannot be deleted: delete its refunds first.");
+        }
+        Instant now = clock.instant();
+        this.deletedAt = now;
+        this.deletedBy = actor.value();
+        this.updatedAt = now.isAfter(updatedAt) ? now : updatedAt.plusNanos(1_000);
+        this.updatedBy = actor.value();
+    }
+
+    /**
+     * BR-EXP-11 restore: only within {@value #RESTORE_WINDOW_DAYS} days of the deletion (the purge removes rows
+     * deleted strictly more than 90 days ago). Outside the window the expense is reported as not found, as the
+     * purge may already have removed it. BR-EXP-03: restoring a linked refund re-checks it against its original,
+     * read under the lock on the original ({@code original} is {@code null} when the original is deleted;
+     * {@code otherRefundsMinor} is the sum of the other live refunds of the original).
+     */
+    public void restore(UserId actor, Clock clock, LedgerProfile ledger, @Nullable Expense original,
+            long otherRefundsMinor) {
+        Objects.requireNonNull(actor, "actor");
+        Instant now = clock.instant();
+        if (deletedAt == null || now.isAfter(deletedAt.plus(RESTORE_WINDOW_DAYS, ChronoUnit.DAYS))) {
+            throw new ApplicationException(ExpenseErrorCode.EXPENSE_NOT_FOUND, "The expense was not found.");
+        }
+        if (refundOfExpenseId != null) {
+            if (original == null) {
+                throw new ApplicationException(ExpenseErrorCode.EXPENSE_REFUND_ORIGINAL_INVALID,
+                        "The original expense of this refund is deleted: restore it first.");
+            }
+            original.requireRefundable(new HouseholdId(householdId), sharingType(), expenseDate,
+                    Money.ofMinor(amountMinor, ledger.currency(), ledger.decimals()),
+                    Money.ofMinor(otherRefundsMinor, ledger.currency(), ledger.decimals()));
+        }
+        this.deletedAt = null;
+        this.deletedBy = null;
+        this.updatedAt = now.isAfter(updatedAt) ? now : updatedAt.plusNanos(1_000);
+        this.updatedBy = actor.value();
+    }
+
     /** BR-EXP-03 for an edit: a linked refund stays within its original; an original keeps its refunds valid. */
     private void requireRefundInvariants(SharingType sharing, LocalDate date, Money amount, RefundState refunds) {
         if (refunds.original() != null) {
@@ -470,6 +525,14 @@ public class Expense {
                     "An item label has at most " + ExpenseItem.LABEL_MAX_LENGTH + " characters.");
         }
         return trimmed;
+    }
+
+    public @Nullable Instant deletedAt() {
+        return deletedAt;
+    }
+
+    public @Nullable UUID deletedBy() {
+        return deletedBy;
     }
 
     public UUID id() {
