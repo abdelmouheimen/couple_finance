@@ -397,6 +397,14 @@ public class Expense {
         return createdBy;
     }
 
+    public Instant updatedAt() {
+        return updatedAt;
+    }
+
+    public UUID updatedBy() {
+        return updatedBy;
+    }
+
     public List<ExpenseItem> items() {
         return List.copyOf(items);
     }

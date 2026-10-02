@@ -32,6 +32,19 @@ public interface ExpenseRepository extends Repository<Expense, UUID> {
             @Param("userId") UUID userId);
 
     /**
+     * Reads, without locking, a live expense of the household that {@code userId} may see (SHARED, or PERSONAL and
+     * owned by them). Unknown, deleted, foreign-household and partner-personal expenses are indistinguishable: all
+     * are empty (BR-EXP-07).
+     */
+    @Query("""
+            select e from Expense e
+            where e.id = :id and e.householdId = :householdId and e.deletedAt is null
+              and (e.ownerUserId is null or e.ownerUserId = :userId)
+            """)
+    Optional<Expense> findVisibleLiveById(@Param("id") UUID id, @Param("householdId") UUID householdId,
+            @Param("userId") UUID userId);
+
+    /**
      * Re-reads a live expense for a background consumer of its events: scoped by the household of the event, with
      * no user visibility filter (the consumer applies the expense's own owner, BR-EXP-07, and must never relay a
      * PERSONAL expense to the partner). Foreign-household and deleted expenses are empty.

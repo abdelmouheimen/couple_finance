@@ -32,6 +32,8 @@ record ExpenseResponse(
         ExpenseSource source,
         UUID createdBy,
         Instant createdAt,
+        @Schema(requiredMode = Schema.RequiredMode.NOT_REQUIRED) @Nullable Instant updatedAt,
+        @Schema(requiredMode = Schema.RequiredMode.NOT_REQUIRED) @Nullable UUID updatedBy,
         @Schema(description = "Version, also sent as ETag.") long version) {
 
     /** One category item. */
@@ -47,6 +49,7 @@ record ExpenseResponse(
                 expense.refundOf(),
                 expense.items().stream().map(item -> new Item(item.id(), item.position(), item.categoryId(),
                         item.amount(), item.label())).toList(),
-                expense.source(), expense.createdBy(), expense.createdAt(), expense.version());
+                expense.source(), expense.createdBy(), expense.createdAt(), expense.updatedAt(),
+                expense.updatedBy(), expense.version());
     }
 }
