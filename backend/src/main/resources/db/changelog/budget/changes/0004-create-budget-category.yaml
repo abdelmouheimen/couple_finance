@@ -1,0 +1,38 @@
+databaseChangeLog:
+  - changeSet:
+      id: budget-0004-create-budget-category
+      author: couplefinance
+      comment: >
+        Per-category limits of a budget (database-schema.md section 9.2). uq_budget_category (budget_id,
+        category_id) is the one-limit-per-category-per-period invariant (BR-BUD-01) and also the index serving the
+        load of a budget's lines (the only query on this table). category_id has no foreign key: categories belong
+        to the categorization module and are never deleted (BR-CAT-03); their visibility is checked through
+        categorization.api. The composite FK to budget (household_id, id) pins a line to its budget's household and
+        cascades the delete; the composite FKs to household_member pin the actors to the household. Currency is
+        inherited from the budget (the root's currency is pinned to the household's).
+      changes:
+        - sql:
+            sql: |
+              CREATE TABLE budget.budget_category (
+                  id           uuid        NOT NULL,
+                  budget_id    uuid        NOT NULL,
+                  household_id uuid        NOT NULL,
+                  category_id  uuid        NOT NULL,
+                  limit_minor  bigint      NOT NULL,
+                  created_at   timestamptz NOT NULL,
+                  created_by   uuid        NOT NULL,
+                  updated_at   timestamptz NOT NULL,
+                  updated_by   uuid        NOT NULL,
+                  CONSTRAINT pk_budget_category PRIMARY KEY (id),
+                  CONSTRAINT uq_budget_category UNIQUE (budget_id, category_id),
+                  CONSTRAINT fk_budget_category_budget FOREIGN KEY (household_id, budget_id)
+                      REFERENCES budget.budget (household_id, id) ON DELETE CASCADE,
+                  CONSTRAINT fk_budget_category_created_by FOREIGN KEY (household_id, created_by)
+                      REFERENCES household.household_member (household_id, user_id),
+                  CONSTRAINT fk_budget_category_updated_by FOREIGN KEY (household_id, updated_by)
+                      REFERENCES household.household_member (household_id, user_id),
+                  CONSTRAINT ck_budget_category_limit CHECK (limit_minor BETWEEN 1 AND 1000000000000000)
+              );
+      rollback:
+        - sql:
+            sql: DROP TABLE budget.budget_category

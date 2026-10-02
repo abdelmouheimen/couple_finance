@@ -29,8 +29,8 @@ import org.jspecify.annotations.Nullable;
  * <p>Current scope (Issue #24): the overall limit. The invariants are enforced here so that no code path builds
  * an invalid budget: BR-BUD-01 one budget per household and period (also a database unique constraint),
  * BR-BUD-02 at least one limit, BR-MON-02/03/07 strictly positive exact amount in the household currency. The
- * "at least one limit" rule is "overall limit present OR at least one category limit"; category limits arrive
- * with Issue #25, which extends {@link #requireAtLeastOneLimit}.
+ * "at least one limit" rule is "overall limit present OR at least one category limit". Category limit lines
+ * (Issue #25) live in {@code budget.budget_category}; the aggregate only receives their count.
  */
 @Entity
 @Table(schema = "budget", name = "budget")
@@ -81,10 +81,20 @@ public class Budget {
      */
     public static Budget create(HouseholdId household, BudgetPeriod period, CurrencyCode currency, int decimals,
             Clock clock, @Nullable Money overallLimit, UserId creator) {
+        return create(household, period, currency, decimals, clock, overallLimit, 0, creator);
+    }
+
+    /**
+     * Creates the budget of {@code period} with an optional overall limit and {@code categoryLimitCount} category
+     * limits that are persisted alongside (BR-BUD-01, BR-BUD-02).
+     */
+    public static Budget create(HouseholdId household, BudgetPeriod period, CurrencyCode currency, int decimals,
+            Clock clock, @Nullable Money overallLimit, int categoryLimitCount, UserId creator) {
         Objects.requireNonNull(household, "household");
         Objects.requireNonNull(period, "period");
         Objects.requireNonNull(creator, "creator");
-        Money limit = validLimit(overallLimit, currency, decimals);
+        requireAtLeastOneLimit(overallLimit, categoryLimitCount);
+        Money limit = overallLimit == null ? null : validLimit(overallLimit, currency, decimals);
 
         Instant now = clock.instant();
         Budget budget = new Budget();
@@ -93,12 +103,11 @@ public class Budget {
         budget.periodStart = period.start();
         budget.periodEnd = period.end();
         budget.currency = currency.value();
-        budget.overallLimitMinor = limit.minorUnits();
+        budget.overallLimitMinor = limit == null ? null : limit.minorUnits();
         budget.createdAt = now;
         budget.createdBy = creator.value();
         budget.updatedAt = now;
         budget.updatedBy = creator.value();
-        budget.requireAtLeastOneLimit(0);
         return budget;
     }
 
@@ -109,16 +118,31 @@ public class Budget {
      * @throws ApplicationException the first violated rule, with a stable error code
      */
     public boolean setOverallLimit(@Nullable Money overallLimit, int decimals, Clock clock, UserId editor) {
+        return setOverallLimit(overallLimit, 0, decimals, clock, editor);
+    }
+
+    /**
+     * Sets or clears the overall limit; clearing is allowed only while {@code categoryLimitCount} category limits
+     * remain (BR-BUD-02).
+     */
+    public boolean setOverallLimit(@Nullable Money overallLimit, int categoryLimitCount, int decimals, Clock clock,
+            UserId editor) {
         Objects.requireNonNull(editor, "editor");
-        Money limit = validLimit(overallLimit, currency(), decimals);
-        if (overallLimitMinor != null && overallLimitMinor == limit.minorUnits()) {
+        requireAtLeastOneLimit(overallLimit, categoryLimitCount);
+        Long newMinor = overallLimit == null ? null : validLimit(overallLimit, currency(), decimals).minorUnits();
+        if (Objects.equals(overallLimitMinor, newMinor)) {
             return false;
         }
-        this.overallLimitMinor = limit.minorUnits();
+        this.overallLimitMinor = newMinor;
+        touch(clock, editor);
+        return true;
+    }
+
+    /** Records an edit of the budget (e.g. of its category limits): bumps the audit stamps and the version. */
+    public void touch(Clock clock, UserId editor) {
+        Objects.requireNonNull(editor, "editor");
         this.updatedAt = clock.instant();
         this.updatedBy = editor.value();
-        requireAtLeastOneLimit(0);
-        return true;
     }
 
     /**
@@ -128,20 +152,17 @@ public class Budget {
     public static Money validLimit(@Nullable Money overallLimit, CurrencyCode currency, int decimals) {
         if (overallLimit == null) {
             throw new ApplicationException(BudgetErrorCode.BUDGET_LIMIT_REQUIRED,
-                    "A budget needs at least one limit: overallLimit is required.");
+                    "A budget needs at least one limit: an overall limit or a category limit.");
         }
         overallLimit.requirePositiveAtMost(Money.ofMinor(MAX_LIMIT_MINOR, currency, decimals));
         return overallLimit;
     }
 
-    /**
-     * BR-BUD-02: overall limit present OR at least one category limit. Category limits do not exist yet
-     * (Issue #25), so the caller passes their count, 0 for now.
-     */
-    private void requireAtLeastOneLimit(int categoryLimitCount) {
-        if (overallLimitMinor == null && categoryLimitCount == 0) {
+    /** BR-BUD-02: overall limit present OR at least one category limit. */
+    public static void requireAtLeastOneLimit(@Nullable Money overallLimit, int categoryLimitCount) {
+        if (overallLimit == null && categoryLimitCount == 0) {
             throw new ApplicationException(BudgetErrorCode.BUDGET_LIMIT_REQUIRED,
-                    "A budget needs at least one limit.");
+                    "A budget needs at least one limit: an overall limit or a category limit.");
         }
     }
 

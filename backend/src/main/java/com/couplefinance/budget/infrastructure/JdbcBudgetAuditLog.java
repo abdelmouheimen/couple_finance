@@ -5,6 +5,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.UUID;
 
 import com.couplefinance.budget.domain.Budget;
 import com.couplefinance.budget.domain.BudgetAuditLog;
@@ -32,12 +33,15 @@ class JdbcBudgetAuditLog implements BudgetAuditLog {
     }
 
     @Override
-    public void created(Budget budget, UserId actor) {
+    public void created(Budget budget, Map<UUID, Long> categoryLimitsMinor, UserId actor) {
         Map<String, Map<String, Object>> changes = new LinkedHashMap<>();
         put(changes, "periodStart", null, budget.periodStart().toString());
         put(changes, "periodEnd", null, budget.periodEnd().toString());
         put(changes, "currency", null, budget.currency().value());
         put(changes, "overallLimitMinor", null, budget.overallLimitMinor());
+        if (!categoryLimitsMinor.isEmpty()) {
+            put(changes, "categoryLimitsMinor", null, categoryLimitsMinor);
+        }
         insert(budget, "CREATE", actor, changes, budget.createdAt());
     }
 
@@ -45,6 +49,14 @@ class JdbcBudgetAuditLog implements BudgetAuditLog {
     public void overallLimitChanged(Budget budget, Long oldLimitMinor, UserId actor) {
         Map<String, Map<String, Object>> changes = new LinkedHashMap<>();
         put(changes, "overallLimitMinor", oldLimitMinor, budget.overallLimitMinor());
+        insert(budget, "UPDATE", actor, changes, budget.updatedAt());
+    }
+
+    @Override
+    public void categoryLimitsChanged(Budget budget, Map<UUID, Long> oldMinor, Map<UUID, Long> newMinor,
+            UserId actor) {
+        Map<String, Map<String, Object>> changes = new LinkedHashMap<>();
+        put(changes, "categoryLimitsMinor", oldMinor, newMinor);
         insert(budget, "UPDATE", actor, changes, budget.updatedAt());
     }
 

@@ -66,17 +66,20 @@ class BudgetController {
 
     @PutMapping("/{periodStart}")
     @Operation(operationId = "setBudget", summary = "Create or update the budget of a period",
-            description = "Sets the overall limit of the period starting on periodStart: creates the budget "
+            description = "Sets the limits (overall and per category) of the period starting on periodStart: creates the budget "
                     + "(201, no If-Match) or updates it (200). Updating requires If-Match with the version (ETag) "
                     + "last read: missing is a 428, stale a 412; If-Match on a period without budget is a 412, as "
                     + "is losing a creation race. At most one budget per period. A budget needs at least one "
-                    + "limit: omitting overallLimit is a 400 and nothing is stored. Both active members may write; "
+                    + "limit, overall or per category: none is a 400 and nothing is stored. categoryLimits, when sent, "
+                    + "replaces all lines (one per category, new lines on active categories of the household only; "
+                    + "lines of since-archived categories may stay). A category sum above the overall limit is "
+                    + "accepted and reported as categoryLimitsWarning. Both active members may write; "
                     + "past periods can be edited. The change is audited and emits BudgetCreated or BudgetUpdated; "
                     + "the new ETag is returned. Rejected on a dissolved household.")
     @ApiResponse(responseCode = "200", description = "Budget updated (or unchanged)")
     @ApiResponse(responseCode = "201", description = "Budget created")
     @ApiResponse(responseCode = "400", description = "VALIDATION_FAILED, MALFORMED_REQUEST, IF_MATCH_INVALID, "
-            + "BUDGET_LIMIT_REQUIRED, INVALID_AMOUNT_FORMAT, TOO_MANY_DECIMALS, AMOUNT_NOT_POSITIVE, "
+            + "BUDGET_LIMIT_REQUIRED, DUPLICATE_CATEGORY_LIMIT, TOO_MANY_CATEGORY_LIMITS, BUDGET_CATEGORY_ARCHIVED, INVALID_AMOUNT_FORMAT, TOO_MANY_DECIMALS, AMOUNT_NOT_POSITIVE, "
             + "AMOUNT_EXCEEDS_MAXIMUM or CURRENCY_MISMATCH",
             content = @Content(mediaType = "application/problem+json",
                     schema = @Schema(implementation = ProblemSchema.class)))
@@ -86,7 +89,8 @@ class BudgetController {
     @ApiResponse(responseCode = "403", description = "EMAIL_NOT_VERIFIED or HOUSEHOLD_READ_ONLY",
             content = @Content(mediaType = "application/problem+json",
                     schema = @Schema(implementation = ProblemSchema.class)))
-    @ApiResponse(responseCode = "404", description = "HOUSEHOLD_NOT_FOUND or BUDGET_PERIOD_NOT_FOUND",
+    @ApiResponse(responseCode = "404", description = "HOUSEHOLD_NOT_FOUND, BUDGET_PERIOD_NOT_FOUND or "
+            + "CATEGORY_NOT_FOUND (unknown or another household's category)",
             content = @Content(mediaType = "application/problem+json",
                     schema = @Schema(implementation = ProblemSchema.class)))
     @ApiResponse(responseCode = "412", description = "VERSION_CONFLICT (stale If-Match, or the budget was "

@@ -6,3 +6,5 @@ databaseChangeLog:
       file: db/changelog/budget/changes/0002-create-budget.yaml
   - include:
       file: db/changelog/budget/changes/0003-create-audit-event.yaml
+  - include:
+      file: db/changelog/budget/changes/0004-create-budget-category.yaml

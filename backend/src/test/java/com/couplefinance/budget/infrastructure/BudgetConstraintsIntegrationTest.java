@@ -131,4 +131,79 @@ class BudgetConstraintsIntegrationTest {
                 .param("e", END).param("now", now).param("user", foreign.member()).update())
                 .isInstanceOf(DataIntegrityViolationException.class).hasMessageContaining("fk_budget_created_by");
     }
+
+    private UUID budgetOf(Fixture f) {
+        insertBudget(f, START, END, "EUR", 100L);
+        return jdbc.sql("SELECT id FROM budget.budget WHERE household_id = :h").param("h", f.household())
+                .query(UUID.class).single();
+    }
+
+    private void insertLine(UUID household, UUID budget, UUID category, long limitMinor, UUID actor) {
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        jdbc.sql("""
+                        INSERT INTO budget.budget_category (id, budget_id, household_id, category_id, limit_minor,
+                            created_at, created_by, updated_at, updated_by)
+                        VALUES (:id, :b, :h, :c, :limit, :now, :user, :now, :user)
+                        """).param("id", UUID.randomUUID()).param("b", budget).param("h", household)
+                .param("c", category).param("limit", limitMinor).param("now", now).param("user", actor).update();
+    }
+
+    @Test
+    void BR_BUD_01_one_limit_per_category_and_budget() {
+        Fixture f = household("EUR");
+        UUID budget = budgetOf(f);
+        UUID category = UUID.randomUUID();
+        insertLine(f.household(), budget, category, 50L, f.member());
+
+        assertThatThrownBy(() -> insertLine(f.household(), budget, category, 60L, f.member()))
+                .isInstanceOf(DataIntegrityViolationException.class).hasMessageContaining("uq_budget_category");
+        insertLine(f.household(), budget, UUID.randomUUID(), 60L, f.member());
+    }
+
+    @Test
+    void BR_MON_07_a_category_limit_is_between_1_and_10_pow_15_minor_units() {
+        Fixture f = household("EUR");
+        UUID budget = budgetOf(f);
+
+        for (long invalid : new long[] {0L, -1L, 1_000_000_000_000_001L}) {
+            assertThatThrownBy(() -> insertLine(f.household(), budget, UUID.randomUUID(), invalid, f.member()))
+                    .isInstanceOf(DataIntegrityViolationException.class)
+                    .hasMessageContaining("ck_budget_category_limit");
+        }
+        insertLine(f.household(), budget, UUID.randomUUID(), 1_000_000_000_000_000L, f.member());
+    }
+
+    @Test
+    void a_category_limit_cannot_point_to_the_budget_of_another_household() {
+        Fixture a = household("EUR");
+        Fixture b = household("EUR");
+        UUID budgetOfA = budgetOf(a);
+
+        assertThatThrownBy(() -> insertLine(b.household(), budgetOfA, UUID.randomUUID(), 10L, b.member()))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("fk_budget_category_budget");
+    }
+
+    @Test
+    void the_actor_of_a_category_limit_must_be_a_member_of_the_household() {
+        Fixture f = household("EUR");
+        Fixture foreign = household("EUR");
+        UUID budget = budgetOf(f);
+
+        assertThatThrownBy(() -> insertLine(f.household(), budget, UUID.randomUUID(), 10L, foreign.member()))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("fk_budget_category_created_by");
+    }
+
+    @Test
+    void deleting_a_budget_removes_its_category_limits() {
+        Fixture f = household("EUR");
+        UUID budget = budgetOf(f);
+        insertLine(f.household(), budget, UUID.randomUUID(), 10L, f.member());
+
+        jdbc.sql("DELETE FROM budget.budget WHERE id = :id").param("id", budget).update();
+
+        assertThat(jdbc.sql("SELECT count(*) FROM budget.budget_category WHERE budget_id = :id").param("id", budget)
+                .query(Integer.class).single()).isZero();
+    }
 }

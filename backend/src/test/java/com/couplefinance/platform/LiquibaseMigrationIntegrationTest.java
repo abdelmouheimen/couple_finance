@@ -54,7 +54,8 @@ class LiquibaseMigrationIntegrationTest {
                 "expense-0009-create-purge-indexes",
                 "budget-0001-create-budget-schema",
                 "budget-0002-create-budget",
-                "budget-0003-create-audit-event");
+                "budget-0003-create-audit-event",
+                "budget-0004-create-budget-category");
     }
 
     @Test
