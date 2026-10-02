@@ -53,6 +53,13 @@ class ArchitectureRulesNegativeTest {
                 .containsExactly("ScopedThingRepository");
     }
 
+    @Test
+    void purge_repository_rule_flags_use_outside_purge_classes_and_accepts_purge_classes() {
+        assertViolates(ArchitectureRules.purgeRepositoriesAreUsedOnlyByPurgeClasses(), fixtures("purge.bad"),
+                "ThingService");
+        assertAccepts(ArchitectureRules.purgeRepositoriesAreUsedOnlyByPurgeClasses(), fixtures("purge.good"));
+    }
+
     // --- 2. money
 
     @Test
