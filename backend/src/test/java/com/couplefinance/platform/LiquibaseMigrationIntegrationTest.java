@@ -40,6 +40,8 @@ class LiquibaseMigrationIntegrationTest {
                 "categorization-0001-create-categorization-schema",
                 "categorization-0002-create-category",
                 "categorization-0003-seed-system-categories",
+                "categorization-0004-create-merchant-rule",
+                "categorization-0005-create-merchant-correction",
                 "expense-0001-create-expense-schema",
                 "expense-0002-create-expense",
                 "expense-0003-create-expense-item",

@@ -348,7 +348,7 @@ Columns: `id uuid`, `household_id uuid`, `code_hash bytea`, `created_by uuid`, `
 ### 6.3 `categorization.merchant_correction`
 
 Columns: `household_id`, `owner_user_id NULL`, `merchant_key`, `category_id`, `consecutive_count smallint`,
-`updated_at`. **PK** surrogate `id`; **UQ** `(household_id, owner_user_id, merchant_key) NULLS NOT DISTINCT`;
+`last_expense_id uuid NOT NULL` (the last expense counted, no FK; makes re-delivery of an expense-saved event a no-op), `updated_at`. **PK** surrogate `id`; **UQ** `(household_id, owner_user_id, merchant_key) NULLS NOT DISTINCT`;
 **FK** as merchant_rule; **CK** `consecutive_count BETWEEN 1 AND 2`. Tracks the "two consecutive corrections" rule;
 the row is deleted when a rule is created or the streak breaks.
 
