@@ -2,6 +2,7 @@ package com.couplefinance.budget.application;
 
 import java.time.Clock;
 import java.time.LocalDate;
+import java.util.Set;
 import java.util.UUID;
 
 import com.couplefinance.budget.api.BudgetCreated;
@@ -11,6 +12,9 @@ import com.couplefinance.budget.domain.BudgetAuditLog;
 import com.couplefinance.budget.domain.BudgetErrorCode;
 import com.couplefinance.budget.domain.BudgetRepository;
 import com.couplefinance.budget.domain.BudgetStore;
+import com.couplefinance.budget.domain.LimitConsumption;
+import com.couplefinance.expense.api.SpendingQuery;
+import com.couplefinance.expense.api.SpendingScope;
 import com.couplefinance.household.api.BudgetPeriod;
 import com.couplefinance.household.api.BudgetPeriods;
 import com.couplefinance.household.api.CurrentHousehold;
@@ -19,6 +23,8 @@ import com.couplefinance.household.api.HouseholdLedgerRules;
 import com.couplefinance.household.api.LedgerProfile;
 import com.couplefinance.shared.concurrency.VersionETag;
 import com.couplefinance.shared.error.ApplicationException;
+import com.couplefinance.shared.money.Money;
+import org.jspecify.annotations.Nullable;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,11 +44,12 @@ public class BudgetService {
     private final BudgetStore store;
     private final BudgetAuditLog audit;
     private final ApplicationEventPublisher events;
+    private final SpendingQuery spending;
     private final Clock clock;
 
     BudgetService(CurrentHousehold currentHousehold, BudgetPeriods periods, HouseholdLedgerRules ledgerRules,
             BudgetRepository budgets, BudgetStore store, BudgetAuditLog audit, ApplicationEventPublisher events,
-            Clock clock) {
+            SpendingQuery spending, Clock clock) {
         this.currentHousehold = currentHousehold;
         this.periods = periods;
         this.ledgerRules = ledgerRules;
@@ -50,6 +57,7 @@ public class BudgetService {
         this.store = store;
         this.audit = audit;
         this.events = events;
+        this.spending = spending;
         this.clock = clock;
     }
 
@@ -62,7 +70,22 @@ public class BudgetService {
         Budget budget = budgets.findByPeriod(household, periodStart).orElseThrow(
                 () -> new ApplicationException(BudgetErrorCode.BUDGET_NOT_FOUND,
                         "There is no budget for this period."));
-        return BudgetView.of(budget, ledgerRules.profile(context.householdId()).decimals());
+        int decimals = ledgerRules.profile(context.householdId()).decimals();
+        return BudgetView.of(budget, decimals, overallConsumption(context, budget, decimals));
+    }
+
+    /**
+     * BR-BUD-03/05/06: household spending of the period, read only through the spending query API; computed on
+     * read, never stored. PERSONAL spending is excluded by the HOUSEHOLD scope.
+     */
+    private @Nullable LimitConsumption overallConsumption(HouseholdContext context, Budget budget, int decimals) {
+        Long limit = budget.overallLimitMinor();
+        if (limit == null) {
+            return null;
+        }
+        Money consumed = spending.spending(context, SpendingScope.HOUSEHOLD, budget.periodStart(),
+                budget.periodEnd(), Set.of()).total();
+        return LimitConsumption.of(Money.ofMinor(limit, budget.currency(), decimals), consumed);
     }
 
     /**

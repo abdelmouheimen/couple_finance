@@ -40,7 +40,10 @@ class BudgetController {
     @Operation(operationId = "getBudget", summary = "Read the budget of a period",
             description = "The budget of the household's period starting on periodStart. The ETag header carries "
                     + "the version. A date that is not the start of a period of the household calendar, and a "
-                    + "period without budget, are a 404. Readable by archive readers of a dissolved household.")
+                    + "period without budget, are a 404. When an overall limit exists, overallConsumption gives "
+                    + "the household spending consumed in the period, the remaining amount (negative when "
+                    + "exceeded), the percentage and the status; computed on read, PERSONAL spending excluded. "
+                    + "Readable by archive readers of a dissolved household.")
     @ApiResponse(responseCode = "200", description = "The budget")
     @ApiResponse(responseCode = "400", description = "VALIDATION_FAILED (malformed date)",
             content = @Content(mediaType = "application/problem+json",
