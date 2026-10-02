@@ -687,6 +687,130 @@ paths:
       summary: Get the current household
       tags:
       - Households
+  /api/v1/households/me/invitations:
+    get:
+      description: "Open (active, unexpired) invitations created by the caller. Never\
+        \ includes the code."
+      operationId: listInvitations
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Invitation"
+          description: Open invitations
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: AUTHENTICATION_REQUIRED
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: EMAIL_NOT_VERIFIED or HOUSEHOLD_READ_ONLY
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: HOUSEHOLD_NOT_FOUND
+      summary: List the caller's open invitations
+      tags:
+      - Households
+    post:
+      description: Creates a single-use invitation valid 7 days and returns its code
+        exactly once. Only the hash of the code is stored. A pending invitation of
+        the household is replaced (revoked). Rate-limited per user and per IP.
+      operationId: createInvitation
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatedInvitation"
+          description: Invitation created; the code is shown only now
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: AUTHENTICATION_REQUIRED
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: EMAIL_NOT_VERIFIED or HOUSEHOLD_READ_ONLY (dissolved)
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: HOUSEHOLD_NOT_FOUND
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: "INVITATION_NOT_ALLOWED: the household does not have exactly\
+            \ one active member"
+        "429":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: RATE_LIMITED
+      summary: Invite the partner
+      tags:
+      - Households
+  /api/v1/households/me/invitations/{id}:
+    delete:
+      description: Revokes an invitation created by the caller; it can never be redeemed
+        afterwards. Idempotent for an already revoked invitation.
+      operationId: revokeInvitation
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "204":
+          description: Revoked
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: AUTHENTICATION_REQUIRED
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: EMAIL_NOT_VERIFIED or HOUSEHOLD_READ_ONLY
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: "HOUSEHOLD_NOT_FOUND or INVITATION_NOT_FOUND (unknown, other\
+            \ household, or created by someone else)"
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: "INVITATION_NOT_REVOCABLE: already redeemed"
+      summary: Revoke an invitation
+      tags:
+      - Households
   /api/v1/merchant-rules:
     put:
       description: "Creates or replaces the rule of the caller's scope for the normalised\
@@ -930,6 +1054,22 @@ components:
           minLength: 1
       required:
       - name
+    CreatedInvitation:
+      type: object
+      properties:
+        code:
+          type: string
+          description: "Single-use secret, shown once. Share it only with the partner."
+        expiresAt:
+          type: string
+          format: date-time
+        id:
+          type: string
+          format: uuid
+      required:
+      - code
+      - expiresAt
+      - id
     Expense:
       type: object
       properties:
@@ -1139,6 +1279,22 @@ components:
       - periodStartDay
       - status
       - timezone
+    Invitation:
+      type: object
+      properties:
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        id:
+          type: string
+          format: uuid
+      required:
+      - createdAt
+      - expiresAt
+      - id
     MerchantRule:
       type: object
       properties:
