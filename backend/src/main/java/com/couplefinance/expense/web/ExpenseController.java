@@ -4,6 +4,7 @@ import java.time.LocalDate;
 import java.util.UUID;
 
 import com.couplefinance.expense.application.CreateExpenseService;
+import com.couplefinance.expense.application.ExpenseQueryService;
 import com.couplefinance.expense.application.ListExpensesQuery;
 import com.couplefinance.expense.application.ListExpensesService;
 import com.couplefinance.expense.domain.ExpenseKind;
@@ -23,6 +24,7 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -39,9 +41,13 @@ class ExpenseController {
     private final CreateExpenseService createExpense;
     private final ListExpensesService listExpenses;
 
-    ExpenseController(CreateExpenseService createExpense, ListExpensesService listExpenses) {
+    private final ExpenseQueryService queries;
+
+    ExpenseController(CreateExpenseService createExpense, ListExpensesService listExpenses,
+            ExpenseQueryService queries) {
         this.createExpense = createExpense;
         this.listExpenses = listExpenses;
+        this.queries = queries;
     }
 
     @GetMapping
@@ -84,6 +90,45 @@ class ExpenseController {
             @RequestParam(required = false) String cursor) {
         return ExpensePageResponse.from(listExpenses.list(new ListExpensesQuery(scope, dateFrom, dateTo,
                 categoryId, paidBy, kind, hasReceipt, q, PageQuery.of(limit, cursor))));
+    }
+
+    @GetMapping("/{id}")
+    @Operation(operationId = "getExpense", summary = "Read an expense",
+            description = "One expense with its items. The ETag header carries the version. A deleted expense, an "
+                    + "expense of another household and a PERSONAL expense of the partner are all a 404 "
+                    + "(BR-EXP-07). Readable by archive readers of a dissolved household.")
+    @ApiResponse(responseCode = "200", description = "The expense")
+    @ApiResponse(responseCode = "401", description = "AUTHENTICATION_REQUIRED",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ProblemSchema.class)))
+    @ApiResponse(responseCode = "403", description = "EMAIL_NOT_VERIFIED",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ProblemSchema.class)))
+    @ApiResponse(responseCode = "404", description = "HOUSEHOLD_NOT_FOUND or EXPENSE_NOT_FOUND",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ProblemSchema.class)))
+    ResponseEntity<ExpenseResponse> get(@PathVariable UUID id) {
+        var expense = queries.get(id);
+        return ResponseEntity.ok().eTag(VersionETag.render(expense.version()))
+                .body(ExpenseResponse.from(expense));
+    }
+
+    @GetMapping("/{id}/audit")
+    @Operation(operationId = "getExpenseAudit", summary = "Read the audit trail of an expense",
+            description = "Who changed what and when (BR-EXP-10), oldest first. Available whenever the expense "
+                    + "can be read; the audit of a PERSONAL expense is visible only to its owner, otherwise 404.")
+    @ApiResponse(responseCode = "200", description = "The audit trail")
+    @ApiResponse(responseCode = "401", description = "AUTHENTICATION_REQUIRED",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ProblemSchema.class)))
+    @ApiResponse(responseCode = "403", description = "EMAIL_NOT_VERIFIED",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ProblemSchema.class)))
+    @ApiResponse(responseCode = "404", description = "HOUSEHOLD_NOT_FOUND or EXPENSE_NOT_FOUND",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ProblemSchema.class)))
+    ExpenseAuditResponse audit(@PathVariable UUID id) {
+        return ExpenseAuditResponse.from(queries.audit(id));
     }
 
     @PostMapping

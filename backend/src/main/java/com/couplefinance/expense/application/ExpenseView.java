@@ -20,7 +20,8 @@ import org.jspecify.annotations.Nullable;
 public record ExpenseView(UUID id, ExpenseKind kind, Money amount, LocalDate date, UUID paidByUserId,
         SharingType sharingType, @Nullable String merchant, @Nullable String note, @Nullable UUID refundOf,
         List<ItemView> items,
-        ExpenseSource source, UUID createdBy, Instant createdAt, long version) {
+        ExpenseSource source, UUID createdBy, Instant createdAt, @Nullable Instant updatedAt, @Nullable UUID updatedBy,
+        long version) {
 
     /** One category item of the expense. */
     public record ItemView(UUID id, int position, UUID categoryId, Money amount, @Nullable String label) {}
@@ -32,7 +33,8 @@ public record ExpenseView(UUID id, ExpenseKind kind, Money amount, LocalDate dat
                 Money.ofMinor(expense.amountMinor(), expense.currency(), decimals), expense.expenseDate(),
                 expense.paidByUserId(), expense.sharingType(), expense.merchantDisplay(), expense.note(),
                 expense.refundOfExpenseId(), items,
-                expense.source(), expense.createdBy(), expense.createdAt(), expense.version());
+                expense.source(), expense.createdBy(), expense.createdAt(), expense.updatedAt(),
+                expense.updatedBy(), expense.version());
     }
 
     private static ItemView toView(ExpenseItem item, Expense expense, int decimals) {
