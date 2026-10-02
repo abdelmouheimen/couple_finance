@@ -63,14 +63,18 @@ paths:
       tags:
       - Budgets
     put:
-      description: "Sets the overall limit of the period starting on periodStart:\
-        \ creates the budget (201, no If-Match) or updates it (200). Updating requires\
-        \ If-Match with the version (ETag) last read: missing is a 428, stale a 412;\
-        \ If-Match on a period without budget is a 412, as is losing a creation race.\
-        \ At most one budget per period. A budget needs at least one limit: omitting\
-        \ overallLimit is a 400 and nothing is stored. Both active members may write;\
-        \ past periods can be edited. The change is audited and emits BudgetCreated\
-        \ or BudgetUpdated; the new ETag is returned. Rejected on a dissolved household."
+      description: "Sets the limits (overall and per category) of the period starting\
+        \ on periodStart: creates the budget (201, no If-Match) or updates it (200).\
+        \ Updating requires If-Match with the version (ETag) last read: missing is\
+        \ a 428, stale a 412; If-Match on a period without budget is a 412, as is\
+        \ losing a creation race. At most one budget per period. A budget needs at\
+        \ least one limit, overall or per category: none is a 400 and nothing is stored.\
+        \ categoryLimits, when sent, replaces all lines (one per category, new lines\
+        \ on active categories of the household only; lines of since-archived categories\
+        \ may stay). A category sum above the overall limit is accepted and reported\
+        \ as categoryLimitsWarning. Both active members may write; past periods can\
+        \ be edited. The change is audited and emits BudgetCreated or BudgetUpdated;\
+        \ the new ETag is returned. Rejected on a dissolved household."
       operationId: setBudget
       parameters:
       - description: First day of the budget period (YYYY-MM-DD).
@@ -111,6 +115,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
           description: "VALIDATION_FAILED, MALFORMED_REQUEST, IF_MATCH_INVALID, BUDGET_LIMIT_REQUIRED,\
+            \ DUPLICATE_CATEGORY_LIMIT, TOO_MANY_CATEGORY_LIMITS, BUDGET_CATEGORY_ARCHIVED,\
             \ INVALID_AMOUNT_FORMAT, TOO_MANY_DECIMALS, AMOUNT_NOT_POSITIVE, AMOUNT_EXCEEDS_MAXIMUM\
             \ or CURRENCY_MISMATCH"
         "401":
@@ -130,7 +135,8 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          description: HOUSEHOLD_NOT_FOUND or BUDGET_PERIOD_NOT_FOUND
+          description: "HOUSEHOLD_NOT_FOUND, BUDGET_PERIOD_NOT_FOUND or CATEGORY_NOT_FOUND\
+            \ (unknown or another household's category)"
         "412":
           content:
             application/problem+json:
@@ -1101,6 +1107,15 @@ components:
     Budget:
       type: object
       properties:
+        categoryLimits:
+          type: array
+          description: Category limits of the period; empty when there are none.
+          items:
+            $ref: "#/components/schemas/CategoryLimit"
+        categoryLimitsWarning:
+          $ref: "#/components/schemas/CategoryLimitsWarning"
+          description: "BR-BUD-04: present when the category limits add up to more\
+            \ than the overall limit. Computed on read, never stored, never blocking."
         createdAt:
           type: string
           format: date-time
@@ -1136,6 +1151,7 @@ components:
           format: int64
           description: "Version, also sent as ETag."
       required:
+      - categoryLimits
       - createdAt
       - createdBy
       - id
@@ -1191,6 +1207,44 @@ components:
       - sortOrder
       - type
       - version
+    CategoryLimit:
+      type: object
+      properties:
+        categoryId:
+          type: string
+          format: uuid
+        limit:
+          $ref: "#/components/schemas/Money"
+      required:
+      - categoryId
+      - limit
+    CategoryLimitRequest:
+      type: object
+      properties:
+        categoryId:
+          type: string
+          format: uuid
+          description: An active system or household category. A category of another
+            household is a 404.
+        limit:
+          $ref: "#/components/schemas/Money"
+          description: "Limit for the period, in the household currency, strictly\
+            \ positive."
+      required:
+      - categoryId
+      - limit
+    CategoryLimitsWarning:
+      type: object
+      properties:
+        categoryLimitsTotal:
+          $ref: "#/components/schemas/Money"
+          description: Sum of the category limits.
+        overallLimit:
+          $ref: "#/components/schemas/Money"
+          description: The overall limit that the sum exceeds.
+      required:
+      - categoryLimitsTotal
+      - overallLimit
     CategoryPage:
       type: object
       properties:
@@ -1701,11 +1755,23 @@ components:
     SetBudgetRequest:
       type: object
       properties:
+        categoryLimits:
+          type: array
+          description: "The complete set of category limits of the period: it replaces\
+            \ the existing lines (added, changed and omitted lines are applied). Omitted:\
+            \ the existing lines are left untouched; an empty array removes them all.\
+            \ At most one line per category (BR-BUD-01). Their sum may exceed the\
+            \ overall limit: the response then carries categoryLimitsWarning (BR-BUD-04)."
+          items:
+            $ref: "#/components/schemas/CategoryLimitRequest"
+          maxItems: 200
+          minItems: 0
         overallLimit:
           $ref: "#/components/schemas/Money"
           description: "Overall spending limit of the period, in the household currency,\
-            \ strictly positive. Required while a budget has no category limit (BR-BUD-02):\
-            \ omitting it is a 400 and nothing is stored."
+            \ strictly positive. Omitting it clears it, which is allowed only while\
+            \ the budget keeps at least one category limit (BR-BUD-02): otherwise\
+            \ 400 and nothing is stored."
     UpdateCategoryRequest:
       type: object
       properties:
