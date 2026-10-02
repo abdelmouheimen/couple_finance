@@ -1,0 +1,39 @@
+databaseChangeLog:
+  - changeSet:
+      id: household-0009-create-invitation
+      author: couplefinance
+      comment: >
+        Invitations (database-schema.md 5.6, BR-HH-04). Only the SHA-256 hash of the code is stored.
+        uq_invitation_code_hash: redemption lookup by code hash and guarantee that two invitations never share
+        a code.
+        ix_invitation_household_active: list/revoke the open invitations of a household and revoke them when a
+        new one replaces them (queries filter on household_id and status = 'ACTIVE').
+        The composite FK to household_member means only a member of the household can be the creator.
+      changes:
+        - sql:
+            sql: |
+              CREATE TABLE household.invitation (
+                  id           uuid        NOT NULL,
+                  household_id uuid        NOT NULL,
+                  code_hash    bytea       NOT NULL,
+                  created_by   uuid        NOT NULL,
+                  created_at   timestamptz NOT NULL,
+                  expires_at   timestamptz NOT NULL,
+                  revoked_at   timestamptz,
+                  status       text        NOT NULL,
+                  CONSTRAINT pk_invitation PRIMARY KEY (id),
+                  CONSTRAINT fk_invitation_household FOREIGN KEY (household_id)
+                      REFERENCES household.household (id) ON DELETE CASCADE,
+                  CONSTRAINT fk_invitation_creator FOREIGN KEY (household_id, created_by)
+                      REFERENCES household.household_member (household_id, user_id),
+                  CONSTRAINT uq_invitation_code_hash UNIQUE (code_hash),
+                  CONSTRAINT ck_invitation_status CHECK (status IN ('ACTIVE', 'REDEEMED', 'REVOKED', 'EXPIRED')),
+                  CONSTRAINT ck_invitation_code_hash CHECK (octet_length(code_hash) = 32),
+                  CONSTRAINT ck_invitation_expiry CHECK (expires_at > created_at),
+                  CONSTRAINT ck_invitation_revoked CHECK ((status = 'REVOKED') = (revoked_at IS NOT NULL))
+              );
+              CREATE INDEX ix_invitation_household_active ON household.invitation (household_id)
+                  WHERE status = 'ACTIVE';
+      rollback:
+        - sql:
+            sql: DROP TABLE household.invitation
