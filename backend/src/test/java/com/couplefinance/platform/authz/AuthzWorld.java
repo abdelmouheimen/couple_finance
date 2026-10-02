@@ -2,6 +2,7 @@ package com.couplefinance.platform.authz;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.UUID;
@@ -89,8 +90,13 @@ public final class AuthzWorld {
                 "{\"merchant\":\"" + ruleMerchant + "\",\"categoryId\":\"" + customCategory
                         + "\",\"sharingType\":\"PERSONAL\"}"));
         assertThat(rule).hasStatus(HttpStatus.OK);
+        LocalDate periodStart = jdbc.sql("SELECT min(period_start) FROM household.budget_period "
+                + "WHERE household_id = :h").param("h", household).query(LocalDate.class).single();
+        MvcTestResult budget = send(owner, Call.with(HttpMethod.PUT, "/api/v1/budgets/" + periodStart,
+                "{\"overallLimit\":{\"amount\":\"" + SeededHousehold.BUDGET_LIMIT + "\",\"currency\":\"EUR\"}}"));
+        assertThat(budget).hasStatus(HttpStatus.CREATED);
         return new SeededHousehold(household, owner, partner, id(invitation), customCategory, id(shared), id(personal),
-                personalMerchant, personalNote, ruleMerchant);
+                personalMerchant, personalNote, ruleMerchant, periodStart, id(budget));
     }
 
     /** BR-HH-10: dissolution does not exist yet as an endpoint; same state change as the production lifecycle. */
@@ -108,7 +114,8 @@ public final class AuthzWorld {
     public String snapshot(SeededHousehold seeded) {
         StringBuilder all = new StringBuilder();
         for (String table : new String[] {"expense.expense", "expense.expense_item", "expense.audit_event",
-                "categorization.category", "categorization.merchant_rule", "household.invitation"}) {
+                "categorization.category", "categorization.merchant_rule", "household.invitation", "budget.budget",
+                "budget.audit_event"}) {
             all.append(jdbc.sql("SELECT coalesce(string_agg(t::text, '|' ORDER BY t::text), '') FROM " + table
                     + " t WHERE t.household_id = :h").param("h", seeded.household()).query(String.class).single());
         }

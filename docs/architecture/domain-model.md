@@ -475,7 +475,8 @@ Holds **limits only**; consumption is always computed from expenses (BR-BUD-03).
   copied forward on "copy previous budget" (BR-CAT-03).
 - Σ category limits > overall is allowed (warning computed on read, BR-BUD-04).
 
-**Lifecycle.** Created (empty or copied from previous period) → edited (audited, also for past periods,
+**Lifecycle.** Created with at least one limit (an overall limit, or at least one category limit; when copied from
+the previous period it must carry at least one limit — never created empty) → edited (audited, also for past periods,
 BR-BUD-07) → deleted (audited) **[ASSUMPTION]**. Frozen when the household is dissolved.
 
 **Authorisation.** Active members: full CRUD (budgets are household-level; no personal budgets in MVP). Archive

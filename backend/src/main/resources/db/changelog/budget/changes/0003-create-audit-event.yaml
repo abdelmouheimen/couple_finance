@@ -1,0 +1,41 @@
+databaseChangeLog:
+  - changeSet:
+      id: budget-0003-create-audit-event
+      author: couplefinance
+      comment: >
+        Append-only audit trail of the budget module (database-schema.md section 11). No foreign key to the audited
+        entity: audit rows must outlive the entity until their own purge.
+        ix_audit_entity: history of an entity and purge of a household's audit rows.
+        ix_audit_retention is deferred until the retention job exists (no speculative index).
+      changes:
+        - sql:
+            sql: |
+              CREATE TABLE budget.audit_event (
+                  id             uuid        NOT NULL,
+                  household_id   uuid        NOT NULL,
+                  entity_type    text        NOT NULL,
+                  entity_id      uuid        NOT NULL,
+                  owner_user_id  uuid,
+                  action         text        NOT NULL,
+                  actor_type     text        NOT NULL,
+                  actor_user_id  uuid,
+                  actor_system   text,
+                  changes        jsonb       NOT NULL,
+                  correlation_id text,
+                  occurred_at    timestamptz NOT NULL,
+                  CONSTRAINT pk_budget_audit_event PRIMARY KEY (id),
+                  CONSTRAINT fk_budget_audit_event_actor FOREIGN KEY (actor_user_id)
+                      REFERENCES identity.user_account (id),
+                  CONSTRAINT ck_budget_audit_event_actor_user
+                      CHECK ((actor_type = 'USER') = (actor_user_id IS NOT NULL)),
+                  CONSTRAINT ck_budget_audit_event_actor_system
+                      CHECK ((actor_type = 'SYSTEM') = (actor_system IS NOT NULL)),
+                  CONSTRAINT ck_budget_audit_event_actor_type CHECK (actor_type IN ('USER', 'SYSTEM')),
+                  CONSTRAINT ck_budget_audit_event_changes CHECK (jsonb_typeof(changes) = 'object'),
+                  CONSTRAINT ck_budget_audit_event_action CHECK (char_length(action) BETWEEN 1 AND 40),
+                  CONSTRAINT ck_budget_audit_event_entity_type CHECK (char_length(entity_type) BETWEEN 1 AND 40)
+              );
+              CREATE INDEX ix_budget_audit_entity ON budget.audit_event (household_id, entity_id, occurred_at DESC);
+      rollback:
+        - sql:
+            sql: DROP TABLE budget.audit_event

@@ -1,0 +1,10 @@
+databaseChangeLog:
+  - changeSet:
+      id: budget-0001-create-budget-schema
+      author: couplefinance
+      changes:
+        - sql:
+            sql: CREATE SCHEMA IF NOT EXISTS budget
+      rollback:
+        - sql:
+            sql: DROP SCHEMA IF EXISTS budget
