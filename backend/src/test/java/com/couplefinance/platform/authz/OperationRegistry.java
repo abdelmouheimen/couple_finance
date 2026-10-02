@@ -31,6 +31,10 @@ public final class OperationRegistry {
             "invitations hold no PERSONAL financial data (BR-EXP-07 does not apply); only the caller's own"
                     + " invitations are listed or revoked and the code is returned only at creation (BR-HH-04)";
 
+    private static final String EXEMPT_BUDGETS =
+            "budgets are household-level limits; personal budgets are out of scope (BR-BUD-02) and no PERSONAL"
+                    + " attribute exists";
+
     private OperationRegistry() {
     }
 
@@ -118,6 +122,15 @@ public final class OperationRegistry {
         registry.put("restoreExpense", household(s -> Call.without(HttpMethod.POST,
                 "/api/v1/expenses/" + s.target().personalExpense() + "/restore"), true,
                 PrivacyProbes::expenseRestore));
+
+        registry.put("getBudget", householdWithoutPersonalData(s -> Call.get("/api/v1/budgets/"
+                + s.target().periodStart()), false, EXEMPT_BUDGETS + "; keyed by a period of the caller's own "
+                + "household calendar, not by a foreign id (a foreign caller reads its own household's budget)"));
+        registry.put("setBudget", householdWithoutPersonalData(s -> Call.withIfMatch(HttpMethod.PUT,
+                "/api/v1/budgets/" + s.target().periodStart(),
+                "{\"overallLimit\":{\"amount\":\"2000.00\",\"currency\":\"EUR\"}}", "\"0\""), false,
+                EXEMPT_BUDGETS + "; the budget is keyed by a period of the caller's own household calendar, not by "
+                        + "a foreign id: a foreign caller only ever reads or writes its own household's budget"));
         return registry;
     }
 

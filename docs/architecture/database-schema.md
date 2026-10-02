@@ -730,7 +730,9 @@ Results are stored in `receipt_draft.duplicate_candidates` and re-checked for ex
   `uq_budget_household_id (household_id, id)` — composite-FK target.
 - **CK** `overall_limit_minor IS NULL OR overall_limit_minor BETWEEN 1 AND 10^15`;
   `copied_from_budget_id IS DISTINCT FROM id`.
-- "At least one limit" (overall or category) spans two tables → application rule.
+- "At least one limit" (BR-BUD-02) spans two tables → application rule. `overall_limit_minor` is nullable **by
+  design**: the invariant (overall limit present OR at least one `budget_category` line) is enforced by the
+  application in the same transaction as the write, not by a database constraint.
 - Consumption and status are **never stored** (computed from `expense` per BR-SCP-01).
 
 ### 9.2 `budget.budget_category`

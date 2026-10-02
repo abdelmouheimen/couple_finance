@@ -1,0 +1,48 @@
+databaseChangeLog:
+  - changeSet:
+      id: budget-0002-create-budget
+      author: couplefinance
+      comment: >
+        Budget aggregate root (database-schema.md section 9.1). uq_budget_period is the one-budget-per-period
+        invariant (BR-BUD-01) - it makes concurrent creation yield a single row - and the (household, period start)
+        lookup index of GET/PUT /budgets/{periodStart}. fk_budget_period pins the stored period end to the real
+        calendar period of the household (BR-HH-07); the composite FK to household.household pins the currency to
+        the household currency (BR-MON-07). overall_limit_minor is nullable by design: the invariant "at least one
+        limit" (BR-BUD-02) spans budget_category and is an application rule enforced in the writing transaction.
+        uq_budget_household_id is the composite-FK target of the self reference and of later category lines.
+      changes:
+        - sql:
+            sql: |
+              CREATE TABLE budget.budget (
+                  id                    uuid        NOT NULL,
+                  household_id          uuid        NOT NULL,
+                  period_start          date        NOT NULL,
+                  period_end            date        NOT NULL,
+                  currency              char(3)     NOT NULL,
+                  overall_limit_minor   bigint,
+                  copied_from_budget_id uuid,
+                  created_at            timestamptz NOT NULL,
+                  created_by            uuid        NOT NULL,
+                  updated_at            timestamptz NOT NULL,
+                  updated_by            uuid        NOT NULL,
+                  version               bigint      NOT NULL DEFAULT 0,
+                  CONSTRAINT pk_budget PRIMARY KEY (id),
+                  CONSTRAINT uq_budget_household_id UNIQUE (household_id, id),
+                  CONSTRAINT uq_budget_period UNIQUE (household_id, period_start),
+                  CONSTRAINT fk_budget_period FOREIGN KEY (household_id, period_start, period_end)
+                      REFERENCES household.budget_period (household_id, period_start, period_end),
+                  CONSTRAINT fk_budget_currency FOREIGN KEY (household_id, currency)
+                      REFERENCES household.household (id, currency),
+                  CONSTRAINT fk_budget_copied_from FOREIGN KEY (household_id, copied_from_budget_id)
+                      REFERENCES budget.budget (household_id, id),
+                  CONSTRAINT fk_budget_created_by FOREIGN KEY (household_id, created_by)
+                      REFERENCES household.household_member (household_id, user_id),
+                  CONSTRAINT fk_budget_updated_by FOREIGN KEY (household_id, updated_by)
+                      REFERENCES household.household_member (household_id, user_id),
+                  CONSTRAINT ck_budget_overall_limit CHECK (
+                      overall_limit_minor IS NULL OR overall_limit_minor BETWEEN 1 AND 1000000000000000),
+                  CONSTRAINT ck_budget_copied_from_not_self CHECK (copied_from_budget_id IS DISTINCT FROM id)
+              );
+      rollback:
+        - sql:
+            sql: DROP TABLE budget.budget

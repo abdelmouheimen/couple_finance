@@ -13,3 +13,5 @@ databaseChangeLog:
       file: db/changelog/categorization/categorization.changelog.yaml
   - include:
       file: db/changelog/expense/expense.changelog.yaml
+  - include:
+      file: db/changelog/budget/budget.changelog.yaml
