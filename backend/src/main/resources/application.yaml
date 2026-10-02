@@ -21,6 +21,13 @@ spring:
     change-log: classpath:db/changelog/db.changelog-master.yaml
     # Liquibase otherwise sends usage analytics to its vendor at every startup (outbound call + startup delay).
     analytics-enabled: false
+  modulith:
+    events:
+      jdbc:
+        # The event publication table is created by Liquibase (infra-0004), never by the library.
+        schema: modulith
+        schema-initialization:
+          enabled: false
   autoconfigure:
     exclude:
       # No authentication mechanism until the identity module exists; never generate a default in-memory user.

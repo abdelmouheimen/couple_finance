@@ -1,0 +1,12 @@
+# Expense module (database-schema.md sections 7 and 11).
+databaseChangeLog:
+  - include:
+      file: db/changelog/expense/changes/0001-create-expense-schema.yaml
+  - include:
+      file: db/changelog/expense/changes/0002-create-expense.yaml
+  - include:
+      file: db/changelog/expense/changes/0003-create-expense-item.yaml
+  - include:
+      file: db/changelog/expense/changes/0004-create-items-consistency-trigger.yaml
+  - include:
+      file: db/changelog/expense/changes/0005-create-audit-event.yaml

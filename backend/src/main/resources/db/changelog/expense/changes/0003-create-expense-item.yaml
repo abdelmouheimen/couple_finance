@@ -1,0 +1,33 @@
+databaseChangeLog:
+  - changeSet:
+      id: expense-0003-create-expense-item
+      author: couplefinance
+      comment: >
+        Category breakdown of an expense (database-schema.md section 7.2, BR-EXP-08). category_id is a
+        cross-module reference without foreign key (ADR-001); it is verified through categorization.api.
+        uq_expense_item_position serves the join from an expense to its ordered items and the consistency trigger
+        lookup; uq_expense_item_category enforces one item per category. ix_expense_item_category (category
+        filters, per-category analytics) is deferred to the issues introducing those queries.
+      changes:
+        - sql:
+            sql: |
+              CREATE TABLE expense.expense_item (
+                  id           uuid     NOT NULL,
+                  expense_id   uuid     NOT NULL,
+                  household_id uuid     NOT NULL,
+                  position     smallint NOT NULL,
+                  category_id  uuid     NOT NULL,
+                  amount_minor bigint   NOT NULL,
+                  label        text,
+                  CONSTRAINT pk_expense_item PRIMARY KEY (id),
+                  CONSTRAINT fk_expense_item_expense FOREIGN KEY (household_id, expense_id)
+                      REFERENCES expense.expense (household_id, id) ON DELETE CASCADE,
+                  CONSTRAINT uq_expense_item_position UNIQUE (expense_id, position),
+                  CONSTRAINT uq_expense_item_category UNIQUE (expense_id, category_id),
+                  CONSTRAINT ck_expense_item_position CHECK (position BETWEEN 1 AND 10),
+                  CONSTRAINT ck_expense_item_amount CHECK (amount_minor > 0 AND amount_minor <= 1000000000000000),
+                  CONSTRAINT ck_expense_item_label CHECK (char_length(label) <= 60)
+              );
+      rollback:
+        - sql:
+            sql: DROP TABLE expense.expense_item

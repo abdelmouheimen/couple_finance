@@ -6,3 +6,5 @@ databaseChangeLog:
       file: db/changelog/infra/changes/0002-create-infra-schema.yaml
   - include:
       file: db/changelog/infra/changes/0003-create-idempotency-key.yaml
+  - include:
+      file: db/changelog/infra/changes/0004-create-modulith-event-publication.yaml

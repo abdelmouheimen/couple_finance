@@ -11,3 +11,5 @@ databaseChangeLog:
       file: db/changelog/household/household.changelog.yaml
   - include:
       file: db/changelog/categorization/categorization.changelog.yaml
+  - include:
+      file: db/changelog/expense/expense.changelog.yaml
