@@ -106,8 +106,8 @@ class ExpenseIntegrationTest {
         });
         assertThat(jdbc.sql("SELECT count(*) FROM modulith.event_publication WHERE serialized_event LIKE :id")
                 .param("id", "%" + id + "%").query(Long.class).single())
-                .as("one publication per transactional listener: the test probe and merchant-rule learning")
-                .isEqualTo(2L);
+                .as("one publication per transactional listener: the test probe and merchant-rule learning and tracking start")
+                .isEqualTo(3L);
     }
 
     @Test
