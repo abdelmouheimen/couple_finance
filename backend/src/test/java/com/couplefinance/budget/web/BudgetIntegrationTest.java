@@ -318,6 +318,135 @@ class BudgetIntegrationTest {
         assertThat(json(read).get("overallLimit").get("amount").asString()).isEqualTo("1500.00");
     }
 
+    // ------------------------------------------------------------------ consumption - Issue #28
+
+    @Test
+    void BR_BUD_03_05_06_consumption_counts_shared_net_of_refunds_and_ignores_personal_and_deleted() {
+        UUID user = users.active();
+        UUID partner = users.active();
+        UUID household = createHousehold(user);
+        addMember(household, partner);
+        LocalDate start = firstPeriod(household);
+        put(user, start, limit("1000.00"), null);
+        createExpense(user, "EXPENSE", "SHARED", "700.00", start);
+        createExpense(partner, "EXPENSE", "SHARED", "200.00", start);
+        createExpense(user, "REFUND", "SHARED", "50.00", start);
+        createExpense(partner, "EXPENSE", "PERSONAL", "999.00", start); // partner's personal: never counted
+        createExpense(user, "EXPENSE", "PERSONAL", "888.00", start); // own personal: not household spending
+        String deleted = createExpense(user, "EXPENSE", "SHARED", "300.00", start);
+        jdbc.sql("UPDATE expense.expense SET deleted_at = now(), deleted_by = :u WHERE id = :id")
+                .param("u", user).param("id", UUID.fromString(deleted)).update();
+
+        for (UUID caller : List.of(user, partner)) {
+            JsonNode consumption = json(get(caller, start)).get("overallConsumption");
+            assertThat(consumption.get("scope").asString()).isEqualTo("HOUSEHOLD");
+            assertThat(consumption.get("consumed").get("amount").asString()).isEqualTo("850.00");
+            assertThat(consumption.get("consumed").get("currency").asString()).isEqualTo("EUR");
+            assertThat(consumption.get("remaining").get("amount").asString()).isEqualTo("150.00");
+            assertThat(consumption.get("percentage").asString()).isEqualTo("85.0");
+            assertThat(consumption.get("status").asString()).isEqualTo("WARNING");
+        }
+    }
+
+    @Test
+    void BR_BUD_05_06_exceeding_the_limit_gives_negative_remaining_and_exceeded() {
+        UUID user = users.active();
+        UUID household = createHousehold(user);
+        LocalDate start = firstPeriod(household);
+        put(user, start, limit("100.00"), null);
+        createExpense(user, "EXPENSE", "SHARED", "100.01", start);
+
+        JsonNode consumption = json(get(user, start)).get("overallConsumption");
+
+        assertThat(consumption.get("remaining").get("amount").asString()).isEqualTo("-0.01");
+        assertThat(consumption.get("percentage").asString()).isEqualTo("100.0");
+        assertThat(consumption.get("status").asString()).isEqualTo("EXCEEDED");
+    }
+
+    @Test
+    void consumption_is_computed_on_read_with_no_expense_on_track_and_follows_limit_changes() {
+        UUID user = users.active();
+        UUID household = createHousehold(user);
+        LocalDate start = firstPeriod(household);
+        put(user, start, limit("100.00"), null);
+
+        JsonNode empty = json(get(user, start)).get("overallConsumption");
+        assertThat(empty.get("consumed").get("amount").asString()).isEqualTo("0.00");
+        assertThat(empty.get("status").asString()).isEqualTo("ON_TRACK");
+
+        createExpense(user, "EXPENSE", "SHARED", "90.00", start);
+        assertThat(json(get(user, start)).get("overallConsumption").get("status").asString()).isEqualTo("WARNING");
+        put(user, start, limit("200.00"), "\"0\"");
+        JsonNode raised = json(get(user, start)).get("overallConsumption");
+        assertThat(raised.get("percentage").asString()).isEqualTo("45.0");
+        assertThat(raised.get("status").asString()).isEqualTo("ON_TRACK");
+    }
+
+    @Test
+    void BR_BUD_03_only_expenses_dated_in_the_period_count() {
+        UUID user = users.active();
+        UUID household = createHousehold(user);
+        LocalDate start = firstPeriod(household);
+        LocalDate end = periodEnd(household, start);
+        put(user, start, limit("100.00"), null);
+        createExpense(user, "EXPENSE", "SHARED", "10.00", start);
+        // an expense dated before the period must not count; seeded directly as the API may forbid old dates
+        insertSharedExpense(household, user, 5_000L, start.minusDays(1));
+        insertSharedExpense(household, user, 7_000L, end); // end is exclusive
+
+        JsonNode consumption = json(get(user, start)).get("overallConsumption");
+
+        assertThat(consumption.get("consumed").get("amount").asString()).isEqualTo("10.00");
+    }
+
+    @Test
+    void the_response_of_a_put_carries_no_consumption() {
+        UUID user = users.active();
+        UUID household = createHousehold(user);
+
+        MvcTestResult created = put(user, firstPeriod(household), limit("100.00"), null);
+
+        assertThat(created).hasStatus(HttpStatus.CREATED);
+        JsonNode consumption = json(created).get("overallConsumption");
+        assertThat(consumption == null || consumption.isNull()).isTrue();
+    }
+
+    @Test
+    void BR_EXP_07_BR_HH_03_another_households_spending_never_leaks_and_its_budget_is_404() {
+        UUID user = users.active();
+        UUID household = createHousehold(user);
+        LocalDate start = firstPeriod(household);
+        put(user, start, limit("100.00"), null);
+        UUID stranger = users.active();
+        UUID strangerHousehold = createHousehold(stranger);
+        createExpense(stranger, "EXPENSE", "SHARED", "60.00", firstPeriod(strangerHousehold));
+
+        assertThat(json(get(user, start)).get("overallConsumption").get("consumed").get("amount").asString())
+                .isEqualTo("0.00");
+        assertThat(get(stranger, start)).hasStatus(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void BR_HH_10_an_archive_reader_of_a_dissolved_household_still_reads_the_consumption() {
+        UUID user = users.active();
+        UUID household = createHousehold(user);
+        LocalDate start = firstPeriod(household);
+        put(user, start, limit("100.00"), null);
+        createExpense(user, "EXPENSE", "SHARED", "40.00", start);
+        dissolve(household, user);
+
+        MvcTestResult read = get(user, start);
+
+        assertThat(read).hasStatus(HttpStatus.OK);
+        assertThat(json(read).get("overallConsumption").get("consumed").get("amount").asString())
+                .isEqualTo("40.00");
+    }
+
+    @Test
+    void BR_BUD_03_unauthenticated_read_is_401() {
+        assertThat(mvc.get().uri("/api/v1/budgets/2026-01-01").exchange()).hasStatus(HttpStatus.UNAUTHORIZED);
+    }
+
     @Test
     void BR_BUD_01_concurrent_creation_yields_a_single_budget() throws Exception {
         UUID user = users.active();
@@ -430,6 +559,34 @@ class BudgetIntegrationTest {
     private long limitMinor(UUID household) {
         return jdbc.sql("SELECT overall_limit_minor FROM budget.budget WHERE household_id = :h")
                 .param("h", household).query(Long.class).single();
+    }
+
+    private static final String GROCERIES = "019a0000-0000-7000-8000-000000000001";
+
+    private String createExpense(UUID payer, String kind, String sharing, String amount, LocalDate date) {
+        String money = "{\"amount\":\"" + amount + "\",\"currency\":\"EUR\"}";
+        String body = "{\"kind\":\"" + kind + "\",\"amount\":" + money + ",\"date\":\"" + date
+                + "\",\"paidByUserId\":\"" + payer + "\",\"sharingType\":\"" + sharing
+                + "\",\"items\":[{\"categoryId\":\"" + GROCERIES + "\",\"amount\":" + money + "}]}";
+        MvcTestResult result = mvc.post().uri("/api/v1/expenses")
+                .header(HttpHeaders.AUTHORIZATION, tokens.bearer(payer)).contentType(MediaType.APPLICATION_JSON)
+                .content(body).exchange();
+        assertThat(result).hasStatus(HttpStatus.CREATED);
+        return json(result).get("id").asString();
+    }
+
+    /** One statement, hence one transaction: the deferred items-consistency trigger sees expense and item. */
+    private void insertSharedExpense(UUID household, UUID payer, long amountMinor, LocalDate date) {
+        jdbc.sql("""
+                WITH e AS (
+                    INSERT INTO expense.expense (id, household_id, kind, amount_minor, currency, expense_date,
+                        paid_by_user_id, source, created_at, created_by, updated_at, updated_by)
+                    VALUES (:id, :h, 'EXPENSE', :amount, 'EUR', :date, :u, 'MANUAL', now(), :u, now(), :u)
+                    RETURNING id, household_id)
+                INSERT INTO expense.expense_item (id, expense_id, household_id, position, category_id, amount_minor)
+                SELECT :item, e.id, e.household_id, 1, CAST(:c AS uuid), :amount FROM e
+                """).param("id", UUID.randomUUID()).param("item", UUID.randomUUID()).param("h", household)
+                .param("amount", amountMinor).param("date", date).param("u", payer).param("c", GROCERIES).update();
     }
 
     private static String text(MvcTestResult result) {

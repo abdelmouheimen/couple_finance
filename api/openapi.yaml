@@ -14,8 +14,11 @@ paths:
     get:
       description: "The budget of the household's period starting on periodStart.\
         \ The ETag header carries the version. A date that is not the start of a period\
-        \ of the household calendar, and a period without budget, are a 404. Readable\
-        \ by archive readers of a dissolved household."
+        \ of the household calendar, and a period without budget, are a 404. When\
+        \ an overall limit exists, overallConsumption gives the household spending\
+        \ consumed in the period, the remaining amount (negative when exceeded), the\
+        \ percentage and the status; computed on read, PERSONAL spending excluded.\
+        \ Readable by archive readers of a dissolved household."
       operationId: getBudget
       parameters:
       - description: First day of the budget period (YYYY-MM-DD).
@@ -1107,6 +1110,11 @@ components:
         id:
           type: string
           format: uuid
+        overallConsumption:
+          $ref: "#/components/schemas/LimitConsumption"
+          description: "Consumption of the overall limit, computed on read from the\
+            \ household spending of the period. Present on GET when an overall limit\
+            \ exists; absent in the response of a PUT."
         overallLimit:
           $ref: "#/components/schemas/Money"
         periodEnd:
@@ -1571,6 +1579,33 @@ components:
       - createdAt
       - expiresAt
       - id
+    LimitConsumption:
+      type: object
+      properties:
+        consumed:
+          $ref: "#/components/schemas/Money"
+        percentage:
+          type: string
+          description: "consumed / limit in percent, one decimal, HALF_EVEN (BR-MON-09);\
+            \ a string like Money amounts."
+          example: "82.5"
+        remaining:
+          $ref: "#/components/schemas/Money"
+          description: limit - consumed; negative when exceeded.
+        scope:
+          type: string
+          description: "Always HOUSEHOLD: PERSONAL spending is never included (BR-SCP-01,\
+            \ BR-SCP-03)."
+          enum:
+          - HOUSEHOLD
+        status:
+          type: string
+          description: "ON_TRACK below 80.0%, WARNING from 80.0% to 100.0% inclusive,\
+            \ EXCEEDED above 100%."
+          enum:
+          - ON_TRACK
+          - WARNING
+          - EXCEEDED
     MerchantRule:
       type: object
       properties:
