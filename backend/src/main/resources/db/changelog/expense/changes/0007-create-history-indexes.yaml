@@ -1,0 +1,22 @@
+databaseChangeLog:
+  - changeSet:
+      id: expense-0007-create-history-indexes
+      author: couplefinance
+      comment: >
+        Read-side indexes of database-schema.md section 7.1 for GET /api/v1/expenses (Issue #16).
+        ix_expense_history serves the household view (SHARED, owner_user_id IS NULL): keyset pagination ordered by
+        (household_id, expense_date DESC, id DESC) and period range scans, over live rows only.
+        ix_expense_personal serves the personal view (household_id = ? AND owner_user_id = ?, ordered by date and id)
+        without scanning shared rows.
+      changes:
+        - sql:
+            sql: |
+              CREATE INDEX ix_expense_history ON expense.expense (household_id, expense_date DESC, id DESC)
+                  WHERE deleted_at IS NULL;
+              CREATE INDEX ix_expense_personal ON expense.expense (household_id, owner_user_id, expense_date DESC, id DESC)
+                  WHERE owner_user_id IS NOT NULL AND deleted_at IS NULL;
+      rollback:
+        - sql:
+            sql: |
+              DROP INDEX expense.ix_expense_personal;
+              DROP INDEX expense.ix_expense_history;
