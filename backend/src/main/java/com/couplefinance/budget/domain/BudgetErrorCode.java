@@ -7,7 +7,7 @@ import org.springframework.http.HttpStatus;
 public enum BudgetErrorCode implements ErrorCode {
 
     /** BR-BUD-02: a budget has at least one limit. */
-        BUDGET_LIMIT_REQUIRED(HttpStatus.BAD_REQUEST),
+    BUDGET_LIMIT_REQUIRED(HttpStatus.BAD_REQUEST),
     /** BR-BUD-01: two lines for the same category in one budget. */
     DUPLICATE_CATEGORY_LIMIT(HttpStatus.BAD_REQUEST),
     /** More category limits than a budget may hold. */
