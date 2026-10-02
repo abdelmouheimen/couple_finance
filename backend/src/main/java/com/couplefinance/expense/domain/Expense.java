@@ -372,6 +372,15 @@ public class Expense {
         return merchantDisplay;
     }
 
+    /** Normalised merchant key (BR-CAT-07), {@code null} when the expense has no merchant. */
+    public @Nullable String merchantKey() {
+        return merchantKey;
+    }
+
+    public @Nullable Short merchantNormaliserVersion() {
+        return merchantNormaliserVersion;
+    }
+
     public @Nullable String note() {
         return note;
     }

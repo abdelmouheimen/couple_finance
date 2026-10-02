@@ -10,7 +10,9 @@ public enum CategoryErrorCode implements ErrorCode {
     /** BR-CAT-03: a system category cannot be renamed, archived or hidden by a household. */
     SYSTEM_CATEGORY_IMMUTABLE(HttpStatus.FORBIDDEN),
     /** The household reached the technical maximum of custom categories (sort_order is a smallint). */
-    CATEGORY_LIMIT_REACHED(HttpStatus.CONFLICT);
+    CATEGORY_LIMIT_REACHED(HttpStatus.CONFLICT),
+    /** An archived category cannot be the target of a new merchant rule (BR-CAT-03). */
+    CATEGORY_ARCHIVED(HttpStatus.BAD_REQUEST);
 
     private final HttpStatus status;
 

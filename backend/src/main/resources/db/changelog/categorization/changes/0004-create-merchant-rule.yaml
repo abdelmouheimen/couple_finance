@@ -1,0 +1,72 @@
+databaseChangeLog:
+  - changeSet:
+      id: categorization-0004-create-merchant-rule
+      author: couplefinance
+      comment: >
+        Merchant rules (database-schema.md 6.2, BR-CAT-04, BR-CAT-05). owner_user_id NULL = household rule, set =
+        private user rule. uq_merchant_rule (NULLS NOT DISTINCT) allows one rule per scope and merchant key, backs
+        the ON CONFLICT upsert, and - leading with household_id - serves the suggestion lookup (household_id =
+        :household AND merchant_key = :key AND (owner_user_id IS NULL OR owner_user_id = :user)). The composite
+        FK to household_member guarantees a user rule belongs to a member of that household (not enforced when
+        owner_user_id is NULL, MATCH SIMPLE). No other index: nothing else queries this table.
+      changes:
+        - sql:
+            sql: |
+              CREATE TABLE categorization.merchant_rule (
+                  id                 uuid        NOT NULL,
+                  household_id       uuid        NOT NULL,
+                  owner_user_id      uuid,
+                  merchant_key       text        NOT NULL,
+                  normaliser_version smallint    NOT NULL,
+                  category_id        uuid        NOT NULL,
+                  hit_count          integer     NOT NULL DEFAULT 0,
+                  created_at         timestamptz NOT NULL,
+                  updated_at         timestamptz NOT NULL,
+                  CONSTRAINT pk_merchant_rule PRIMARY KEY (id),
+                  CONSTRAINT fk_merchant_rule_household FOREIGN KEY (household_id)
+                      REFERENCES household.household (id),
+                  CONSTRAINT fk_merchant_rule_owner FOREIGN KEY (household_id, owner_user_id)
+                      REFERENCES household.household_member (household_id, user_id),
+                  CONSTRAINT fk_merchant_rule_category FOREIGN KEY (category_id)
+                      REFERENCES categorization.category (id),
+                  CONSTRAINT ck_merchant_rule_key CHECK (char_length(merchant_key) BETWEEN 1 AND 120),
+                  CONSTRAINT ck_merchant_rule_hit_count CHECK (hit_count >= 0),
+                  CONSTRAINT uq_merchant_rule UNIQUE NULLS NOT DISTINCT (household_id, owner_user_id, merchant_key)
+              );
+      rollback:
+        - sql:
+            sql: DROP TABLE categorization.merchant_rule
+  - changeSet:
+      id: categorization-0005-create-merchant-correction
+      author: couplefinance
+      comment: >
+        Streak of the "two consecutive corrections" rule of BR-CAT-05 (database-schema.md 6.3). One row per scope and
+        merchant key; uq_merchant_correction backs the ON CONFLICT upsert. last_expense_id (an addition to the
+        documented columns, no FK: expense data belongs to another module) makes re-delivery of the same
+        expense-saved event a no-op. No other index.
+      changes:
+        - sql:
+            sql: |
+              CREATE TABLE categorization.merchant_correction (
+                  id                uuid        NOT NULL,
+                  household_id      uuid        NOT NULL,
+                  owner_user_id     uuid,
+                  merchant_key      text        NOT NULL,
+                  category_id       uuid        NOT NULL,
+                  consecutive_count smallint    NOT NULL,
+                  last_expense_id   uuid        NOT NULL,
+                  updated_at        timestamptz NOT NULL,
+                  CONSTRAINT pk_merchant_correction PRIMARY KEY (id),
+                  CONSTRAINT fk_merchant_correction_household FOREIGN KEY (household_id)
+                      REFERENCES household.household (id),
+                  CONSTRAINT fk_merchant_correction_owner FOREIGN KEY (household_id, owner_user_id)
+                      REFERENCES household.household_member (household_id, user_id),
+                  CONSTRAINT fk_merchant_correction_category FOREIGN KEY (category_id)
+                      REFERENCES categorization.category (id),
+                  CONSTRAINT ck_merchant_correction_key CHECK (char_length(merchant_key) BETWEEN 1 AND 120),
+                  CONSTRAINT ck_merchant_correction_count CHECK (consecutive_count BETWEEN 1 AND 2),
+                  CONSTRAINT uq_merchant_correction UNIQUE NULLS NOT DISTINCT (household_id, owner_user_id, merchant_key)
+              );
+      rollback:
+        - sql:
+            sql: DROP TABLE categorization.merchant_correction
