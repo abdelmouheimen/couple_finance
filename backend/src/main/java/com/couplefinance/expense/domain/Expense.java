@@ -107,6 +107,7 @@ public class Expense {
     private Long version;
 
     // Items are written together with the expense at creation: adding them is not a modification of the version.
+    // An edit of the items bumps the version through updatedAt, see update().
     @OptimisticLock(excluded = true)
     @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     @JoinColumn(name = "expense_id", nullable = false, updatable = false)
@@ -289,6 +290,9 @@ public class Expense {
 
     private void applyMerchant(@Nullable String merchant) {
         if (merchant == null || merchant.isBlank()) {
+            this.merchantDisplay = null;
+            this.merchantKey = null;
+            this.merchantNormaliserVersion = null;
             return;
         }
         if (merchant.length() > MERCHANT_MAX_LENGTH) {
@@ -303,6 +307,146 @@ public class Expense {
         this.merchantDisplay = merchant;
         this.merchantKey = normalised.key();
         this.merchantNormaliserVersion = (short) normalised.normaliserVersion();
+    }
+
+    /** Everything an edit may change, for the audit diff and the no-op detection (BR-EXP-10). */
+    public ExpenseSnapshot snapshot() {
+        return new ExpenseSnapshot(amountMinor, currency.strip(), expenseDate, paidByUserId, ownerUserId,
+                merchantDisplay, note,
+                items.stream().map(i -> new ExpenseSnapshot.Item(i.categoryId(), i.amountMinor(), i.label()))
+                        .toList());
+    }
+
+    /**
+     * BR-EXP-14: the categories of {@code items} that must be active - those of items that are not identical
+     * (category, amount, label) to an item the expense already has. An unchanged item on a since-archived category
+     * stays valid.
+     */
+    public Set<UUID> categoriesRequiringActiveStatus(List<NewItem> newItems) {
+        Set<ExpenseSnapshot.Item> existing = new HashSet<>(snapshot().items());
+        Set<UUID> required = new HashSet<>();
+        for (NewItem item : newItems) {
+            if (!existing.contains(new ExpenseSnapshot.Item(item.categoryId(), item.amount().minorUnits(),
+                    normalisedLabel(item.label())))) {
+                required.add(item.categoryId());
+            }
+        }
+        return required;
+    }
+
+    /**
+     * Facts about the refunds around an expense being edited, read by the caller under the lock on the original
+     * (BR-EXP-03, domain-model.md section 7.3).
+     *
+     * @param original          the original of this expense when it is a linked refund, else {@code null}
+     * @param otherRefundsMinor live refunds of the original other than this one
+     * @param ownRefundsMinor   live refunds linked to this expense
+     * @param earliestOwnRefund date of the earliest live refund linked to this expense, if any
+     */
+    public record RefundState(@Nullable Expense original, long otherRefundsMinor, long ownRefundsMinor,
+            @Nullable LocalDate earliestOwnRefund) {
+
+        public static RefundState none() {
+            return new RefundState(null, 0, 0, null);
+        }
+    }
+
+    /**
+     * Edits this expense (BR-EXP-09): full replacement of amount, date, items, payer, sharing type, merchant and
+     * note. Kind, refund link, source and creator never change. The caller has loaded the row under a lock, scoped
+     * by household and visibility, and has checked the version (BR-EXP-12), the payer membership and the
+     * categories (BR-EXP-14, through {@link #categoriesRequiringActiveStatus}).
+     *
+     * <p>The date window is checked only when the date changes: validation-time rules are not re-checked as time
+     * passes. When nothing changes the expense is left untouched.
+     *
+     * @return whether anything changed (the version is then incremented at flush)
+     * @throws ApplicationException the first violated rule, with a stable error code
+     */
+    public boolean update(UserId editor, LedgerProfile ledger, Clock clock, Money amount, LocalDate date,
+            List<NewItem> newItems, UserId paidBy, SharingType sharing, @Nullable String merchant,
+            @Nullable String newNote, RefundState refunds) {
+        Objects.requireNonNull(editor, "editor");
+        Objects.requireNonNull(ledger, "ledger");
+        Objects.requireNonNull(clock, "clock");
+        Objects.requireNonNull(amount, "amount");
+        Objects.requireNonNull(date, "date");
+        Objects.requireNonNull(newItems, "items");
+        Objects.requireNonNull(paidBy, "paidBy");
+        Objects.requireNonNull(sharing, "sharing");
+        Objects.requireNonNull(refunds, "refunds");
+        // BR-EXP-09: any member edits a SHARED expense, only the owner a PERSONAL one (partner: not found).
+        if (ownerUserId != null && !ownerUserId.equals(editor.value())) {
+            throw new ApplicationException(ExpenseErrorCode.EXPENSE_NOT_FOUND, "The expense was not found.");
+        }
+        amount.requirePositiveAtMost(ledger.maxExpense());
+        if (!date.equals(expenseDate)) {
+            requireDateInWindow(date, LocalDate.ofInstant(clock.instant(), ledger.timezone()));
+        }
+        if (sharing != sharingType() && !editor.value().equals(paidByUserId)) {
+            throw new ApplicationException(ExpenseErrorCode.EXPENSE_SHARING_CHANGE_FORBIDDEN,
+                    "Only the payer can switch an expense between SHARED and PERSONAL.");
+        }
+        UUID newOwner = sharing == SharingType.PERSONAL ? editor.value() : null;
+        if (newOwner != null && (!paidBy.value().equals(newOwner) || !createdBy.equals(newOwner))) {
+            throw new ApplicationException(ExpenseErrorCode.EXPENSE_PERSONAL_PAYER_MISMATCH,
+                    "A personal expense must be paid by its creator.");
+        }
+        requireConsistentItems(amount, newItems, ledger.maxExpense());
+        requireRefundInvariants(sharing, date, amount, refunds);
+
+        ExpenseSnapshot before = snapshot();
+        this.amountMinor = amount.minorUnits();
+        this.expenseDate = date;
+        this.paidByUserId = paidBy.value();
+        this.ownerUserId = newOwner;
+        applyMerchant(merchant);
+        this.note = validNote(newNote);
+        List<ExpenseSnapshot.Item> wanted = newItems.stream().map(i -> new ExpenseSnapshot.Item(i.categoryId(),
+                i.amount().minorUnits(), validLabel(i.label()))).toList();
+        if (!wanted.equals(before.items())) {
+            items.clear();
+            int position = 1;
+            for (ExpenseSnapshot.Item item : wanted) {
+                items.add(new ExpenseItem(UuidV7.generate(clock), householdId, position++, item.categoryId(),
+                        item.amountMinor(), item.label()));
+            }
+        }
+        if (before.equals(snapshot())) {
+            return false;
+        }
+        // updatedAt strictly increases, so that every real change makes the row dirty and increments the version
+        // (BR-EXP-12) even when only the items changed, or the clock did not advance.
+        Instant now = clock.instant();
+        this.updatedAt = now.isAfter(updatedAt) ? now : updatedAt.plusNanos(1_000);
+        this.updatedBy = editor.value();
+        return true;
+    }
+
+    /** BR-EXP-03 for an edit: a linked refund stays within its original; an original keeps its refunds valid. */
+    private void requireRefundInvariants(SharingType sharing, LocalDate date, Money amount, RefundState refunds) {
+        if (refunds.original() != null) {
+            refunds.original().requireRefundable(new HouseholdId(householdId), sharing, date, amount,
+                    Money.ofMinor(refunds.otherRefundsMinor(), amount.currency(), amount.amount().scale()));
+        }
+        if (refunds.ownRefundsMinor() > 0) {
+            if (amount.minorUnits() < refunds.ownRefundsMinor()) {
+                throw new ApplicationException(ExpenseErrorCode.EXPENSE_REFUND_EXCEEDS_ORIGINAL,
+                        "The refunds of an expense cannot exceed its amount.");
+            }
+            if (sharing != sharingType()) {
+                throw new ApplicationException(ExpenseErrorCode.EXPENSE_REFUND_VISIBILITY_MISMATCH,
+                        "A refund has the same sharing type as its original expense.");
+            }
+            if (refunds.earliestOwnRefund() != null && refunds.earliestOwnRefund().isBefore(date)) {
+                throw new ApplicationException(ExpenseErrorCode.EXPENSE_REFUND_DATE_BEFORE_ORIGINAL,
+                        "A refund cannot be dated before its original expense.");
+            }
+        }
+    }
+
+    private static @Nullable String normalisedLabel(@Nullable String label) {
+        return label == null || label.isBlank() ? null : label.strip();
     }
 
     private static @Nullable String validNote(@Nullable String note) {

@@ -7,10 +7,13 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.UUID;
 
 import com.couplefinance.expense.domain.Expense;
 import com.couplefinance.expense.domain.ExpenseAuditLog;
 import com.couplefinance.expense.domain.ExpenseItem;
+import com.couplefinance.expense.domain.ExpenseSnapshot;
 import com.couplefinance.shared.id.UserId;
 import com.couplefinance.shared.id.UuidV7;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -72,6 +75,62 @@ class JdbcExpenseAuditLog implements ExpenseAuditLog {
                 .param("changes", jsonMapper.writeValueAsString(changes))
                 .param("occurredAt", OffsetDateTime.ofInstant(expense.createdAt(), ZoneOffset.UTC))
                 .update();
+    }
+
+    @Override
+    public void updated(ExpenseSnapshot before, Expense after, UserId actor) {
+        ExpenseSnapshot now = after.snapshot();
+        Map<String, Map<String, Object>> changes = new LinkedHashMap<>();
+        diff(changes, "amountMinor", before.amountMinor(), now.amountMinor());
+        diff(changes, "expenseDate", before.expenseDate().toString(), now.expenseDate().toString());
+        diff(changes, "paidByUserId", before.paidByUserId().toString(), now.paidByUserId().toString());
+        diff(changes, "ownerUserId", str(before.ownerUserId()), str(now.ownerUserId()));
+        diff(changes, "merchant", before.merchant(), now.merchant());
+        diff(changes, "note", before.note(), now.note());
+        diff(changes, "items", itemMaps(before.items()), itemMaps(now.items()));
+        // BR-EXP-10: an entry that touches a PERSONAL expense (before or after) is visible to its owner only.
+        UUID owner = before.ownerUserId() != null ? before.ownerUserId() : now.ownerUserId();
+        jdbc.sql("""
+                        INSERT INTO expense.audit_event
+                            (id, household_id, entity_type, entity_id, owner_user_id, action, actor_type,
+                             actor_user_id, changes, occurred_at)
+                        VALUES (:id, :householdId, 'EXPENSE', :entityId, :ownerUserId, 'UPDATE', 'USER', :actor,
+                                CAST(:changes AS jsonb), :occurredAt)
+                        """)
+                .param("id", UuidV7.generate(clock))
+                .param("householdId", after.householdId())
+                .param("entityId", after.id())
+                .param("ownerUserId", owner)
+                .param("actor", actor.value())
+                .param("changes", jsonMapper.writeValueAsString(changes))
+                .param("occurredAt", OffsetDateTime.ofInstant(after.updatedAt(), ZoneOffset.UTC))
+                .update();
+    }
+
+    private static void diff(Map<String, Map<String, Object>> changes, String field, Object oldValue,
+            Object newValue) {
+        if (!Objects.equals(oldValue, newValue)) {
+            Map<String, Object> change = new LinkedHashMap<>();
+            change.put("old", oldValue);
+            change.put("new", newValue);
+            changes.put(field, change);
+        }
+    }
+
+    private static String str(UUID value) {
+        return value == null ? null : value.toString();
+    }
+
+    private static List<Map<String, Object>> itemMaps(List<ExpenseSnapshot.Item> items) {
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (ExpenseSnapshot.Item item : items) {
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("categoryId", item.categoryId().toString());
+            entry.put("amountMinor", item.amountMinor());
+            entry.put("label", item.label());
+            result.add(entry);
+        }
+        return result;
     }
 
     private static void put(Map<String, Map<String, Object>> changes, String field, Object value) {

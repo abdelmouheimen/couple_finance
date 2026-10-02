@@ -5,6 +5,7 @@ import java.util.UUID;
 
 import com.couplefinance.expense.application.CreateExpenseService;
 import com.couplefinance.expense.application.ExpenseQueryService;
+import com.couplefinance.expense.application.ExpenseUpdater;
 import com.couplefinance.expense.application.ListExpensesQuery;
 import com.couplefinance.expense.application.ListExpensesService;
 import com.couplefinance.expense.domain.ExpenseKind;
@@ -26,6 +27,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -42,9 +44,11 @@ class ExpenseController {
     private final ListExpensesService listExpenses;
 
     private final ExpenseQueryService queries;
+    private final ExpenseUpdater updater;
 
     ExpenseController(CreateExpenseService createExpense, ListExpensesService listExpenses,
-            ExpenseQueryService queries) {
+            ExpenseQueryService queries, ExpenseUpdater updater) {
+        this.updater = updater;
         this.createExpense = createExpense;
         this.listExpenses = listExpenses;
         this.queries = queries;
@@ -129,6 +133,49 @@ class ExpenseController {
                     schema = @Schema(implementation = ProblemSchema.class)))
     ExpenseAuditResponse audit(@PathVariable UUID id) {
         return ExpenseAuditResponse.from(queries.audit(id));
+    }
+
+    @PutMapping("/{id}")
+    @Operation(operationId = "updateExpense", summary = "Update an expense",
+            description = "Replaces the editable state of an expense (amount, date, items, payer, sharing type, "
+                    + "merchant, note) with the same validation as creation. Requires If-Match with the version "
+                    + "(ETag) last read: missing is a 428, stale a 412. Any member edits a SHARED expense; only "
+                    + "the owner a PERSONAL one (the partner gets a 404); only the payer can switch between "
+                    + "SHARED and PERSONAL. A deleted expense is a 404. The edit is audited and increments the "
+                    + "version; the new ETag is returned. Rejected on a dissolved household.")
+    @ApiResponse(responseCode = "200", description = "Expense updated (or unchanged)")
+    @ApiResponse(responseCode = "400", description = "VALIDATION_FAILED, MALFORMED_REQUEST, IF_MATCH_INVALID, "
+            + "INVALID_AMOUNT_FORMAT, TOO_MANY_DECIMALS, AMOUNT_NOT_POSITIVE, AMOUNT_EXCEEDS_MAXIMUM, "
+            + "CURRENCY_MISMATCH, EXPENSE_DATE_OUT_OF_RANGE, EXPENSE_ITEM_COUNT_INVALID, "
+            + "EXPENSE_ITEM_DUPLICATE_CATEGORY, EXPENSE_ITEMS_SUM_MISMATCH, EXPENSE_CATEGORY_ARCHIVED, "
+            + "EXPENSE_PAID_BY_INVALID, EXPENSE_PERSONAL_PAYER_MISMATCH, EXPENSE_MERCHANT_INVALID, "
+            + "EXPENSE_REFUND_ORIGINAL_INVALID, EXPENSE_REFUND_VISIBILITY_MISMATCH, "
+            + "EXPENSE_REFUND_DATE_BEFORE_ORIGINAL or EXPENSE_REFUND_EXCEEDS_ORIGINAL",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ProblemSchema.class)))
+    @ApiResponse(responseCode = "401", description = "AUTHENTICATION_REQUIRED",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ProblemSchema.class)))
+    @ApiResponse(responseCode = "403", description = "EMAIL_NOT_VERIFIED, HOUSEHOLD_READ_ONLY or "
+            + "EXPENSE_SHARING_CHANGE_FORBIDDEN", content = @Content(mediaType = "application/problem+json",
+            schema = @Schema(implementation = ProblemSchema.class)))
+    @ApiResponse(responseCode = "404", description = "HOUSEHOLD_NOT_FOUND, EXPENSE_NOT_FOUND (unknown, deleted, "
+            + "of another household or personal to the partner) or CATEGORY_NOT_FOUND",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ProblemSchema.class)))
+    @ApiResponse(responseCode = "412", description = "VERSION_CONFLICT (stale If-Match)",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ProblemSchema.class)))
+    @ApiResponse(responseCode = "428", description = "IF_MATCH_REQUIRED",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ProblemSchema.class)))
+    ResponseEntity<ExpenseResponse> update(@PathVariable UUID id,
+            @Parameter(description = "Version of the expense last read, as sent in its ETag.")
+            @RequestHeader(value = "If-Match", required = false) String ifMatch,
+            @Valid @RequestBody UpdateExpenseRequest request) {
+        var expense = updater.update(request.toCommand(id, ifMatch));
+        return ResponseEntity.ok().eTag(VersionETag.render(expense.version()))
+                .body(ExpenseResponse.from(expense));
     }
 
     @PostMapping

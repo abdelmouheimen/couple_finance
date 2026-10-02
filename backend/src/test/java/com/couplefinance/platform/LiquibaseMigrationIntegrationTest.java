@@ -48,7 +48,8 @@ class LiquibaseMigrationIntegrationTest {
                 "expense-0004-create-items-consistency-trigger",
                 "expense-0005-create-audit-event",
                 "expense-0006-create-refund-index",
-                "expense-0007-create-history-indexes");
+                "expense-0007-create-history-indexes",
+                "expense-0008-defer-expense-item-uniqueness");
     }
 
     @Test
