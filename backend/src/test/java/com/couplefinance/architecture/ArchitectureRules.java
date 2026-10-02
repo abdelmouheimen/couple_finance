@@ -146,6 +146,19 @@ final class ArchitectureRules {
                         + "only dedicated *PurgeRepository classes may be unscoped (4.4)");
     }
 
+    /**
+     * The other half of the security.md 4.4 exception: unscoped purge repositories may only be used by dedicated
+     * purge classes (simple name contains {@code Purge}), never by ordinary use cases or controllers.
+     */
+    static ArchRule purgeRepositoriesAreUsedOnlyByPurgeClasses() {
+        return noClasses().that(describe("are not purge classes",
+                        (JavaClass c) -> !c.getSimpleName().contains("Purge")))
+                .should().dependOnClassesThat(describe("are purge repositories",
+                        (JavaClass c) -> c.getSimpleName().endsWith(PURGE_REPOSITORY_SUFFIX)))
+                .allowEmptyShould(true)
+                .because("security.md 4.4: unscoped purge persistence is confined to dedicated purge classes");
+    }
+
     // ------------------------------------------------------ 2. no floating point money (BR-MON-02)
 
     private static final Set<String> FLOATING_POINT_TYPES =

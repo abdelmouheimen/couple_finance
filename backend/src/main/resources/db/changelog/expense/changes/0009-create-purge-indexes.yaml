@@ -1,0 +1,19 @@
+databaseChangeLog:
+  - changeSet:
+      id: expense-0009-create-purge-indexes
+      author: couplefinance
+      comment: >
+        Retention purge (Issue #22, BR-EXP-11, BR-DAT). ix_expense_deleted serves the purge selection
+        "WHERE deleted_at < :cutoff ORDER BY deleted_at, id" over deleted rows only (partial index, tiny).
+        ix_expense_audit_occurred serves "WHERE occurred_at < :cutoff ORDER BY occurred_at, id" of the 24-month
+        audit purge. The refund index of expense-0006 serves the NOT EXISTS refund check.
+      changes:
+        - sql:
+            sql: |
+              CREATE INDEX ix_expense_deleted ON expense.expense (deleted_at, id) WHERE deleted_at IS NOT NULL;
+              CREATE INDEX ix_expense_audit_occurred ON expense.audit_event (occurred_at, id);
+      rollback:
+        - sql:
+            sql: |
+              DROP INDEX expense.ix_expense_audit_occurred;
+              DROP INDEX expense.ix_expense_deleted;

@@ -37,6 +37,11 @@ class ArchitectureTest {
     }
 
     @Test
+    void security_4_4_purge_repositories_are_used_only_by_purge_classes() {
+        ArchitectureRules.purgeRepositoriesAreUsedOnlyByPurgeClasses().check(production);
+    }
+
+    @Test
     void BR_MON_02_no_floating_point_fields_in_money_classes() {
         ArchitectureRules.noFloatingPointFieldsInMoneyClasses().check(production);
     }
