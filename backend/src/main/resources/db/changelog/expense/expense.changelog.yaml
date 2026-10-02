@@ -12,3 +12,5 @@ databaseChangeLog:
       file: db/changelog/expense/changes/0005-create-audit-event.yaml
   - include:
       file: db/changelog/expense/changes/0006-create-refund-index.yaml
+  - include:
+      file: db/changelog/expense/changes/0007-create-history-indexes.yaml

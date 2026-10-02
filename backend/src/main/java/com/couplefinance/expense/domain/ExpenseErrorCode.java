@@ -35,7 +35,9 @@ public enum ExpenseErrorCode implements ErrorCode {
     /** BR-EXP-03: the live refunds of an expense sum to at most its amount. */
     EXPENSE_REFUND_EXCEEDS_ORIGINAL(HttpStatus.BAD_REQUEST),
     /** The original of a refund does not exist, is deleted, or is not visible to the caller (404). */
-    EXPENSE_NOT_FOUND(HttpStatus.NOT_FOUND);
+    EXPENSE_NOT_FOUND(HttpStatus.NOT_FOUND),
+    /** A history filter is inconsistent: {@code dateFrom} after {@code dateTo}, or a search text that is too long. */
+    EXPENSE_FILTER_INVALID(HttpStatus.BAD_REQUEST);
 
     private final HttpStatus status;
 

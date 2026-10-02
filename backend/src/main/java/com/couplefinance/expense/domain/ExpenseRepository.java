@@ -1,5 +1,7 @@
 package com.couplefinance.expense.domain;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -54,4 +56,17 @@ public interface ExpenseRepository extends Repository<Expense, UUID> {
             where r.refundOfExpenseId = :originalId and r.householdId = :householdId and r.deletedAt is null
             """)
     boolean hasLiveRefunds(@Param("originalId") UUID originalId, @Param("householdId") UUID householdId);
+
+    /**
+     * Loads, with their items, the live expenses of the household with the given ids. The ids come from
+     * {@link ExpenseSearch}, which already applied the visibility rule (BR-EXP-07); the household scope is repeated
+     * here as defence in depth. Order is unspecified: the caller restores the page order.
+     */
+    @Query("""
+            select distinct e from Expense e left join fetch e.items
+            where e.id in :ids and e.householdId = :householdId and e.deletedAt is null
+              and (e.ownerUserId is null or e.ownerUserId = :userId)
+            """)
+    List<Expense> findVisibleLiveByIds(@Param("ids") Collection<UUID> ids, @Param("householdId") UUID householdId,
+            @Param("userId") UUID userId);
 }

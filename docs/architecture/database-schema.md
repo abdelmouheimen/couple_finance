@@ -413,7 +413,7 @@ the row is deleted when a rule is created or the streak breaks.
 | Index | Definition | Serves |
 |---|---|---|
 | `ix_expense_history` | `(household_id, expense_date DESC, id DESC) WHERE deleted_at IS NULL` | History pagination (cursor = date,id), period range scans for budgets/analytics (BR-SCP-01); visibility predicate evaluated on the few rows per household. |
-| `ix_expense_personal` | `(household_id, owner_user_id, expense_date DESC) WHERE owner_user_id IS NOT NULL AND deleted_at IS NULL` | Personal views/analytics (BR-SCP-02) without scanning shared rows. |
+| `ix_expense_personal` | `(household_id, owner_user_id, expense_date DESC, id DESC) WHERE owner_user_id IS NOT NULL AND deleted_at IS NULL` | Personal views/analytics (BR-SCP-02) without scanning shared rows. |
 | `ix_expense_duplicate` | `(household_id, amount_minor, expense_date) WHERE deleted_at IS NULL AND kind = 'EXPENSE'` | Duplicate detection (§8.9): equality on amount, range ±1 day. Candidates are then compared by merchant similarity in Java. |
 | `ix_expense_refunds` | `(refund_of_expense_id) WHERE refund_of_expense_id IS NOT NULL` | Σ refunds ≤ original under lock (BR-EXP-03); FK check when an original is purged. |
 | `ix_expense_deleted` | `(deleted_at) WHERE deleted_at IS NOT NULL` | 90-day purge job; restore listing. |
