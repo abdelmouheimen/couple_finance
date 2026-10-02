@@ -4,6 +4,7 @@ import java.time.LocalDate;
 import java.util.UUID;
 
 import com.couplefinance.expense.application.CreateExpenseService;
+import com.couplefinance.expense.application.ExpenseDeleter;
 import com.couplefinance.expense.application.ExpenseQueryService;
 import com.couplefinance.expense.application.ExpenseUpdater;
 import com.couplefinance.expense.application.ListExpensesQuery;
@@ -24,6 +25,7 @@ import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -45,9 +47,11 @@ class ExpenseController {
 
     private final ExpenseQueryService queries;
     private final ExpenseUpdater updater;
+    private final ExpenseDeleter deleter;
 
     ExpenseController(CreateExpenseService createExpense, ListExpensesService listExpenses,
-            ExpenseQueryService queries, ExpenseUpdater updater) {
+            ExpenseQueryService queries, ExpenseUpdater updater, ExpenseDeleter deleter) {
+        this.deleter = deleter;
         this.updater = updater;
         this.createExpense = createExpense;
         this.listExpenses = listExpenses;
@@ -174,6 +178,64 @@ class ExpenseController {
             @RequestHeader(value = "If-Match", required = false) String ifMatch,
             @Valid @RequestBody UpdateExpenseRequest request) {
         var expense = updater.update(request.toCommand(id, ifMatch));
+        return ResponseEntity.ok().eTag(VersionETag.render(expense.version()))
+                .body(ExpenseResponse.from(expense));
+    }
+
+    @DeleteMapping("/{id}")
+    @Operation(operationId = "deleteExpense", summary = "Delete an expense",
+            description = "Logical deletion (BR-EXP-11): the expense leaves every list, total, budget and analytic "
+                    + "and can be restored for 90 days. Any member deletes a SHARED expense; only the owner a "
+                    + "PERSONAL one (the partner gets a 404). An expense with live refunds cannot be deleted "
+                    + "(409 EXPENSE_HAS_LIVE_REFUNDS). The deletion is audited and emits ExpenseDeleted. No "
+                    + "If-Match is required: deleting is idempotent in effect and a second delete is a 404. "
+                    + "Rejected on a dissolved household.")
+    @ApiResponse(responseCode = "204", description = "Expense deleted")
+    @ApiResponse(responseCode = "401", description = "AUTHENTICATION_REQUIRED",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ProblemSchema.class)))
+    @ApiResponse(responseCode = "403", description = "EMAIL_NOT_VERIFIED or HOUSEHOLD_READ_ONLY",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ProblemSchema.class)))
+    @ApiResponse(responseCode = "404", description = "HOUSEHOLD_NOT_FOUND or EXPENSE_NOT_FOUND (unknown, already "
+            + "deleted, of another household or personal to the partner)",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ProblemSchema.class)))
+    @ApiResponse(responseCode = "409", description = "EXPENSE_HAS_LIVE_REFUNDS",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ProblemSchema.class)))
+    ResponseEntity<Void> delete(@PathVariable UUID id) {
+        deleter.delete(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{id}/restore")
+    @Operation(operationId = "restoreExpense", summary = "Restore a deleted expense",
+            description = "Restores a deleted expense within 90 days of its deletion (BR-EXP-11), under the same "
+                    + "edit rights as deletion. After 90 days, or when the expense is not deleted, is unknown, "
+                    + "belongs to another household or is personal to the partner, the answer is a 404. "
+                    + "Restoring a refund re-checks BR-EXP-03 against its original (400 "
+                    + "EXPENSE_REFUND_ORIGINAL_INVALID when the original is deleted, EXPENSE_REFUND_EXCEEDS_ORIGINAL, "
+                    + "EXPENSE_REFUND_DATE_BEFORE_ORIGINAL, EXPENSE_REFUND_VISIBILITY_MISMATCH). Audited; emits "
+                    + "ExpenseRestored. The restored expense is returned with its new ETag. Rejected on a "
+                    + "dissolved household.")
+    @ApiResponse(responseCode = "200", description = "Expense restored")
+    @ApiResponse(responseCode = "400", description = "EXPENSE_REFUND_ORIGINAL_INVALID, "
+            + "EXPENSE_REFUND_EXCEEDS_ORIGINAL, EXPENSE_REFUND_DATE_BEFORE_ORIGINAL or "
+            + "EXPENSE_REFUND_VISIBILITY_MISMATCH",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ProblemSchema.class)))
+    @ApiResponse(responseCode = "401", description = "AUTHENTICATION_REQUIRED",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ProblemSchema.class)))
+    @ApiResponse(responseCode = "403", description = "EMAIL_NOT_VERIFIED or HOUSEHOLD_READ_ONLY",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ProblemSchema.class)))
+    @ApiResponse(responseCode = "404", description = "HOUSEHOLD_NOT_FOUND or EXPENSE_NOT_FOUND",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ProblemSchema.class)))
+    ResponseEntity<ExpenseResponse> restore(@PathVariable UUID id) {
+        var expense = deleter.restore(id);
         return ResponseEntity.ok().eTag(VersionETag.render(expense.version()))
                 .body(ExpenseResponse.from(expense));
     }

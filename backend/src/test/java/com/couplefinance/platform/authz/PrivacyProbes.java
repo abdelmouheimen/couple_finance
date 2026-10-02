@@ -75,6 +75,24 @@ final class PrivacyProbes {
         assertThat(world.body(unchanged).get("merchant").asString()).isEqualTo(s.personalMerchant());
     }
 
+    static void expenseDelete(AuthzWorld world, SeededHousehold s) {
+        String uri = "/api/v1/expenses/" + s.personalExpense();
+        MvcTestResult result = world.send(s.partner(), Call.without(HttpMethod.DELETE, uri));
+        assertThat(result).hasStatus(HttpStatus.NOT_FOUND);
+        assertNoPrivateData(s, AuthzWorld.text(result), uri);
+        assertThat(world.get(s.owner(), uri)).hasStatus(HttpStatus.OK);
+    }
+
+    static void expenseRestore(AuthzWorld world, SeededHousehold s) {
+        String uri = "/api/v1/expenses/" + s.personalExpense();
+        assertThat(world.send(s.owner(), Call.without(HttpMethod.DELETE, uri))).hasStatus(HttpStatus.NO_CONTENT);
+        MvcTestResult result = world.send(s.partner(), Call.without(HttpMethod.POST, uri + "/restore"));
+        assertThat(result).hasStatus(HttpStatus.NOT_FOUND);
+        assertNoPrivateData(s, AuthzWorld.text(result), uri);
+        assertThat(world.get(s.owner(), uri)).as("still deleted: the partner's restore had no effect")
+                .hasStatus(HttpStatus.NOT_FOUND);
+    }
+
     static void suggestions(AuthzWorld world, SeededHousehold s) {
         String uri = "/api/v1/category-suggestions?merchant=" + s.ruleMerchant() + "&sharingType=";
         JsonNode own = world.body(world.get(s.owner(), uri + "PERSONAL"));
