@@ -255,6 +255,117 @@ paths:
       tags:
       - Merchant rules
   /api/v1/expenses:
+    get:
+      description: "Expense history, newest first (date, then id), cursor-paginated.\
+        \ scope=HOUSEHOLD lists the SHARED expenses of the caller's household; scope=PERSONAL\
+        \ lists the caller's own PERSONAL expenses. A partner's PERSONAL expenses\
+        \ never appear, nor in totals or counts. Deleted expenses are excluded. Filters\
+        \ combine with AND. The totals cover every expense matching the filters, not\
+        \ only the page, and carry their scope. Readable on a dissolved household\
+        \ by a former member with archive access."
+      operationId: listExpenses
+      parameters:
+      - description: Which view to list.
+        in: query
+        name: scope
+        required: true
+        schema:
+          type: string
+          enum:
+          - HOUSEHOLD
+          - PERSONAL
+      - description: First date included (YYYY-MM-DD).
+        in: query
+        name: dateFrom
+        required: false
+        schema:
+          type: string
+          format: date
+      - description: Last date included (YYYY-MM-DD).
+        in: query
+        name: dateTo
+        required: false
+        schema:
+          type: string
+          format: date
+      - description: Only expenses having an item of this category.
+        in: query
+        name: categoryId
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - description: Only expenses paid by this member.
+        in: query
+        name: paidBy
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - description: Only this kind.
+        in: query
+        name: kind
+        required: false
+        schema:
+          type: string
+          enum:
+          - EXPENSE
+          - REFUND
+      - description: Only expenses with (true) or without (false) a receipt.
+        in: query
+        name: hasReceipt
+        required: false
+        schema:
+          type: boolean
+      - description: Case-insensitive text contained in the merchant or the note (max
+          100).
+        in: query
+        name: q
+        required: false
+        schema:
+          type: string
+      - description: "Page size, default 20, capped at 100."
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+          format: int32
+      - description: Opaque cursor of the previous page.
+        in: query
+        name: cursor
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExpensePage"
+          description: A page of expenses
+        "400":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: "VALIDATION_FAILED (missing or malformed parameter), INVALID_CURSOR,\
+            \ INVALID_LIMIT or EXPENSE_FILTER_INVALID"
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: AUTHENTICATION_REQUIRED
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: HOUSEHOLD_NOT_FOUND (the caller has no household)
+      summary: List and search expenses
+      tags:
+      - Expenses
     post:
       description: "Creates an EXPENSE or a REFUND (optionally linked to an original\
         \ expense) in the caller's household. The household comes from the authenticated\
@@ -738,6 +849,44 @@ components:
       - categoryId
       - id
       - position
+    ExpensePage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Expense"
+        nextCursor:
+          type: string
+          description: "Opaque cursor of the next page, absent on the last page."
+        totals:
+          $ref: "#/components/schemas/ExpenseTotals"
+      required:
+      - items
+      - totals
+    ExpenseTotals:
+      type: object
+      properties:
+        count:
+          type: integer
+          format: int64
+          description: "Number of matching expenses, all kinds."
+        net:
+          $ref: "#/components/schemas/Money"
+          description: "EXPENSE minus REFUND (TRANSFER excluded, BR-SCP-01); negative\
+            \ when refunds exceed expenses. With a category filter, only the items\
+            \ of that category."
+        scope:
+          type: string
+          description: "Scope of the figures: HOUSEHOLD (SHARED expenses) or PERSONAL\
+            \ (caller's own)."
+          enum:
+          - HOUSEHOLD
+          - PERSONAL
+      required:
+      - count
+      - net
+      - scope
     FieldViolation:
       type: object
       properties:
