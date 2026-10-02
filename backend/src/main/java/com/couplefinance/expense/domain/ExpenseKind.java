@@ -1,6 +1,6 @@
 package com.couplefinance.expense.domain;
 
-/** BR-EXP-02. Only {@code EXPENSE} is created so far; REFUND and TRANSFER arrive with their own Issues. */
+/** BR-EXP-02. {@code EXPENSE} and {@code REFUND} are created so far; TRANSFER arrives with its own Issue. */
 public enum ExpenseKind {
-    EXPENSE
+    EXPENSE, REFUND
 }

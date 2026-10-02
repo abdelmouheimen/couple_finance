@@ -10,3 +10,5 @@ databaseChangeLog:
       file: db/changelog/expense/changes/0004-create-items-consistency-trigger.yaml
   - include:
       file: db/changelog/expense/changes/0005-create-audit-event.yaml
+  - include:
+      file: db/changelog/expense/changes/0006-create-refund-index.yaml

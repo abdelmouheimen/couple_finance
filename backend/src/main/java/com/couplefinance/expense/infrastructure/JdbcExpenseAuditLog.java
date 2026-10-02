@@ -46,6 +46,8 @@ class JdbcExpenseAuditLog implements ExpenseAuditLog {
         put(changes, "ownerUserId", expense.ownerUserId() == null ? null : expense.ownerUserId().toString());
         put(changes, "merchant", expense.merchantDisplay());
         put(changes, "note", expense.note());
+        put(changes, "refundOfExpenseId",
+                expense.refundOfExpenseId() == null ? null : expense.refundOfExpenseId().toString());
         List<Map<String, Object>> items = new ArrayList<>();
         for (ExpenseItem item : expense.items()) {
             Map<String, Object> entry = new LinkedHashMap<>();
