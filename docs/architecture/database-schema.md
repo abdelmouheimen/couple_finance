@@ -434,7 +434,7 @@ No trigram index at MVP: duplicate candidates are already narrowed to a handful 
 | `amount_minor` | `bigint` | N | > 0; currency of the expense. |
 | `label` | `text` | Y | ≤ 60 chars. |
 
-- **PK** `(id)` · **FK** `(household_id, expense_id) → expense(household_id, id) ON DELETE CASCADE`.
+- **UQ** `(expense_id, position)`; `(expense_id, category_id)` (P2: one item per category) - both `DEFERRABLE INITIALLY DEFERRED` so that an edit can replace the items in one transaction.
 - **UQ** `(expense_id, position)`; `(expense_id, category_id)` (P2: one item per category).
 - **CK** `position BETWEEN 1 AND 10`; `amount_minor > 0 AND amount_minor <= 10^15`.
 - **Index** `uq_expense_item (expense_id, position)` serves the join from expense; `ix_expense_item_category

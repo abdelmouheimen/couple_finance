@@ -1,0 +1,28 @@
+databaseChangeLog:
+  - changeSet:
+      id: expense-0008-defer-expense-item-uniqueness
+      author: couplefinance
+      comment: >
+        Editing an expense replaces its items (BR-EXP-09, Issue #18) in one transaction: the new rows are written
+        while the old ones are still there, so the per-expense uniqueness of position and category must be checked
+        at commit, like the items-sum trigger (expense-0004), not per statement. The same unique indexes keep
+        serving the item lookup of uq_expense_item_position (expense_id, position) and the one-item-per-category
+        rule; only the checking time changes. No new index.
+      changes:
+        - sql:
+            sql: |
+              ALTER TABLE expense.expense_item DROP CONSTRAINT uq_expense_item_position;
+              ALTER TABLE expense.expense_item ADD CONSTRAINT uq_expense_item_position
+                  UNIQUE (expense_id, position) DEFERRABLE INITIALLY DEFERRED;
+              ALTER TABLE expense.expense_item DROP CONSTRAINT uq_expense_item_category;
+              ALTER TABLE expense.expense_item ADD CONSTRAINT uq_expense_item_category
+                  UNIQUE (expense_id, category_id) DEFERRABLE INITIALLY DEFERRED;
+      rollback:
+        - sql:
+            sql: |
+              ALTER TABLE expense.expense_item DROP CONSTRAINT uq_expense_item_category;
+              ALTER TABLE expense.expense_item ADD CONSTRAINT uq_expense_item_category
+                  UNIQUE (expense_id, category_id);
+              ALTER TABLE expense.expense_item DROP CONSTRAINT uq_expense_item_position;
+              ALTER TABLE expense.expense_item ADD CONSTRAINT uq_expense_item_position
+                  UNIQUE (expense_id, position);

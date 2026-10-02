@@ -36,6 +36,8 @@ public enum ExpenseErrorCode implements ErrorCode {
     EXPENSE_REFUND_EXCEEDS_ORIGINAL(HttpStatus.BAD_REQUEST),
     /** The original of a refund does not exist, is deleted, or is not visible to the caller (404). */
     EXPENSE_NOT_FOUND(HttpStatus.NOT_FOUND),
+    /** BR-EXP-09: only the payer can switch an expense between SHARED and PERSONAL. */
+    EXPENSE_SHARING_CHANGE_FORBIDDEN(HttpStatus.FORBIDDEN),
     /** A history filter is inconsistent: {@code dateFrom} after {@code dateTo}, or a search text that is too long. */
     EXPENSE_FILTER_INVALID(HttpStatus.BAD_REQUEST);
 

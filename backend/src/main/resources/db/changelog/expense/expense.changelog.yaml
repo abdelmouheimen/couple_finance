@@ -14,3 +14,5 @@ databaseChangeLog:
       file: db/changelog/expense/changes/0006-create-refund-index.yaml
   - include:
       file: db/changelog/expense/changes/0007-create-history-indexes.yaml
+  - include:
+      file: db/changelog/expense/changes/0008-defer-expense-item-uniqueness.yaml

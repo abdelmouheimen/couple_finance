@@ -1,5 +1,6 @@
 package com.couplefinance.expense.domain;
 
+import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -62,6 +63,14 @@ public interface ExpenseRepository extends Repository<Expense, UUID> {
             where r.refundOfExpenseId = :originalId and r.householdId = :householdId and r.deletedAt is null
             """)
     long sumLiveRefundsMinor(@Param("originalId") UUID originalId, @Param("householdId") UUID householdId);
+
+    /** Date of the earliest live refund linked to an expense, empty when it has none (BR-EXP-03). */
+    @Query("""
+            select min(r.expenseDate) from Expense r
+            where r.refundOfExpenseId = :originalId and r.householdId = :householdId and r.deletedAt is null
+            """)
+    Optional<LocalDate> earliestLiveRefundDate(@Param("originalId") UUID originalId,
+            @Param("householdId") UUID householdId);
 
     /** Whether an expense has live refunds: it then cannot be deleted (BR-EXP-03, enforced by the delete use case). */
     @Query("""
