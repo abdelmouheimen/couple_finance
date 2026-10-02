@@ -37,6 +37,7 @@ class LiquibaseMigrationIntegrationTest {
                 "household-0006-create-audit-event",
                 "household-0007-create-member-archive-index",
                 "household-0008-create-budget-period",
+                "household-0009-create-invitation",
                 "categorization-0001-create-categorization-schema",
                 "categorization-0002-create-category",
                 "categorization-0003-seed-system-categories",

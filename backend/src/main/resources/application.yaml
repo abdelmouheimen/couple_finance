@@ -57,9 +57,14 @@ couplefinance:
       default:
         ip: {capacity: 300, period: 1m}
         user: {capacity: 600, period: 1m}
+      # Invitation creation/listing/revocation (BR-HH-04): few legitimate calls, strictly bounded.
+      invitations:
+        ip: {capacity: 60, period: 1h}
+        user: {capacity: 10, period: 1h}
     # Stricter profiles (auth, invitation redemption, receipt upload) are added with those features:
     #   routes: [{pattern: "/api/v1/auth/**", profile: auth}]
-    routes: []
+    routes:
+      - {pattern: "/api/v1/households/me/invitations/**", profile: invitations}
   pagination:
     # COUPLEFINANCE_PAGINATION_CURSOR_KEY: base64 of 32 random bytes (e.g. `openssl rand -base64 32`).
     # Unset = random per-process key (cursors do not survive restarts or span instances): set it in production.
