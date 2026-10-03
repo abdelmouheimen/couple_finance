@@ -44,3 +44,30 @@ jobs:
           name: test-reports
           path: backend/build/reports/tests/
           retention-days: 7
+
+  mobile:
+    name: Mobile lint, typecheck & tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - run: npm ci
+
+      # The generated API client must match api/openapi.yaml (never hand-edited).
+      - name: API client drift check
+        run: npm run check:api
+
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run typecheck
+      - run: npm test

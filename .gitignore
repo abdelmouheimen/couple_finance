@@ -37,3 +37,5 @@ Thumbs.db
 # Local working notes (not versioned)
 b6-investigation.md
 backlog-analysis.md
+expo-env.d.ts
+dist/
