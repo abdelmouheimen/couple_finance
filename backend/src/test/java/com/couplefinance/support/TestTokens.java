@@ -35,6 +35,10 @@ public final class TestTokens {
         }
     }
 
+    ECKey signingKey() {
+        return signingKey;
+    }
+
     ECKey publicKey() {
         return signingKey.toPublicJWK();
     }

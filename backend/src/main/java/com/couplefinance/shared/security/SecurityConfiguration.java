@@ -6,6 +6,7 @@ import com.couplefinance.shared.ratelimit.RateLimiter.Stage;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -35,6 +36,12 @@ public class SecurityConfiguration {
         "/error"
     };
 
+    /** Public authentication routes (security.md §3); every other route stays deny-by-default. */
+    private static final String[] PUBLIC_AUTH_ENDPOINTS = {"/api/v1/auth/login"};
+
+    private static final String AUTH_PATH_PREFIX = "/api/v1/auth/";
+    private static final long AUTH_MAX_BODY_BYTES = 4096;
+
     @Bean
     SecurityFilterChain apiSecurityFilterChain(
             HttpSecurity http,
@@ -54,6 +61,8 @@ public class SecurityConfiguration {
                 // Spring Security's cache-control writer sends "no-cache, no-store, max-age=0, must-revalidate"
                 // on every response, so no authenticated response is cacheable (security.md section 5).
                 .headers(headers -> headers.cacheControl(Customizer.withDefaults()))
+                .addFilterBefore(new RequestSizeLimitFilter(AUTH_PATH_PREFIX, AUTH_MAX_BODY_BYTES, exceptionResolver),
+                        BearerTokenAuthenticationFilter.class)
                 // Rate limiting: per IP before token authentication, per user right after it.
                 .addFilterBefore(new RateLimitFilter(rateLimiter, Stage.IP, exceptionResolver),
                         BearerTokenAuthenticationFilter.class)
@@ -61,6 +70,7 @@ public class SecurityConfiguration {
                         BearerTokenAuthenticationFilter.class)
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
+                        .requestMatchers(HttpMethod.POST, PUBLIC_AUTH_ENDPOINTS).permitAll()
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(resourceServer -> resourceServer
                         .jwt(Customizer.withDefaults())

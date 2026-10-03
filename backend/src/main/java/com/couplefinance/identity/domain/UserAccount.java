@@ -12,7 +12,7 @@ import org.hibernate.annotations.Immutable;
 
 /**
  * Read-only view of a user account, used to resolve the authenticated user. Accounts are written by
- * registration, which is not implemented yet; only the columns needed here are mapped.
+ * registration, which is not implemented yet; only the columns needed for authentication and the profile are mapped.
  */
 @Entity
 @Immutable
@@ -21,6 +21,17 @@ public class UserAccount {
 
     @Id
     private UUID id;
+
+    private String email;
+
+    @Column(name = "password_hash")
+    private String passwordHash;
+
+    @Column(name = "display_name")
+    private String displayName;
+
+    @Column(nullable = false)
+    private String locale;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
@@ -32,6 +43,23 @@ public class UserAccount {
 
     public UUID id() {
         return id;
+    }
+
+    public String email() {
+        return email;
+    }
+
+    /** Encoded (Argon2id) password; {@code null} only for deleted accounts. Never log or serialise it. */
+    public String passwordHash() {
+        return passwordHash;
+    }
+
+    public String displayName() {
+        return displayName;
+    }
+
+    public String locale() {
+        return locale;
     }
 
     public UserAccountStatus status() {

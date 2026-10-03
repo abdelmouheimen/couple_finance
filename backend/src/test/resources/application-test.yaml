@@ -21,6 +21,11 @@ couplefinance:
       invitations:
         ip: {capacity: 1000000, period: 1h}
         user: {capacity: 8, period: 1h}
+      # Login: lifted IP budget (shared client address); a small per-account budget serves the 429 test, every
+      # other test logs in with its own fresh account.
+      auth:
+        ip: {capacity: 1000000, period: 1h}
+        user: {capacity: 5, period: 1h}
       tight-ip:
         ip: {capacity: 3, period: 1h}
         user: {capacity: 1000, period: 1h}
@@ -30,5 +35,6 @@ couplefinance:
     routes:
       # Lists replace (not merge) the production routes: repeat the production invitation route.
       - {pattern: "/api/v1/households/me/invitations/**", profile: invitations}
+      - {pattern: "/api/v1/auth/**", profile: auth}
       - {pattern: "/test-support/ratelimit/ip/**", profile: tight-ip}
       - {pattern: "/test-support/ratelimit/user/**", profile: tight-user}

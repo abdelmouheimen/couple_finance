@@ -28,6 +28,8 @@ class LiquibaseMigrationIntegrationTest {
                 "infra-0004-create-modulith-event-publication",
                 "identity-0001-create-identity-schema",
                 "identity-0002-create-user-account",
+                "identity-0003-create-session",
+                "identity-0004-create-refresh-token",
                 "household-0001-create-household-schema",
                 "household-0002-create-currency",
                 "household-0002-seed-currencies",

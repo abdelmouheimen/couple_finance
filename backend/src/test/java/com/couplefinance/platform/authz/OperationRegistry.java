@@ -77,6 +77,9 @@ public final class OperationRegistry {
     public static Map<String, OperationFixture> defaults() {
         Map<String, OperationFixture> registry = new LinkedHashMap<>();
 
+        registry.put("login", OperationFixture.publicOperation());
+        registry.put("getCurrentUser", authenticated(s -> Call.get("/api/v1/me")));
+
         registry.put("createHousehold", authenticated(s -> Call.with(HttpMethod.POST, "/api/v1/households",
                 "{\"name\":\"Another foyer\"}")));
         registry.put("getCurrentHousehold", authenticated(s -> Call.get("/api/v1/households/me")));

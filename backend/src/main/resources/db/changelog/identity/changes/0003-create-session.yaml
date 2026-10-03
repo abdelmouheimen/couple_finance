@@ -1,0 +1,32 @@
+databaseChangeLog:
+  - changeSet:
+      id: identity-0003-create-session
+      author: couplefinance
+      comment: >
+        Login sessions (database-schema.md §4.2); the id is the `sid` claim of the access tokens.
+        ix_session_user_active: "log out everywhere" and sensitive-endpoint checks, which look up the active
+        sessions of one user.
+      changes:
+        - sql:
+            sql: |
+              CREATE TABLE identity.session (
+                  id            uuid        NOT NULL,
+                  user_id       uuid        NOT NULL,
+                  device_label  text,
+                  created_at    timestamptz NOT NULL,
+                  last_used_at  timestamptz NOT NULL,
+                  revoked_at    timestamptz,
+                  revoke_reason text,
+                  CONSTRAINT pk_session PRIMARY KEY (id),
+                  CONSTRAINT fk_session_user_account FOREIGN KEY (user_id)
+                      REFERENCES identity.user_account (id) ON DELETE CASCADE,
+                  CONSTRAINT ck_session_device_label
+                      CHECK (device_label IS NULL OR char_length(device_label) BETWEEN 1 AND 80),
+                  CONSTRAINT ck_session_revoked CHECK ((revoked_at IS NULL) = (revoke_reason IS NULL)),
+                  CONSTRAINT ck_session_revoke_reason CHECK (revoke_reason IS NULL OR revoke_reason IN
+                      ('LOGOUT', 'LOGOUT_ALL', 'PASSWORD_RESET', 'REUSE_DETECTED', 'ACCOUNT_DELETED'))
+              );
+              CREATE INDEX ix_session_user_active ON identity.session (user_id) WHERE revoked_at IS NULL;
+      rollback:
+        - sql:
+            sql: DROP TABLE identity.session
