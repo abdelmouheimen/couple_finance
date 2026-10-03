@@ -1,5 +1,6 @@
 package com.couplefinance.support;
 
+import com.nimbusds.jose.jwk.ECKey;
 import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import com.nimbusds.jose.jwk.source.JWKSource;
@@ -18,6 +19,13 @@ public class TestSecurityConfiguration {
     @Bean
     TestTokens testTokens() {
         return new TestTokens();
+    }
+
+    /** The key the application signs login tokens with: the test key, so the production validator trusts them. */
+    @Bean
+    @Primary
+    ECKey testAccessTokenSigningKey(TestTokens testTokens) {
+        return testTokens.signingKey();
     }
 
     @Bean

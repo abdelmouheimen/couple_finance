@@ -1,12 +1,19 @@
 package com.couplefinance.identity.infrastructure;
 
 import java.net.MalformedURLException;
+import java.text.ParseException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
 
+import com.nimbusds.jose.JOSEException;
+import com.nimbusds.jose.JWSAlgorithm;
+import com.nimbusds.jose.jwk.Curve;
+import com.nimbusds.jose.jwk.ECKey;
 import com.nimbusds.jose.jwk.JWKSet;
+import com.nimbusds.jose.jwk.gen.ECKeyGenerator;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.jwk.source.JWKSourceBuilder;
@@ -36,12 +43,28 @@ class JwtDecoderConfiguration {
 
     private static final Logger log = LoggerFactory.getLogger(JwtDecoderConfiguration.class);
 
+    /** The single active signing key (key rotation is out of scope). */
     @Bean
-    JWKSource<SecurityContext> accessTokenKeySource(JwtProperties properties) throws MalformedURLException {
+    ECKey accessTokenSigningKey(JwtProperties properties) throws ParseException, JOSEException {
+        String configured = properties.signingJwk();
+        if (configured == null || configured.isBlank()) {
+            log.warn("couplefinance.security.jwt.signing-jwk is not set: an ephemeral signing key is generated. "
+                    + "Never run production like this.");
+            return new ECKeyGenerator(Curve.P_256).keyID(UUID.randomUUID().toString())
+                    .algorithm(JWSAlgorithm.ES256).generate();
+        }
+        ECKey key = ECKey.parse(configured);
+        if (!Curve.P_256.equals(key.getCurve()) || !key.isPrivate()) {
+            throw new IllegalStateException("couplefinance.security.jwt.signing-jwk must be a private P-256 key.");
+        }
+        return key;
+    }
+
+    @Bean
+    JWKSource<SecurityContext> accessTokenKeySource(JwtProperties properties, ECKey accessTokenSigningKey)
+            throws MalformedURLException {
         if (properties.jwkSetUri() == null) {
-            log.warn("couplefinance.security.jwt.jwk-set-uri is not set: no signing key is trusted and every "
-                    + "bearer token will be rejected.");
-            return new ImmutableJWKSet<>(new JWKSet());
+            return new ImmutableJWKSet<>(new JWKSet(accessTokenSigningKey.toPublicJWK()));
         }
         return JWKSourceBuilder.<SecurityContext>create(properties.jwkSetUri().toURL()).build();
     }
