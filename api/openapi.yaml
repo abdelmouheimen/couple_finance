@@ -73,6 +73,116 @@ paths:
       summary: Household or personal analytics of a budget period
       tags:
       - Analytics
+  /api/v1/analytics/periods/{periodStart}/daily-cumulative:
+    get:
+      description: "For each day of the period (up to today in the household timezone\
+        \ for the current period), the cumulative net spending of the requested scope,\
+        \ and the overall budget limit for reference when one exists (HOUSEHOLD only).\
+        \ HOUSEHOLD never includes a PERSONAL expense (BR-SCP-01); PERSONAL is the\
+        \ caller's own only (BR-SCP-02). Computed in integer minor units."
+      operationId: getDailyCumulativeSeries
+      parameters:
+      - description: First day of the budget period (YYYY-MM-DD).
+        in: path
+        name: periodStart
+        required: true
+        schema:
+          type: string
+          format: date
+      - description: "HOUSEHOLD, or PERSONAL for the caller's own personal spending."
+        in: query
+        name: scope
+        required: true
+        schema:
+          type: string
+          enum:
+          - HOUSEHOLD
+          - PERSONAL
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DailyCumulativeSeries"
+          description: The series
+        "400":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: "VALIDATION_FAILED (malformed date, missing or unknown scope)"
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: AUTHENTICATION_REQUIRED
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: EMAIL_NOT_VERIFIED
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: HOUSEHOLD_NOT_FOUND or ANALYTICS_PERIOD_NOT_FOUND
+      summary: Cumulative daily spending of a budget period
+      tags:
+      - Analytics
+  /api/v1/analytics/trend:
+    get:
+      description: "Net spending totals of the last 6 periods up to and including\
+        \ the current one (oldest first), none that ended before the household tracking\
+        \ start; fewer when the household has fewer. Same scope rules as the daily\
+        \ series."
+      operationId: getTrendSeries
+      parameters:
+      - description: "HOUSEHOLD, or PERSONAL for the caller's own personal spending."
+        in: query
+        name: scope
+        required: true
+        schema:
+          type: string
+          enum:
+          - HOUSEHOLD
+          - PERSONAL
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrendSeries"
+          description: The series
+        "400":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: VALIDATION_FAILED (missing or unknown scope)
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: AUTHENTICATION_REQUIRED
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: EMAIL_NOT_VERIFIED
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: HOUSEHOLD_NOT_FOUND
+      summary: Net totals of the last 6 budget periods
+      tags:
+      - Analytics
   /api/v1/budgets/{periodStart}:
     get:
       description: "The budget of the household's period starting on periodStart.\
@@ -1618,6 +1728,49 @@ components:
       - code
       - expiresAt
       - id
+    DailyCumulativePoint:
+      type: object
+      properties:
+        cumulative:
+          $ref: "#/components/schemas/Money"
+          description: Net spending from the period start through this day inclusive.
+        date:
+          type: string
+          format: date
+    DailyCumulativeSeries:
+      type: object
+      properties:
+        limit:
+          $ref: "#/components/schemas/Money"
+          description: Overall budget limit for reference; absent without an overall
+            limit and for the PERSONAL scope (BR-BUD-02).
+        periodEnd:
+          type: string
+          format: date
+          description: End of the period (exclusive).
+        periodStart:
+          type: string
+          format: date
+          description: First day of the period (inclusive).
+        points:
+          type: array
+          description: "One point per day from the period start to the last day of\
+            \ the period, or to today in the household timezone for the current period;\
+            \ days without spending repeat the previous cumulative; future days are\
+            \ absent (empty for a future period)."
+          items:
+            $ref: "#/components/schemas/DailyCumulativePoint"
+        scope:
+          type: string
+          description: Scope of every figure (BR-SCP-03).
+          enum:
+          - HOUSEHOLD
+          - PERSONAL
+      required:
+      - periodEnd
+      - periodStart
+      - points
+      - scope
     Expense:
       type: object
       properties:
@@ -2044,6 +2197,39 @@ components:
             \ strictly positive. Omitting it clears it, which is allowed only while\
             \ the budget keeps at least one category limit (BR-BUD-02): otherwise\
             \ 400 and nothing is stored."
+    TrendPeriodTotal:
+      type: object
+      properties:
+        current:
+          type: boolean
+          description: "True for the period containing today, still in progress."
+        periodEnd:
+          type: string
+          format: date
+        periodStart:
+          type: string
+          format: date
+        total:
+          $ref: "#/components/schemas/Money"
+    TrendSeries:
+      type: object
+      properties:
+        periods:
+          type: array
+          description: "Net totals of the last 6 periods up to and including the current\
+            \ one, oldest first; fewer when the household has fewer periods since\
+            \ its tracking start."
+          items:
+            $ref: "#/components/schemas/TrendPeriodTotal"
+        scope:
+          type: string
+          description: Scope of every figure (BR-SCP-03).
+          enum:
+          - HOUSEHOLD
+          - PERSONAL
+      required:
+      - periods
+      - scope
     UpdateCategoryRequest:
       type: object
       properties:

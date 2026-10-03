@@ -137,6 +137,11 @@ public final class OperationRegistry {
                         + "a foreign id: a foreign caller only ever copies within its own household"));
         registry.put("getPeriodAnalytics", household(s -> Call.get("/api/v1/analytics/periods/"
                 + s.target().periodStart() + "?scope=HOUSEHOLD"), false, PrivacyProbes::periodAnalytics));
+        registry.put("getDailyCumulativeSeries", household(s -> Call.get("/api/v1/analytics/periods/"
+                + s.target().periodStart() + "/daily-cumulative?scope=HOUSEHOLD"), false,
+                PrivacyProbes::dailyCumulativeSeries));
+        registry.put("getTrendSeries", household(s -> Call.get("/api/v1/analytics/trend?scope=HOUSEHOLD"), false,
+                PrivacyProbes::trendSeries));
         return registry;
     }
 
