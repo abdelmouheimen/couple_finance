@@ -75,7 +75,7 @@ tasks.test {
     finalizedBy(tasks.jacocoTestReport)
 }
 
-// Test coverage (unit + Testcontainers integration tests). Informational only: no threshold is enforced.
+// Test coverage (unit + Testcontainers integration tests); `check` (hence `build`) fails below 80 %.
 // HTML: build/reports/jacoco/test/html/index.html, XML: build/reports/jacoco/test/jacocoTestReport.xml.
 jacoco {
     // 0.8.14+ is required to instrument Java 25 class files.
@@ -88,6 +88,27 @@ tasks.jacocoTestReport {
         xml.required = true
         html.required = true
     }
+}
+
+// Minimum backend coverage required by the Tech Lead: 80 % of lines and 80 % of branches.
+tasks.jacocoTestCoverageVerification {
+    dependsOn(tasks.test)
+    violationRules {
+        rule {
+            limit {
+                counter = "LINE"
+                minimum = "0.80".toBigDecimal()
+            }
+            limit {
+                counter = "BRANCH"
+                minimum = "0.80".toBigDecimal()
+            }
+        }
+    }
+}
+
+tasks.check {
+    dependsOn(tasks.jacocoTestCoverageVerification)
 }
 
 tasks.register<Test>("updateOpenApi") {

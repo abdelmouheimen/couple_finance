@@ -152,7 +152,7 @@ Run from `backend/` (JDK 25 toolchain; Docker must be running for tests):
 |---|---|
 | Full build (warnings are errors) + all tests | `./gradlew build` |
 | Tests only / one class | `./gradlew test` / `./gradlew test --tests '*ClassName'` |
-| Test coverage report (JaCoCo, generated after `test`) | `build/reports/jacoco/test/html/index.html` |
+| Test coverage report (JaCoCo, generated after `test`; `build` fails below 80 % line or branch coverage) | `build/reports/jacoco/test/html/index.html` |
 | Regenerate the committed OpenAPI contract after an API change | `./gradlew updateOpenApi` |
 | Run against Docker Compose PostgreSQL (`local` profile) | `docker compose -f ../infra/docker-compose.yml up -d --wait` then `./gradlew bootRun` |
 | Run against a throw-away Testcontainers database | `./gradlew bootTestRun` |
