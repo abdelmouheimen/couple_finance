@@ -6,7 +6,7 @@ Related: [security.md](security.md) · [ai.md](ai.md) · [database.md](database.
 [business-rules.md](../product/business-rules.md) · ADRs:
 [001](adr/001-modular-monolith.md) · [002](adr/002-household-lifecycle-and-data-ownership.md) ·
 [003](adr/003-expense-model.md) · [004](adr/004-ai-output-trust-model.md) ·
-[005](adr/005-ai-consent-and-data-protection.md) · [006](adr/006-domain-model-and-persistence.md) ·
+[005](adr/005-ai-consent-and-data-protection.md) · [006](adr/006-domain-model-and-persistence.md) · [007](adr/007-couplefinance-managed-authentication.md) ·
 [domain-model.md](domain-model.md) · [database-schema.md](database-schema.md)
 
 ---
@@ -281,7 +281,7 @@ Resolved by this revision: budget scope, personal visibility (ADR-002/003). Rema
    `expense_share` table deferred) — decide before V1.
 2. **Income** tracking (savings-rate insights).
 3. **Multi-currency** (travel): conversion source, rates, rounding.
-4. **Authentication**: in-house vs external IdP; Apple/Google sign-in.
+4. ~~**Authentication**: in-house vs external IdP; Apple/Google sign-in.~~ **Resolved** by [ADR-007](adr/007-couplefinance-managed-authentication.md) (in-house; social login deferred).
 5. **AI provider(s)**, DPA, EU residency, cost ceiling; vision LLM vs OCR vs hybrid.
 6. **DPIA outcome**: redaction pre-processor mandatory at MVP?
 7. **Offline capture** requirements.

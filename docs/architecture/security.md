@@ -32,8 +32,8 @@ Verification target: OWASP ASVS Level 2 (backend), OWASP MASVS (mobile).
 
 ## 3. Authentication
 
-**Proposal (MVP):** in-house authentication with Spring Security (external IdP remains an open question; the rest
-of this document applies either way).
+**Decision (MVP):** CoupleFinance-managed authentication with Spring Security, no external IdP
+([ADR-007](adr/007-couplefinance-managed-authentication.md)).
 
 | Element | Design |
 |---|---|
@@ -42,11 +42,11 @@ of this document applies either way).
 | Access token | JWT signed with **ES256** (EdDSA may be added later), **15 min**, claims `sub`, `sid`, `iat`, `exp`, `aud`. **No household id** — membership resolved per request. |
 | Validation (implemented) | Resource server with keys from a JWKS endpoint (`couplefinance.security.jwt.jwk-set-uri`; none configured = the public part of the signing key is trusted). Required: valid ES256 signature, `exp` present and not past (60 s skew), `sub` = user id, `aud` contains `couplefinance-api`, `iss` when configured. The user must exist and not be deleted (else 401) and be `ACTIVE` (else 403 `EMAIL_NOT_VERIFIED`). Issuance (`POST /api/v1/auth/login`, Issue #75): ES256 signed by `couplefinance.security.jwt.signing-jwk` (deployment secret, private P-256 JWK; unset = ephemeral key, local only), 15 min, claims `sub`, `sid` (session id), `iat`, `exp`, `aud`, `iss` when configured, no household id. A session and a first refresh token (opaque 256-bit, SHA-256 stored, 30 days) are created; passwords are verified with Argon2id; unknown email, wrong password and deleted account are indistinguishable (`INVALID_CREDENTIALS`). Refresh/logout: not implemented yet. |
 | Revocation window | Access tokens stay valid up to 15 min after logout-all / password reset / account deletion (accepted). **Sensitive endpoints** (export, account deletion, dissolution, join approval, consent changes) additionally check that `sid` is not revoked. |
-| Refresh token | Opaque 256-bit, stored hashed, 30-day sliding, rotated on each use. **Reuse detection with a 30 s grace window**: presenting the just-rotated token within the window returns the same successor instead of revoking (handles parallel refreshes). Reuse outside the window revokes the session. |
+| Refresh token | Opaque 256-bit, stored hashed, 30-day sliding, rotated on each use. **Reuse detection with a 30 s grace window**: presenting a token rotated less than 30 s ago rotates forward again in the same chain so only the newest token stays valid, instead of revoking (handles parallel refreshes; ADR-007). Reuse outside the window revokes the session. |
 | Client | **Single-flight refresh** in the app: concurrent 401s wait on one refresh call. |
 | Logout | Revokes the session; "log out everywhere" revokes all sessions. |
-| Password reset | Single-use hashed token, 30 min; all sessions revoked. No account enumeration. |
-| Brute force | Rate limits per IP and account on login, reset, verification and invitation redemption; progressive delays; no permanent lockout. |
+| Password reset | **Deferred (ADR-007).** Single-use hashed token, 30 min; all sessions revoked. No account enumeration. |
+| Brute force | Rate limits per IP and account on login, reset, verification and invitation redemption; no permanent lockout; progressive delays deferred (ADR-007). |
 | Biometrics | Local app unlock only. |
 | MFA | Not in MVP; TOTP or passkeys in V1. |
 
@@ -167,7 +167,7 @@ an explicit ArchUnit exception.
 
 ## 11. Open security questions
 
-1. In-house auth vs external IdP; Sign in with Apple / Google at MVP?
+1. ~~In-house auth vs external IdP~~ — **resolved**: in-house, no IdP at MVP ([ADR-007](adr/007-couplefinance-managed-authentication.md)); Sign in with Apple / Google deferred.
 2. RLS: confirm performance and adopt from the first release, or at GA?
 3. Is column-level encryption required for notes/merchants?
 4. Is the redaction pre-processor mandatory at MVP (DPIA outcome)?
