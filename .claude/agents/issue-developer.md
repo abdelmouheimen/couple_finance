@@ -60,6 +60,14 @@ security, Money, database, test and scope rule still applies unchanged.
   fresh processes after a deterministic gate and sends you their findings
   in a later "FIX MODE" run. Your mandatory self-review (§ "Mandatory
   self-review") still happens before you finish.
+- RECOVERY (your prompt contains `RECOVERY:`): a previous process on this
+  item was interrupted and you have none of its memory. Rebuild the context
+  from CLAUDE.md, the Issue, `git status`, `git log`/`git diff` against
+  `origin/integration/mvp`, the existing code/tests and the orchestration
+  logs named in the prompt, then continue the existing work. Keep every
+  valid commit and uncommitted/untracked file; never `git reset`, `clean`,
+  `stash`, `rebase`, `restore` or `checkout -- <path>` it; fix genuinely
+  wrong work with a new commit.
 - FIX MODE: validate each finding against CLAUDE.md, BR rules, ADRs and
   scope; fix valid BLOCKER/HIGH (and in-scope MEDIUM) findings with tests;
   list rejected findings with a precise justification in `rejected`.

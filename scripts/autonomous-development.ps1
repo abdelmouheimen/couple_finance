@@ -19,14 +19,22 @@
        optional Android APK, then a Pull Request integration/mvp -> main for the HUMAN, and a
        HUMAN-ACCEPTANCE.md report with the exact launch commands.
 
-    Safety: never merges into / pushes to main, never force-pushes, never resets/cleans/stashes,
-    never deletes a worktree containing uncommitted work, never edits Issues or labels.
-    Resumable: state is derived from Git (integration trailers, branches, worktrees), GitHub
-    (merged PRs) and local state files (.autonomous-dev/state); rerunning continues safely.
+    Safety: never merges into / pushes to main, never force-pushes, never resets/cleans/stashes/
+    rebases, never deletes a worktree containing uncommitted work, never edits Issues or labels.
+
+    Crash recovery: Claude Code sessions, workers and this process are disposable. Git, GitHub,
+    the worktrees, the integration branch and .autonomous-dev (state checkpoints + logs) are the
+    source of truth. On every start the persisted per-item phases are reconciled with Git
+    (integration trailers / validated heads win over state files), a RECOVERY report is printed,
+    live workers are adopted, interrupted work is continued by NEW Claude processes with a
+    recovery context, and integration is idempotent (an Issue is never integrated twice).
+    After a crash, token/session expiration or reboot: rerun exactly the same command.
 
     Exit codes: 0 = dry run done / READY FOR HUMAN ACCEPTANCE TESTING
                 1 = failure / unsafe state
                 2 = stopped: human input required (needs approval, blocked Issues, remaining findings)
+                3 = paused: Claude Code unavailable (session/token expired, usage limit, persistent
+                    network/overload); all work is checkpointed - rerun the same command later
 
 .EXAMPLE
     .\scripts\autonomous-development.ps1 -DryRun
@@ -119,6 +127,10 @@ $script:Started = 0
 $script:LaunchCount = @{}
 $script:Integrated = New-Object System.Collections.ArrayList
 $script:Notes = New-Object System.Collections.ArrayList
+$script:AgentUnavailable = ''     # set when Claude is unavailable (AUTH): no new agent is started
+$script:DelayedRelaunch = New-Object System.Collections.ArrayList   # @{ Item; NotBefore } after TRANSIENT failures
+$script:RecoveryEntries = $null
+$MaxTransientRelaunches = 4
 $IntegrationRef = 'origin/' + $IntegrationBranch
 
 function Stop-Orchestrator([string]$Message, [int]$Code = 1) { $script:ExitCode = $Code; throw ($StopPrefix + $Message) }
@@ -137,6 +149,9 @@ function Get-Prop($Obj, [string]$Name, $Default = $null) {
 # ---------------------------------------------------------------------------
 
 function Invoke-Exe([string]$Exe, [string[]]$Arguments, [switch]$AllowFailure) {
+    if ($DryRun -and $script:Gh -and $Exe -eq $script:Gh -and -not (Test-ReadOnlyGhCommand $Arguments)) {
+        Stop-Orchestrator ('DryRun refused a modifying GitHub command: gh ' + ($Arguments -join ' '))
+    }
     $previous = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
     try { $output = & $Exe @Arguments 2>&1 } finally { $ErrorActionPreference = $previous }
     $code = $LASTEXITCODE
@@ -202,27 +217,17 @@ function Assert-Prerequisites {
 function Enter-Lock {
     New-Item -ItemType Directory -Force -Path $script:StateDir | Out-Null
     $script:LockFile = Join-Path $script:AutoDir 'orchestrator.lock'
-    if (Test-Path -LiteralPath $script:LockFile) {
-        $other = 0
-        [void][int]::TryParse((Read-TextFile $script:LockFile).Trim(), [ref]$other)
-        if (Test-ProcessAlive $other) { Stop-Orchestrator ('Another orchestrator is running (PID ' + $other + ').') }
-    }
-    Write-TextFile $script:LockFile ([string]$PID)
+    # A lock left by a killed orchestrator or a reboot is stale (PID dead or reused by another process).
+    $other = Test-LockHeld $script:LockFile
+    if ($other -gt 0) { Stop-Orchestrator ('Another orchestrator is running (PID ' + $other + ').') }
+    Write-LockFile $script:LockFile
 }
 
 # ---------------------------------------------------------------------------
 # Integration branch
 # ---------------------------------------------------------------------------
 
-function Get-WorktreeMap {
-    $map = @{}
-    $current = $null
-    foreach ($line in ((Invoke-RootGit @('worktree', 'list', '--porcelain')).Output -split "`n")) {
-        if ($line -like 'worktree *') { $current = [System.IO.Path]::GetFullPath($line.Substring(9).Replace('/', '\')); $map[$current] = '' }
-        elseif ($line -like 'branch *' -and $current) { $map[$current] = $line.Substring(7) -replace '^refs/heads/', '' }
-    }
-    return $map
-}
+function Get-WorktreeMap { return (Get-GitWorktreeMap $script:Root) }
 
 function Ensure-Worktree([string]$Path, [string]$Branch, [string]$StartRef) {
     [void](Invoke-RootGit @('worktree', 'prune'))
@@ -259,6 +264,39 @@ function Sync-IntegrationWorktree {
     Stop-Orchestrator ('Local and remote ' + $IntegrationBranch + ' diverged; resolve manually (never force-pushed automatically).')
 }
 
+function Get-IntegrationMessage($s) {
+    $trailer = if ($s.Kind -eq 'issue') { 'Integrates-Issue: #' + $s.Issue } else { 'Integrates-Repair: ' + $s.Key }
+    $subject = if ($s.Kind -eq 'issue') { 'chore(integration): integrate #' + $s.Issue + ' ' + $s.Title } else { 'chore(integration): ' + $s.Title }
+    return ($subject + "`n`nReviewed and gated by the autonomous orchestrator (run " + $script:RunId + ").`n`n" + $trailer + "`nIntegrated-Branch: " + $s.Branch + "`nReviewed-Head: " + $s.Head)
+}
+
+# An orchestrator killed while merging in its own integration worktree leaves a merge in
+# progress. It is rolled forward, never discarded: the integration merge of a validated item is
+# concluded idempotently; an interrupted main sync (clean, staged, unedited) is gated again.
+# Returns $true when a main-sync merge is staged and must be gated by the caller.
+function Resume-InterruptedIntegrationWorktree {
+    if (-not (Test-MergeInProgress $script:IntegrationWt)) { return $false }
+    $mergeHead = (Invoke-GitIn $script:IntegrationWt @('rev-parse', 'MERGE_HEAD')).Output.Trim()
+    foreach ($f in (Get-ChildItem -LiteralPath $script:StateDir -Filter '*.json' -ErrorAction SilentlyContinue)) {
+        $s = Read-ItemState $f.FullName
+        if ($null -eq $s -or [string](Get-StateValue $s 'Head' '') -ne $mergeHead) { continue }
+        if (@('VALIDATED', 'INTEGRATING') -notcontains (ConvertTo-ItemPhase ([string]$s.Phase))) { continue }
+        $r = Invoke-IdempotentIntegrationMerge -IntegrationWt $script:IntegrationWt -Head $mergeHead -Message (Get-IntegrationMessage $s)
+        Write-RunLog ($s.Key + ': interrupted integration merge ' + $r + ' (rolled forward); it is pushed next') 'WARN' Yellow
+        return $false
+    }
+    if (Test-GitAncestor $script:Root $mergeHead ('origin/' + $BaseBranch)) {
+        $unmerged = (Invoke-GitIn $script:IntegrationWt @('diff', '--name-only', '--diff-filter=U')).Output
+        $unstaged = (Invoke-GitIn $script:IntegrationWt @('diff', '--name-only')).Output
+        $untracked = (Invoke-GitIn $script:IntegrationWt @('ls-files', '--others', '--exclude-standard')).Output
+        if (-not $unmerged -and -not $unstaged -and -not $untracked) {
+            Write-Warn ('An interrupted sync of ' + $BaseBranch + ' into ' + $IntegrationBranch + ' is staged; it is gated again before commit.')
+            return $true
+        }
+    }
+    Stop-Orchestrator ('A merge (' + $mergeHead + ') is in progress in ' + $script:IntegrationWt + ' that the orchestrator cannot attribute; inspect it manually (nothing is discarded automatically).')
+}
+
 function Initialize-Integration {
     Write-Section ('Integration branch ' + $IntegrationBranch)
     if (-not (Test-GitRefExists $script:Root $IntegrationRef)) {
@@ -271,14 +309,17 @@ function Initialize-Integration {
     }
     if (-not (Test-GitRefExists $script:Root ('refs/heads/' + $IntegrationBranch))) { [void](Invoke-RootGit @('branch', '--no-track', $IntegrationBranch, $IntegrationRef)) }
     $script:IntegrationWt = Ensure-Worktree $script:IntegrationWt $IntegrationBranch $IntegrationRef
-    Sync-IntegrationWorktree
+    $mainSyncStaged = Resume-InterruptedIntegrationWorktree
+    if (-not $mainSyncStaged) { Sync-IntegrationWorktree }
     Write-Info ('Worktree: ' + $script:IntegrationWt + ' at ' + (Get-GitHead $script:IntegrationWt).Substring(0, 10))
 
     # Keep the integration branch current with main (human-merged work). Clean merges are gated;
     # conflicts and gate failures become integration-repair items for an agent.
-    if (-not (Test-GitAncestor $script:Root ('origin/' + $BaseBranch) $IntegrationRef)) {
-        $m = Invoke-GitIn $script:IntegrationWt @('merge', '--no-ff', '--no-commit', ('origin/' + $BaseBranch)) -AllowFailure
+    if ($mainSyncStaged -or -not (Test-GitAncestor $script:Root ('origin/' + $BaseBranch) $IntegrationRef)) {
+        if (-not $mainSyncStaged) { $m = Invoke-GitIn $script:IntegrationWt @('merge', '--no-ff', '--no-commit', ('origin/' + $BaseBranch)) -AllowFailure }
+        else { $m = [pscustomobject]@{ ExitCode = 0 } }
         if ($m.ExitCode -ne 0) {
+            # The orchestrator's own mechanical merge (no agent work in it) is aborted and handed to an agent.
             if (Test-MergeInProgress $script:IntegrationWt) { [void](Invoke-GitIn $script:IntegrationWt @('merge', '--abort')) }
             Write-Warn ('Merging ' + $BaseBranch + ' into ' + $IntegrationBranch + ' conflicts; queued as an integration-repair item.')
             Add-RepairItem 'main-sync' ('Merge origin/' + $BaseBranch + ' into the integration branch') ("Run ``git merge --no-ff --signoff origin/$BaseBranch`` on this branch and resolve every conflict, keeping both the human-merged work of $BaseBranch and the integrated MVP work. Regenerate generated files (api/openapi.yaml via ``gradlew.bat updateOpenApi``, the mobile client via ``npm run generate:api``) instead of hand-merging them. Then build and test, and commit the merge with --signoff.")
@@ -344,15 +385,7 @@ function Get-Snapshot {
 
 function Get-StateFile([string]$Key) { return (Join-Path $script:StateDir ($Key + '.json')) }
 
-function Get-LocalStates {
-    $map = @{}
-    if (-not (Test-Path -LiteralPath $script:StateDir)) { return $map }
-    foreach ($f in (Get-ChildItem -LiteralPath $script:StateDir -Filter 'issue-*.json')) {
-        $s = Read-ItemState $f.FullName
-        if ($null -ne $s) { $map[[int]$s.Issue] = @{ Phase = [string]$s.Phase; Reason = [string](Get-Prop $s 'Reason' '') } }
-    }
-    return $map
-}
+function Get-LocalStates { return (Get-LocalPhaseMap $script:StateDir) }
 
 function Get-Plan($Snapshot) {
     $running = @{}
@@ -387,11 +420,20 @@ function Start-Worker([hashtable]$Item) {
     if ($script:LaunchCount[$key] -gt 8) {
         # Guard against a worker that dies before it can record anything (would relaunch forever).
         $st = Read-ItemState (Get-StateFile $key)
-        if ($null -eq $st) { $st = [pscustomobject]@{ Key = $key; Kind = $Item.Kind; Issue = $Item.Issue; Title = $Item.Title; Branch = $Item.Branch; Worktree = $Item.Worktree; Phase = 'blocked'; Reason = '' } }
-        $st.Phase = 'blocked'; Set-StateProperty $st 'Reason' ('worker launched ' + ($script:LaunchCount[$key] - 1) + ' times in this run without finishing; see ' + (Join-Path $script:RunDir $key))
+        if ($null -eq $st) { $st = [pscustomobject]@{ Key = $key; Kind = $Item.Kind; Issue = $Item.Issue; Title = $Item.Title; Branch = $Item.Branch; Worktree = $Item.Worktree; Phase = 'BLOCKED'; Reason = '' } }
+        $st.Phase = 'BLOCKED'; Set-StateProperty $st 'Reason' ('worker launched ' + ($script:LaunchCount[$key] - 1) + ' times in this run without finishing; see ' + (Join-Path $script:RunDir $key))
         Save-ItemState (Get-StateFile $key) $st
         Write-RunLog ($key + ': BLOCKED - ' + $st.Reason) 'WARN' Yellow
         return
+    }
+    if ($script:AgentUnavailable) { Write-RunLog ($key + ': not started, Claude is unavailable (' + $script:AgentUnavailable + ')') 'WARN' Yellow; return }
+    # Checkpoint before the process exists, so a crash right after the launch is still recoverable.
+    if ($null -eq (Read-ItemState (Get-StateFile $key))) {
+        Save-ItemState (Get-StateFile $key) ([pscustomobject]@{
+            Key = $key; Kind = $Item.Kind; Issue = $Item.Issue; Title = $Item.Title; Branch = $Item.Branch; Worktree = $Item.Worktree
+            Phase = 'PLANNED'; Reason = ''; Head = ''; Cycles = 0; MediumFixDone = $false; SyncCount = 0
+            Reviews = [pscustomobject]@{}; Gate = $null; Rejected = ''; CostUsd = 0; History = @()
+        })
     }
     $logDir = Join-Path $script:RunDir $key
     $params = [ordered]@{
@@ -421,7 +463,7 @@ function Add-RepairItem([string]$Slug, [string]$Title, [string]$TaskText, [strin
     $key = 'repair-' + $Slug
     $branch = 'integration-fix/' + $script:RunId + '-' + $Slug
     $existing = Read-ItemState (Get-StateFile $key)
-    if ($null -ne $existing -and @('integrated') -notcontains $existing.Phase) { $branch = [string]$existing.Branch }
+    if ($null -ne $existing -and @('INTEGRATED') -notcontains (ConvertTo-ItemPhase ([string]$existing.Phase))) { $branch = [string]$existing.Branch }
     elseif ($null -ne $existing) { Remove-Item -LiteralPath (Get-StateFile $key) -Force }   # previous repair of the same name is integrated
     [void]$script:PendingRepairs.Add(@{ Key = $key; Kind = 'repair'; Issue = 0; Title = $Title; Labels = @(); Branch = $branch; Worktree = (Join-Path $script:WtRoot $key); DeveloperAgent = $Agent; TaskText = $TaskText })
 }
@@ -430,7 +472,8 @@ function Resume-RepairItems {
     if (-not (Test-Path -LiteralPath $script:StateDir)) { return }
     foreach ($f in (Get-ChildItem -LiteralPath $script:StateDir -Filter 'repair-*.json')) {
         $s = Read-ItemState $f.FullName
-        if ($null -eq $s -or @('integrated', 'blocked') -contains $s.Phase) { continue }
+        # VALIDATED / INTEGRATING items are integrated by the orchestrator, adopted ones are running.
+        if ($null -eq $s -or @('INTEGRATED', 'BLOCKED', 'VALIDATED', 'INTEGRATING') -contains (ConvertTo-ItemPhase ([string]$s.Phase)) -or $script:Workers.ContainsKey([string]$s.Key)) { continue }
         $params = Join-Path (Get-Prop $s 'LogDir' '') 'worker.params.json'
         $task = ''; $agent = 'integration-validator'
         if ($params -and (Test-Path -LiteralPath $params)) { $pp = ConvertFrom-Json (Read-TextFile $params); $task = $pp.TaskText; $agent = $pp.DeveloperAgent }
@@ -438,23 +481,50 @@ function Resume-RepairItems {
     }
 }
 
-# Adopt workers still running from an interrupted orchestrator (state file records the PID).
-function Register-AdoptedWorkers {
-    if (-not (Test-Path -LiteralPath $script:StateDir)) { return }
-    foreach ($f in (Get-ChildItem -LiteralPath $script:StateDir -Filter '*.json')) {
-        $s = Read-ItemState $f.FullName
-        if ($null -eq $s) { continue }
-        $workerPid = [int](Get-Prop $s 'WorkerPid' 0)
-        if (@('developing', 'reviewing') -contains $s.Phase -and (Test-ProcessAlive $workerPid)) {
-            $script:Workers[$s.Key] = @{ Process = $null; Pid = $workerPid; Key = $s.Key; Kind = $s.Kind; Issue = [int]$s.Issue; StateFile = $f.FullName; Item = $null }
-            Write-RunLog ('adopted running worker ' + $s.Key + ' (PID ' + $workerPid + ')')
+# Start-up reconciliation of every persisted checkpoint with Git reality (see
+# Invoke-StateRecovery / Get-RecoveryAction): integrated items are skipped (Git wins), live
+# workers adopted, everything else continues from its checkpoint in a NEW worker process.
+function Invoke-Recovery {
+    $integratedIssues = Get-IntegratedIssueSet $script:Root ('origin/' + $BaseBranch) @($IntegrationRef)
+    $entries = Invoke-StateRecovery -Root $script:Root -StateDir $script:StateDir -BaseRef $IntegrationRef -IntegrationRefs @($IntegrationRef) -IntegratedIssues $integratedIssues
+    foreach ($e in $entries) {
+        $s = Read-ItemState $e.File
+        switch ($e.Decision.Action) {
+            'adopt' {
+                $workerPid = [int](Get-Prop $s 'WorkerPid' 0)
+                $script:Workers[$e.Key] = @{ Process = $null; Pid = $workerPid; StartTicks = [string](Get-Prop $s 'WorkerStartTicks' ''); Key = $e.Key; Kind = $e.Kind; Issue = $e.Issue; StateFile = $e.File; Item = $null }
+                Write-RunLog ('adopted running worker ' + $e.Key + ' (PID ' + $workerPid + ')')
+            }
+            'skip' { if ($e.Before -ne 'INTEGRATED') { Write-RunLog ($e.Key + ': ' + $e.Decision.Detail) 'WARN' Yellow }; Remove-ItemWorktree ([string](Get-Prop $s 'Worktree' '')) }
+            default { }
         }
     }
+    $script:RecoveryEntries = $entries
+}
+
+function Write-RecoveryReport($Entries, [hashtable]$Plan, [string]$Title = 'RECOVERY DETECTED') {
+    if ($null -eq $Entries -or @($Entries).Count -eq 0) { return }
+    Write-Host ''
+    Write-Host $Title -ForegroundColor Magenta
+    Write-Host ''
+    foreach ($line in (Format-RecoveryReport $Entries $Plan)) { Write-RunLog $line 'RECOVERY' Magenta }
 }
 
 function Test-WorkerExited($w) {
     if ($null -ne $w.Process) { return $w.Process.HasExited }
-    return -not (Test-ProcessAlive $w.Pid)
+    return -not (Test-ProcessAlive $w.Pid ([string]$w.StartTicks))
+}
+
+# Relaunches items whose TRANSIENT back-off elapsed; returns $true when one started.
+function Start-DueRelaunches {
+    $started = $false
+    foreach ($d in @($script:DelayedRelaunch)) {
+        if ($script:AgentUnavailable -or $script:Workers.Count -ge $Parallelism) { break }
+        if ((Get-Date) -lt $d.NotBefore) { continue }
+        $script:DelayedRelaunch.Remove($d)
+        Start-Worker $d.Item; $started = $true
+    }
+    return $started
 }
 
 # Handles finished workers; returns $true when something changed.
@@ -466,20 +536,46 @@ function Receive-FinishedWorkers {
         $script:Workers.Remove($key)
         $changed = $true
         $s = Read-ItemState $w.StateFile
-        $phase = [string](Get-Prop $s 'Phase' 'unknown')
-        if ($phase -eq 'approved') { Write-RunLog ($key + ': APPROVED (ready to integrate)') 'INFO' Green; continue }
-        if ($phase -eq 'blocked') { Write-RunLog ($key + ': BLOCKED - ' + (Get-Prop $s 'Reason' '')) 'WARN' Yellow; continue }
-        # Crashed / killed worker: relaunch a bounded number of times, then block.
-        $errors = [int](Get-Prop $s 'ErrorCount' 0)
+        $phase = ConvertTo-ItemPhase ([string](Get-Prop $s 'Phase' ''))
+        if ($phase -eq 'VALIDATED') { Write-RunLog ($key + ': VALIDATED (ready to integrate)') 'INFO' Green; continue }
+        if ($phase -eq 'BLOCKED') { Write-RunLog ($key + ': BLOCKED - ' + (Get-Prop $s 'Reason' '')) 'WARN' Yellow; continue }
         $item = $w.Item
         if ($null -eq $item -and $null -ne $s) { $item = Get-ItemFromState $s }
-        if ($null -ne $s -and $errors -lt 3 -and $null -ne $item) {
-            Write-RunLog ($key + ': worker ended in phase ' + $phase + ' (' + (Get-Prop $s 'LastError' 'no error recorded') + '); relaunching') 'WARN' Yellow
-            if (-not (Get-Prop $s 'LastError' $null)) { Set-StateProperty $s 'ErrorCount' ($errors + 1); Save-ItemState $w.StateFile $s }
+        if ($null -eq $s -or $null -eq $item) { Write-RunLog ($key + ': worker ended without a readable state file; the next run reconciles it from Git') 'WARN' Yellow; continue }
+
+        # Claude unavailable: AUTH pauses the whole run; TRANSIENT relaunches this item later.
+        $kind = [string](Get-Prop $s 'InterruptKind' '')
+        if ($phase -eq 'INTERRUPTED' -and $kind -eq 'AUTH') {
+            $script:AgentUnavailable = [string](Get-Prop $s 'Reason' 'Claude unavailable')
+            Write-RunLog ($key + ': INTERRUPTED - Claude Code is unavailable (session/token/usage); no new agent is started. ' + $script:AgentUnavailable) 'WARN' Yellow
+            continue
+        }
+        if ($phase -eq 'INTERRUPTED' -and $kind -eq 'TRANSIENT') {
+            $n = [int](Get-Prop $s 'TransientCount' 0) + 1
+            Set-StateProperty $s 'TransientCount' $n; Save-ItemState $w.StateFile $s
+            if ($n -gt $MaxTransientRelaunches) {
+                $script:AgentUnavailable = 'repeated transient Claude failures (' + (Get-Prop $s 'Reason' '') + ')'
+                Write-RunLog ($key + ': INTERRUPTED ' + $n + ' times by transient Claude failures; pausing the run') 'WARN' Yellow
+                continue
+            }
+            $delay = [Math]::Min(30, [Math]::Pow(2, $n))
+            [void]$script:DelayedRelaunch.Add(@{ Item = $item; NotBefore = (Get-Date).AddMinutes($delay) })
+            Write-RunLog ($key + ': INTERRUPTED by a transient Claude failure; relaunch in ' + $delay + ' min') 'WARN' Yellow
+            continue
+        }
+
+        # Crashed / killed worker: mark the checkpoint INTERRUPTED and relaunch (bounded); the new
+        # worker resumes from it with fresh Claude processes and a recovery context.
+        $errors = [int](Get-Prop $s 'ErrorCount' 0)
+        if (-not (Get-Prop $s 'LastError' $null)) { $errors++; Set-StateProperty $s 'ErrorCount' $errors }
+        if (Test-WorkerPhase $phase) { Set-StateProperty $s 'InterruptedPhase' $phase; $s.Phase = 'INTERRUPTED' }
+        Save-ItemState $w.StateFile $s
+        if ($errors -le 3) {
+            Write-RunLog ($key + ': worker ended during ' + $phase + ' (' + (Get-Prop $s 'LastError' 'killed, no error recorded') + '); relaunching from the checkpoint') 'WARN' Yellow
             Start-Worker $item
-        } elseif ($null -ne $s) {
-            $s.Phase = 'blocked'; Set-StateProperty $s 'Reason' ('worker failed repeatedly: ' + (Get-Prop $s 'LastError' 'unknown')); Save-ItemState $w.StateFile $s
-            Write-RunLog ($key + ': BLOCKED after repeated worker failures') 'WARN' Yellow
+        } else {
+            $s.Phase = 'BLOCKED'; Set-StateProperty $s 'Reason' ('worker failed repeatedly: ' + (Get-Prop $s 'LastError' 'unknown')); Save-ItemState $w.StateFile $s
+            Write-RunLog ($key + ': BLOCKED after repeated worker failures (work preserved)') 'WARN' Yellow
         }
     }
     return $changed
@@ -489,15 +585,24 @@ function Receive-FinishedWorkers {
 # Integration of approved work (serialized)
 # ---------------------------------------------------------------------------
 
-function Get-ConflictPrompt([hashtable]$Item) {
+function Get-ConflictPrompt([hashtable]$Item, [switch]$Resume) {
     $scope = if ($Item.Kind -eq 'issue') { 'GitHub Issue #' + $Item.Issue + ' (' + $Item.Title + ')' } else { 'integration task "' + $Item.Title + '"' }
+    $step1 = '1. Run: git merge --no-ff --signoff ' + $IntegrationRef
+    if ($Resume) {
+        $step1 = @"
+1. RECOVERY: a previous process resolving this merge was interrupted (you are a NEW process without its memory).
+   The merge is still in progress: inspect ``git status``, ``git diff``, the conflict markers, CLAUDE.md and the Issue,
+   and the earlier logs in $(Join-Path $script:AutoDir 'runs'). Keep every resolution already made that is correct;
+   resolve the remaining conflicts. Do NOT run ``git merge --abort``, reset, clean, stash or restart the merge.
+"@
+    }
     return @"
 ORCHESTRATION MODE: integration
 Worktree: $($Item.Worktree)
 Branch: $($Item.Branch) (already checked out; never switch branches)
 TASK: MERGE CONFLICT RESOLUTION for $scope.
 The branch was reviewed and approved, but $IntegrationRef moved and the merge conflicts.
-1. Run: git merge --no-ff --signoff $IntegrationRef
+$step1
 2. Resolve every conflict so that BOTH this branch's scope and the already integrated work keep their approved behaviour.
    Decide from the approved docs, the Issues' scopes, existing code and architecture. Regenerate generated files
    (api/openapi.yaml: ``gradlew.bat updateOpenApi`` in backend/; mobile client: ``npm run generate:api`` in mobile/) instead of hand-merging them.
@@ -510,12 +615,55 @@ ORCHESTRATOR-RESULT: {"status":"DONE|BLOCKED","category":"NONE|HUMAN_DECISION|TE
 "@
 }
 
-function Set-ItemPhase([string]$Key, [string]$Phase, [string]$Reason = '') {
+function Set-ItemPhase([string]$Key, [string]$Phase, [string]$Reason = '', [string]$IntegrationStep = '') {
     $f = Get-StateFile $Key
     $s = Read-ItemState $f
-    $s.Phase = $Phase; Set-StateProperty $s 'Reason' $Reason
+    $s.Phase = $Phase; Set-StateProperty $s 'Reason' $Reason; Set-StateProperty $s 'InterruptedPhase' $null
+    Set-StateProperty $s 'IntegrationStep' $IntegrationStep
+    Add-StateHistory $s ('orchestrator: ' + $Phase + $(if ($IntegrationStep) { ' (' + $IntegrationStep + ')' } else { '' }) + $(if ($Reason) { ' - ' + $Reason } else { '' }))
     Save-ItemState $f $s
     return $s
+}
+
+function Complete-ItemIntegration([string]$Key, [string]$How) {
+    $s = Set-ItemPhase $Key 'INTEGRATED' '' ''
+    [void]$script:Integrated.Add($Key + ' ' + $s.Title)
+    Write-RunLog ($Key + ': INTEGRATED into ' + $IntegrationBranch + ' (' + $How + ')') 'INFO' Green
+    Remove-ItemWorktree ([string]$s.Worktree)
+}
+
+function Get-AgentPidFile([string]$Key) { return (Join-Path $script:StateDir ($Key + '.agent.pid')) }
+
+# Runs the conflict-resolution agent for the sync merge in an item worktree; $true when the
+# merge was concluded cleanly (otherwise the item is BLOCKED with its work preserved).
+function Invoke-ConflictResolution([string]$Key, [hashtable]$Item, [string]$Wt, [int]$Attempt, [switch]$Resume) {
+    if ($script:AgentUnavailable) { Write-RunLog ($Key + ': conflict resolution postponed, Claude is unavailable') 'WARN' Yellow; return $false }
+    if ($Resume) {
+        $s = Read-ItemState (Get-StateFile $Key)
+        $n = [int](Get-Prop $s 'ConflictResumes' 0) + 1
+        Set-StateProperty $s 'ConflictResumes' $n; Save-ItemState (Get-StateFile $Key) $s
+        if ($n -gt 3) { [void](Set-ItemPhase $Key 'BLOCKED' ('conflict resolution interrupted ' + ($n - 1) + ' times; the merge state is preserved in ' + $Wt) 'sync'); return $false }
+    }
+    $run = Invoke-ClaudeAgent -Agent $Item.DeveloperAgent -Prompt (Get-ConflictPrompt $Item -Resume:$Resume) -WorkingDirectory $Wt -LogDir (Join-Path $script:RunDir $Key) -Name ('conflict-' + $Attempt + $(if ($Resume) { '-resume' } else { '' })) -Settings $script:Settings -DeniedTools (Get-ImplementationDeniedTools) -PidFile (Get-AgentPidFile $Key)
+    $res = ConvertFrom-AgentResult $run.Text
+    $kind = Get-AgentRunFailure $run $res.Found
+    if ($kind -eq 'AUTH' -or $kind -eq 'TRANSIENT' -or $kind -eq 'CRASH') {
+        if (Test-MergeInProgress $Wt) {
+            # Keep the partially resolved merge: the next attempt continues it (INTEGRATING/sync).
+            if ($kind -eq 'AUTH') { $script:AgentUnavailable = 'conflict agent for ' + $Key + ': ' + $run.ResultFile }
+            Write-RunLog ($Key + ': conflict agent failed (' + $kind + '); merge kept in progress for a later recovery agent') 'WARN' Yellow
+            return $false
+        }
+    }
+    if ((Test-MergeInProgress $Wt) -or (Get-GitDirtyStatus $Wt) -or -not (Test-GitAncestor $Wt $IntegrationRef 'HEAD')) {
+        $why = 'merge conflict with ' + $IntegrationBranch + ' not resolved; the merge state is preserved in ' + $Wt
+        if ($res.Status -eq 'BLOCKED') { $why += ': ' + $res.Category + ' - ' + $res.Summary }
+        [void](Set-ItemPhase $Key 'BLOCKED' ($why + ' (see ' + $run.ResultFile + ')') $(if (Test-MergeInProgress $Wt) { 'sync' } else { '' }))
+        return $false
+    }
+    $s = Read-ItemState (Get-StateFile $Key); Set-StateProperty $s 'ConflictResumes' 0; Save-ItemState (Get-StateFile $Key) $s
+    Write-RunLog ($Key + ': conflicts resolved by agent; re-running gate and reviews')
+    return $true
 }
 
 function Get-ItemFromState($s) {
@@ -525,62 +673,78 @@ function Get-ItemFromState($s) {
     return @{ Key = $s.Key; Kind = $s.Kind; Issue = [int]$s.Issue; Title = $s.Title; Labels = $labels; Branch = $s.Branch; Worktree = $s.Worktree; DeveloperAgent = $agent; TaskText = $task }
 }
 
+# Integrates one VALIDATED (or interrupted INTEGRATING) item. Idempotent at every step: the
+# orchestrator may die anywhere in here and the next run continues from Git reality.
+#   check : already on the integration branch (trailer / validated head reachable) -> INTEGRATED
+#   sync  : integration tip merged into the item branch (conflicts -> agent; an interrupted
+#           conflict resolution is continued by a NEW agent, never aborted) -> re-validation
+#   merge : validated head merged --no-ff into the integration branch (an interrupted merge is
+#           concluded, an existing one detected) ; push : never forced, retried by the next run
+# Returns $false only when it has to wait (an agent of a killed orchestrator is still running).
 function Invoke-Integration([string]$Key) {
+    if (Test-RecordedProcessAlive (Get-AgentPidFile $Key)) {
+        Write-RunLog ($Key + ': a conflict agent started by a previous orchestrator is still running; waiting for it') 'WARN' Yellow
+        return $false
+    }
     $f = Get-StateFile $Key
     $s = Read-ItemState $f
     $item = Get-ItemFromState $s
     $wt = [string]$s.Worktree
+    $previousStep = [string](Get-Prop $s 'IntegrationStep' '')
     Write-Section ('Integrating ' + $Key + ' (' + $s.Branch + ')')
+    $s = Set-ItemPhase $Key 'INTEGRATING' '' 'check'
 
-    if ((Get-GitHead $wt) -ne $s.Head -or (Get-GitDirtyStatus $wt) -or (Test-MergeInProgress $wt)) {
-        Write-RunLog ($Key + ': worktree changed since approval; re-validating') 'WARN' Yellow
-        [void](Set-ItemPhase $Key 'reviewing'); Start-Worker $item; return
-    }
     Sync-IntegrationWorktree
+    $integratedIssues = Get-IntegratedIssueSet $script:Root ('origin/' + $BaseBranch) @($IntegrationRef)
+    if (Test-ItemIntegrated -Root $script:Root -State $s -IntegrationRefs @($IntegrationRef) -IntegratedIssues $integratedIssues) {
+        Complete-ItemIntegration $Key 'already on the integration branch; not merged again'
+        return $true
+    }
+    if (-not $wt -or -not (Test-Path -LiteralPath $wt)) { $wt = Ensure-Worktree (Join-Path $script:WtRoot $Key) ([string]$s.Branch) $IntegrationRef; Set-StateProperty $s 'Worktree' $wt; Save-ItemState $f $s; $item.Worktree = $wt }
+
+    $syncs = [int](Get-Prop $s 'SyncCount' 0)
+    if (Test-MergeInProgress $wt) {
+        if ($previousStep -ne 'sync') { [void](Set-ItemPhase $Key 'BLOCKED' ('unexpected merge in progress in ' + $wt + '; inspect it manually (work preserved)')); return $true }
+        Write-RunLog ($Key + ': interrupted conflict resolution found; continuing it with a new agent') 'WARN' Yellow
+        [void](Set-ItemPhase $Key 'INTEGRATING' '' 'sync')
+        if (-not (Invoke-ConflictResolution $Key $item $wt ($syncs + 1) -Resume)) { return $true }
+        [void](Set-ItemPhase $Key 'REVIEWING'); Start-Worker $item; return $true
+    }
+    if ((Get-GitHead $wt) -ne $s.Head -or (Get-GitDirtyStatus $wt)) {
+        Write-RunLog ($Key + ': worktree changed since validation; re-validating') 'WARN' Yellow
+        [void](Set-ItemPhase $Key 'REVIEWING'); Start-Worker $item; return $true
+    }
     if (-not (Test-GitAncestor $wt $IntegrationRef 'HEAD')) {
-        $syncs = [int](Get-Prop $s 'SyncCount' 0)
-        if ($syncs -ge 5) { [void](Set-ItemPhase $Key 'blocked' 'integration branch moved during 5 consecutive re-validations'); return }
+        if ($syncs -ge 5) { [void](Set-ItemPhase $Key 'BLOCKED' 'integration branch moved during 5 consecutive re-validations'); return $true }
+        $s = Set-ItemPhase $Key 'INTEGRATING' '' 'sync'
         Set-StateProperty $s 'SyncCount' ($syncs + 1); Save-ItemState $f $s
         $label = if ($s.Kind -eq 'issue') { '#' + $s.Issue } else { 'integration' }
         $m = Invoke-GitIn $wt @('merge', '--no-ff', '--signoff', '-m', ('chore(integration): sync ' + $IntegrationBranch + ' into ' + $s.Branch + ' (' + $label + ')'), $IntegrationRef) -AllowFailure
         if ($m.ExitCode -ne 0) {
+            # The orchestrator's own fresh merge holds no agent work: abort it and let the agent redo it.
             if (Test-MergeInProgress $wt) { [void](Invoke-GitIn $wt @('merge', '--abort')) }
             Write-RunLog ($Key + ': conflicts with ' + $IntegrationBranch + '; starting a conflict-resolution agent') 'WARN' Yellow
-            $run = Invoke-ClaudeAgent -Agent $item.DeveloperAgent -Prompt (Get-ConflictPrompt $item) -WorkingDirectory $wt -LogDir (Join-Path $script:RunDir $Key) -Name ('conflict-' + ($syncs + 1)) -Settings $script:Settings -DeniedTools (Get-ImplementationDeniedTools)
-            $res = ConvertFrom-AgentResult $run.Text
-            if ((Test-MergeInProgress $wt) -or (Get-GitDirtyStatus $wt) -or -not (Test-GitAncestor $wt $IntegrationRef 'HEAD')) {
-                if (Test-MergeInProgress $wt) { [void](Invoke-GitIn $wt @('merge', '--abort') -AllowFailure) }
-                $why = 'merge conflict with ' + $IntegrationBranch + ' not resolved'
-                if ($res.Status -eq 'BLOCKED') { $why += ': ' + $res.Category + ' - ' + $res.Summary }
-                [void](Set-ItemPhase $Key 'blocked' ($why + ' (see ' + $run.ResultFile + ')')); return
-            }
-            Write-RunLog ($Key + ': conflicts resolved by agent; re-running gate and reviews')
+            if (-not (Invoke-ConflictResolution $Key $item $wt ($syncs + 1))) { return $true }
         } else {
             Write-RunLog ($Key + ': synced with ' + $IntegrationBranch + '; re-running the gate on the combined code')
         }
-        [void](Set-ItemPhase $Key 'reviewing'); Start-Worker $item; return
+        [void](Set-ItemPhase $Key 'REVIEWING'); Start-Worker $item; return $true
     }
 
     # HEAD contains the integration tip: the --no-ff merge result is exactly the validated tree.
-    $trailer = if ($s.Kind -eq 'issue') { 'Integrates-Issue: #' + $s.Issue } else { 'Integrates-Repair: ' + $s.Key }
-    $subject = if ($s.Kind -eq 'issue') { 'chore(integration): integrate #' + $s.Issue + ' ' + $s.Title } else { 'chore(integration): ' + $s.Title }
-    $msg = $subject + "`n`nReviewed and gated by the autonomous orchestrator (run " + $script:RunId + ").`n`n" + $trailer + "`nIntegrated-Branch: " + $s.Branch + "`nReviewed-Head: " + $s.Head
-    [void](Invoke-GitIn $script:IntegrationWt @('merge', '--no-ff', '--signoff', '-m', $msg, $s.Branch))
-    if ((Invoke-GitIn $script:IntegrationWt @('diff', '--quiet', 'HEAD', $s.Branch) -AllowFailure).ExitCode -ne 0) {
-        Stop-Orchestrator ('Integration merge of ' + $s.Branch + ' does not equal the validated tree; local ' + $IntegrationBranch + ' is NOT pushed. Inspect ' + $script:IntegrationWt + '.')
-    }
+    $s = Set-ItemPhase $Key 'INTEGRATING' '' 'merge'
+    $how = Invoke-IdempotentIntegrationMerge -IntegrationWt $script:IntegrationWt -Head ([string]$s.Head) -Message (Get-IntegrationMessage $s)
+    $s = Set-ItemPhase $Key 'INTEGRATING' '' 'push'
     $push = Invoke-GitIn $script:IntegrationWt @('push', 'origin', $IntegrationBranch) -AllowFailure
     if ($push.ExitCode -ne 0) { Stop-Orchestrator ('Push of ' + $IntegrationBranch + ' was rejected (never forced). The validated merge stays local and is pushed by the next run.' + "`n" + $push.Output) }
     [void](Invoke-GitIn $wt @('push', 'origin', ($s.Branch + ':refs/heads/' + $s.Branch)) -AllowFailure)
     [void](Invoke-RootGit @('fetch', 'origin'))
-    [void](Set-ItemPhase $Key 'integrated')
-    [void]$script:Integrated.Add($Key + ' ' + $s.Title)
-    Write-RunLog ($Key + ': INTEGRATED into ' + $IntegrationBranch) 'INFO' Green
-    Remove-ItemWorktree $wt
+    Complete-ItemIntegration $Key $how
+    return $true
 }
 
 function Remove-ItemWorktree([string]$Path) {
-    if (-not (Test-Path -LiteralPath $Path)) { return }
+    if (-not $Path -or -not (Test-Path -LiteralPath $Path)) { return }
     if (Get-GitDirtyStatus $Path) { Write-Warn ('Worktree ' + $Path + ' kept: it contains uncommitted changes.'); return }
     $r = Invoke-RootGit @('worktree', 'remove', $Path) -AllowFailure
     if ($r.ExitCode -ne 0) { Write-Warn ('Worktree ' + $Path + ' kept (' + $r.Output + ')') }
@@ -588,12 +752,11 @@ function Remove-ItemWorktree([string]$Path) {
 
 function Invoke-ApprovedIntegrations {
     $any = $false
-    if (-not (Test-Path -LiteralPath $script:StateDir)) { return $false }
+    if ($script:AgentUnavailable -or -not (Test-Path -LiteralPath $script:StateDir)) { return $false }
     foreach ($f in (Get-ChildItem -LiteralPath $script:StateDir -Filter '*.json' | Sort-Object Name)) {
         $s = Read-ItemState $f.FullName
-        if ($null -eq $s -or $s.Phase -ne 'approved' -or $script:Workers.ContainsKey($s.Key)) { continue }
-        Invoke-Integration $s.Key
-        $any = $true
+        if ($null -eq $s -or @('VALIDATED', 'INTEGRATING') -notcontains (ConvertTo-ItemPhase ([string]$s.Phase)) -or $script:Workers.ContainsKey($s.Key)) { continue }
+        if (Invoke-Integration $s.Key) { $any = $true }
     }
     return $any
 }
@@ -603,8 +766,8 @@ function Clear-IntegratedWorktrees($Snapshot) {
     if (-not (Test-Path -LiteralPath $script:StateDir)) { return }
     foreach ($f in (Get-ChildItem -LiteralPath $script:StateDir -Filter 'issue-*.json')) {
         $s = Read-ItemState $f.FullName
-        if ($null -ne $s -and $Snapshot.Integrated.ContainsKey([int]$s.Issue) -and $s.Phase -ne 'integrated') {
-            $s.Phase = 'integrated'; Save-ItemState $f.FullName $s
+        if ($null -ne $s -and $Snapshot.Integrated.ContainsKey([int]$s.Issue) -and (ConvertTo-ItemPhase ([string]$s.Phase)) -ne 'INTEGRATED' -and -not $script:Workers.ContainsKey([string]$s.Key)) {
+            $s.Phase = 'INTEGRATED'; Add-StateHistory $s 'orchestrator: integration trailer found on the integration branch; state corrected'; Save-ItemState $f.FullName $s
             Remove-ItemWorktree ([string]$s.Worktree)
         }
     }
@@ -677,9 +840,13 @@ function Write-DryRunDetails([hashtable]$Plan) {
 function Wait-Item([string]$Key) {
     while ($true) {
         if ($script:Workers.ContainsKey($Key)) { [void](Receive-FinishedWorkers); Start-Sleep -Seconds $PollSeconds; continue }
+        if (@($script:DelayedRelaunch | Where-Object { $_.Item.Key -eq $Key }).Count -gt 0 -and -not $script:AgentUnavailable) {
+            if (-not (Start-DueRelaunches)) { Start-Sleep -Seconds $PollSeconds }
+            continue
+        }
         $s = Read-ItemState (Get-StateFile $Key)
-        $phase = [string](Get-Prop $s 'Phase' '')
-        if ($phase -eq 'approved') { Invoke-Integration $Key; continue }
+        $phase = ConvertTo-ItemPhase ([string](Get-Prop $s 'Phase' ''))
+        if (@('VALIDATED', 'INTEGRATING') -contains $phase -and -not $script:AgentUnavailable) { if (-not (Invoke-Integration $Key)) { Start-Sleep -Seconds $PollSeconds }; continue }
         return $phase
     }
 }
@@ -741,7 +908,7 @@ function Invoke-FinalAcceptance($Snapshot) {
             if ($repairs -ge $MaxRepairCycles) { return @{ Ready = $false; Reason = 'final validation still failing after ' + $repairs + ' repair round(s)'; Report = $report } }
             $repairs++
             $phase = Invoke-RepairNow ('final-gate-' + $repairs) 'Fix final integration validation failures' ("The full validation of the integrated branch fails. Make it pass without weakening any check:`n" + (Format-GateFailure $gate $script:IntegrationWt))
-            if ($phase -ne 'integrated') { return @{ Ready = $false; Reason = 'final validation repair ended ' + $phase; Report = $report } }
+            if ($phase -ne 'INTEGRATED') { return @{ Ready = $false; Reason = 'final validation repair ended ' + $phase; Report = $report } }
             continue
         }
         $report.Gate = 'PASSED (' + (($gate.Steps | ForEach-Object { $_.Name }) -join ', ') + ')'
@@ -757,11 +924,11 @@ function Invoke-FinalAcceptance($Snapshot) {
             $report.JourneyReport = $run.Text
             if ((Get-CommitsAhead $wt $IntegrationRef) -gt 0 -and $journeyRuns -le $MaxRepairCycles) {
                 # Fixes made during the journey go through the normal gate + review loop, then integration.
-                $state = [pscustomobject]@{ Key = $key; Kind = 'repair'; Issue = 0; Title = 'Acceptance journey fixes'; Branch = $branch; Worktree = $wt; Phase = 'reviewing'; Reason = ''; Head = ''; Cycles = 0; MediumFixDone = $false; SyncCount = 0; Reviews = [pscustomobject]@{}; Gate = $null; Rejected = ''; CostUsd = 0; History = @() }
+                $state = [pscustomobject]@{ Key = $key; Kind = 'repair'; Issue = 0; Title = 'Acceptance journey fixes'; Branch = $branch; Worktree = $wt; Phase = 'REVIEWING'; Reason = ''; Head = ''; Cycles = 0; MediumFixDone = $false; SyncCount = 0; Reviews = [pscustomobject]@{}; Gate = $null; Rejected = ''; CostUsd = 0; History = @() }
                 Save-ItemState (Get-StateFile $key) $state
                 Start-Worker @{ Key = $key; Kind = 'repair'; Issue = 0; Title = 'Acceptance journey fixes'; Labels = @(); Branch = $branch; Worktree = $wt; DeveloperAgent = 'integration-validator'; TaskText = ("Fixes for integration defects found by the acceptance journey:`n" + (Get-TextTail $run.Text 120)) }
                 $phase = Wait-Item $key
-                if ($phase -ne 'integrated') { return @{ Ready = $false; Reason = 'acceptance-journey fixes ended ' + $phase; Report = $report } }
+                if ($phase -ne 'INTEGRATED') { return @{ Ready = $false; Reason = 'acceptance-journey fixes ended ' + $phase; Report = $report } }
                 continue   # re-validate and replay the journey on the new tip
             }
             Remove-ItemWorktree $wt
@@ -784,7 +951,7 @@ function Invoke-FinalAcceptance($Snapshot) {
                 $uxRounds++
                 if (($c.BLOCKER + $c.HIGH) -eq 0) { $uxMediumDone = $true }
                 $phase = Invoke-RepairNow ('ux-' + $uxRounds) 'Mobile UX consistency fixes' ("Fix the findings of the holistic mobile UX review below (BLOCKER/HIGH mandatory, MEDIUM when within the approved scope). Do not invent business rules or change approved behaviour.`n`n" + $ux.Text) 'issue-developer'
-                if ($phase -ne 'integrated') { return @{ Ready = $false; Reason = 'UX fix round ended ' + $phase; Report = $report } }
+                if ($phase -ne 'INTEGRATED') { return @{ Ready = $false; Reason = 'UX fix round ended ' + $phase; Report = $report } }
                 continue
             }
             if (($c.BLOCKER + $c.HIGH) -gt 0) { return @{ Ready = $false; Reason = 'holistic UX review still reports BLOCKER/HIGH after ' + $uxRounds + ' fix round(s): ' + $ux.ResultFile; Report = $report } }
@@ -889,17 +1056,28 @@ $($r.JourneyReport)
 
 $lockTaken = $false
 try {
-    if ($DryRun) { Write-Host 'MODE: DRY RUN (reads Git/GitHub only; no worktree, branch, commit, push, PR, Issue or file change)' -ForegroundColor Magenta }
+    if ($DryRun) {
+        Write-Host 'MODE: DRY RUN (read-only: no fetch, worktree, branch, commit, push, PR, Issue, label or file change; enforced)' -ForegroundColor Magenta
+        Set-GitReadOnly $true
+    }
     else {
         if (-not $AutoMergeIntegration) { Stop-Orchestrator ('A real run merges reviewed work into ' + $IntegrationBranch + ' automatically: pass -AutoMergeIntegration to consent (main is never touched).') }
         Write-Host ('MODE: REAL RUN - target ' + $Target + ', parallelism ' + $Parallelism + ', review cycles ' + $MaxReviewCycles + ', integration ' + $IntegrationBranch) -ForegroundColor Magenta
     }
     Assert-Prerequisites
-    [void](Invoke-RootGit @('fetch', '--prune', 'origin'))
+    if (-not $DryRun) { [void](Invoke-RootGit @('fetch', '--prune', 'origin')) }
     $script:RunId = (Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssZ')
 
     if ($DryRun) {
         Write-Section ('Integration branch ' + $IntegrationBranch)
+        # No fetch in a dry run: report when the local view of origin is stale instead.
+        $remote = Invoke-RootGit @('ls-remote', 'origin', ('refs/heads/' + $BaseBranch), ('refs/heads/' + $IntegrationBranch)) -AllowFailure
+        foreach ($line in ($remote.Output -split "`n" | Where-Object { $_ -match '^[0-9a-f]{40}\s+refs/heads/' })) {
+            $sha, $refName = $line -split '\s+', 2
+            $tracking = 'origin/' + ($refName -replace '^refs/heads/', '')
+            $local = Invoke-RootGit @('rev-parse', '--verify', '--quiet', $tracking) -AllowFailure
+            if ($local.Output.Trim() -ne $sha) { Write-Warn ($tracking + ' is not up to date locally (dry runs do not fetch); run ''git fetch origin'' for an exact preview.') }
+        }
         if (Test-GitRefExists $script:Root $IntegrationRef) {
             $ahead = (Invoke-RootGit @('rev-list', '--count', ('origin/' + $BaseBranch + '..' + $IntegrationRef))).Output
             $behind = (Invoke-RootGit @('rev-list', '--count', ($IntegrationRef + '..origin/' + $BaseBranch))).Output
@@ -912,6 +1090,9 @@ try {
         Write-Plan $plan
         Write-Waves $plan
         Write-DryRunDetails $plan
+        $refs = @($IntegrationRef, ('refs/heads/' + $IntegrationBranch))
+        $preview = Invoke-StateRecovery -Root $script:Root -StateDir $script:StateDir -BaseRef $IntegrationRef -IntegrationRefs $refs -IntegratedIssues (Get-IntegratedIssueSet $script:Root ('origin/' + $BaseBranch) $refs) -ReadOnly
+        Write-RecoveryReport $preview $plan 'RECOVERY PREVIEW (what a real run would do with the persisted state; nothing changed)'
         Write-Section 'Dry run complete'
         Write-Info 'Nothing was modified.'
         exit 0
@@ -927,21 +1108,26 @@ try {
     if ($RetryBlocked) {
         foreach ($f in (Get-ChildItem -LiteralPath $script:StateDir -Filter '*.json' -ErrorAction SilentlyContinue)) {
             $s = Read-ItemState $f.FullName
-            if ($null -ne $s -and $s.Phase -eq 'blocked') {
-                $s.Phase = 'reviewing'; $s.Cycles = 0; $s.Reason = ''; Set-StateProperty $s 'ErrorCount' 0; Set-StateProperty $s 'SyncCount' 0
+            if ($null -ne $s -and (ConvertTo-ItemPhase ([string]$s.Phase)) -eq 'BLOCKED') {
+                # A conflict resolution kept in progress continues in the integration step; anything else is re-validated.
+                $s.Phase = $(if ([string](Get-Prop $s 'IntegrationStep' '') -eq 'sync') { 'INTEGRATING' } else { 'REVIEWING' })
+                $s.Cycles = 0; $s.Reason = ''; Set-StateProperty $s 'PendingFix' $null; Set-StateProperty $s 'InterruptedPhase' $null
+                Set-StateProperty $s 'ErrorCount' 0; Set-StateProperty $s 'SyncCount' 0; Set-StateProperty $s 'ConflictResumes' 0; Set-StateProperty $s 'TransientCount' 0
+                Add-StateHistory $s ('orchestrator: blocked state cleared (-RetryBlocked) -> ' + $s.Phase)
                 Save-ItemState $f.FullName $s; Write-RunLog ($s.Key + ': blocked state cleared (-RetryBlocked)')
             }
         }
     }
 
     Initialize-Integration
-    Register-AdoptedWorkers
+    Invoke-Recovery
     Resume-RepairItems
 
     $refresh = $true
     $snapshot = $null; $plan = $null
     while ($true) {
         if (Receive-FinishedWorkers) { $refresh = $true }
+        if (Start-DueRelaunches) { $refresh = $true }
         if (Invoke-ApprovedIntegrations) { $refresh = $true }
         if ($refresh -or $null -eq $plan) {
             $snapshot = Get-Snapshot
@@ -950,6 +1136,13 @@ try {
             $refresh = $false
             $counts = $plan.Values | Group-Object Status | ForEach-Object { $_.Name + '=' + $_.Count }
             Write-RunLog ('plan: ' + ($counts -join ', ') + '; running workers: ' + $script:Workers.Count)
+            if ($null -ne $script:RecoveryEntries) { Write-RecoveryReport $script:RecoveryEntries $plan; $script:RecoveryEntries = $null }
+        }
+
+        if ($script:AgentUnavailable) {
+            # Paused: running workers finish or checkpoint themselves; nothing new is started.
+            if ($script:Workers.Count -eq 0) { break }
+            Start-Sleep -Seconds $PollSeconds; continue
         }
 
         # Launch: repair items first, then runnable Issues in DAG order.
@@ -958,14 +1151,15 @@ try {
             $item.Worktree = Ensure-Worktree $item.Worktree $item.Branch $IntegrationRef
             Start-Worker $item; $refresh = $true
         }
+        $delayedKeys = @($script:DelayedRelaunch | ForEach-Object { $_.Item.Key })
         foreach ($p in @(Select-RunnableIssues $plan)) {
             if ($script:Workers.Count -ge $Parallelism) { break }
             if ($MaxIssues -gt 0 -and $script:Started -ge $MaxIssues) { break }
-            if ($script:Workers.ContainsKey('issue-' + $p.Number)) { continue }
+            if ($script:Workers.ContainsKey('issue-' + $p.Number) -or $delayedKeys -contains ('issue-' + $p.Number)) { continue }
             try { $item = New-IssueItem $p }
             catch {
                 $msg = $_.Exception.Message -replace [regex]::Escape($StopPrefix), ''
-                $s = [pscustomobject]@{ Key = 'issue-' + $p.Number; Kind = 'issue'; Issue = $p.Number; Title = $p.Title; Branch = $p.Branch; Worktree = ''; Phase = 'blocked'; Reason = ('worktree setup failed: ' + $msg) }
+                $s = [pscustomobject]@{ Key = 'issue-' + $p.Number; Kind = 'issue'; Issue = $p.Number; Title = $p.Title; Branch = $p.Branch; Worktree = ''; Phase = 'BLOCKED'; Reason = ('worktree setup failed: ' + $msg) }
                 Save-ItemState (Get-StateFile $s.Key) $s; Write-RunLog ($s.Key + ': BLOCKED - ' + $s.Reason) 'WARN' Yellow
                 $refresh = $true; continue
             }
@@ -973,10 +1167,10 @@ try {
             $script:Started++; $refresh = $true
         }
 
-        $approvedLeft = @(Get-ChildItem -LiteralPath $script:StateDir -Filter '*.json' | ForEach-Object { Read-ItemState $_.FullName } | Where-Object { $null -ne $_ -and $_.Phase -eq 'approved' }).Count
+        $approvedLeft = @(Get-ChildItem -LiteralPath $script:StateDir -Filter '*.json' | ForEach-Object { Read-ItemState $_.FullName } | Where-Object { $null -ne $_ -and @('VALIDATED', 'INTEGRATING') -contains (ConvertTo-ItemPhase ([string]$_.Phase)) }).Count
         $runnableLeft = @(Select-RunnableIssues $plan).Count
         if ($MaxIssues -gt 0 -and $script:Started -ge $MaxIssues) { $runnableLeft = 0 }
-        if ($script:Workers.Count -eq 0 -and $approvedLeft -eq 0 -and $script:PendingRepairs.Count -eq 0) {
+        if ($script:Workers.Count -eq 0 -and $approvedLeft -eq 0 -and $script:PendingRepairs.Count -eq 0 -and $script:DelayedRelaunch.Count -eq 0) {
             if ($refresh) { continue }   # re-plan once more before deciding to stop
             if ($runnableLeft -eq 0) { break }
         }
@@ -985,8 +1179,14 @@ try {
 
     Write-Plan $plan
     Write-Waves $plan
-    $blockedRepairs = @(Get-ChildItem -LiteralPath $script:StateDir -Filter 'repair-*.json' | ForEach-Object { Read-ItemState $_.FullName } | Where-Object { $null -ne $_ -and $_.Phase -eq 'blocked' })
-    if (-not (Test-PlanComplete $plan) -or $blockedRepairs.Count -gt 0) {
+    $blockedRepairs = @(Get-ChildItem -LiteralPath $script:StateDir -Filter 'repair-*.json' | ForEach-Object { Read-ItemState $_.FullName } | Where-Object { $null -ne $_ -and (ConvertTo-ItemPhase ([string]$_.Phase)) -eq 'BLOCKED' })
+    if ($script:AgentUnavailable) {
+        Write-Section 'PAUSED: Claude Code is unavailable'
+        Write-Info $script:AgentUnavailable
+        Write-Info 'Every item is checkpointed (INTERRUPTED with the phase it stopped in); worktrees and uncommitted work are kept.'
+        Write-Info 'Restore Claude Code (e.g. run ''claude'' and log in, or wait for the usage limit), then rerun exactly the same command.'
+        $script:ExitCode = 3
+    } elseif (-not (Test-PlanComplete $plan) -or $blockedRepairs.Count -gt 0) {
         Write-Section 'STOP: human input required before the MVP DAG can complete'
         foreach ($p in ($plan.Values | Where-Object { @('NEEDS_HUMAN', 'BLOCKED', 'HUMAN_PR') -contains $_.Status } | Sort-Object Number)) { Write-Info ('#' + $p.Number + ' ' + $p.Identifier + ' ' + $p.Status + ': ' + $p.Reason) }
         foreach ($s in $blockedRepairs) { Write-Info ($s.Key + ' BLOCKED: ' + $s.Reason) }
@@ -1005,6 +1205,10 @@ try {
             Write-Info ('Report : ' + $file)
             Write-Info ('PR     : ' + $result.Report.Pr + '  (not merged - your decision)')
             Write-Info 'Launch : powershell.exe -ExecutionPolicy Bypass -File .\scripts\start-mvp-acceptance.ps1 -Device emulator   (or -Device usb)'
+        } elseif ($script:AgentUnavailable) {
+            Write-Section 'PAUSED: Claude Code is unavailable during final acceptance'
+            Write-Info ($script:AgentUnavailable + ' - rerun exactly the same command once Claude Code works again.')
+            $script:ExitCode = 3
         } else {
             Write-Section 'STOP: final acceptance not reached'
             Write-Info $result.Reason
@@ -1027,7 +1231,7 @@ catch {
 finally {
     if (-not $DryRun) {
         if ($script:Workers.Count -gt 0) {
-            Write-Warn ($script:Workers.Count.ToString() + ' worker(s) are still running in the background (' + (($script:Workers.Keys) -join ', ') + '). Rerun the orchestrator to adopt them; nothing is lost.')
+            Write-Warn ($script:Workers.Count.ToString() + ' worker(s) are still running in the background (' + (($script:Workers.Keys) -join ', ') + '). Rerun the same command to adopt them; nothing is lost.')
         }
         if ($script:Integrated.Count -gt 0) { Write-Section 'Integrated in this run'; foreach ($i in $script:Integrated) { Write-Info $i } }
         if ($lockTaken -and (Test-Path -LiteralPath $script:LockFile)) { Remove-Item -LiteralPath $script:LockFile -Force }

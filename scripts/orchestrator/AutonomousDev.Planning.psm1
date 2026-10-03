@@ -253,18 +253,23 @@ function New-ExecutionPlan {
         $status = ''
         $reason = ''
         $local = $null
-        if ($ctx.LocalState.ContainsKey($n)) { $local = $ctx.LocalState[$n] }
+        $localPhase = ''
+        if ($ctx.LocalState.ContainsKey($n)) { $local = $ctx.LocalState[$n]; $localPhase = ConvertTo-ItemPhase ([string]$local.Phase) }
         if ($ctx.Done.ContainsKey($n)) { $status = 'DONE'; $reason = [string]$ctx.Done[$n] }
         elseif ($ctx.HumanPr.ContainsKey($n)) { $status = 'HUMAN_PR'; $reason = 'open PR #' + $ctx.HumanPr[$n] + ' to main awaits human review' }
-        elseif ($null -ne $local -and $local.Phase -eq 'blocked') { $status = 'BLOCKED'; $reason = [string]$local.Reason }
+        elseif ($localPhase -eq 'BLOCKED') { $status = 'BLOCKED'; $reason = [string]$local.Reason }
         elseif ($ctx.Running.ContainsKey($n)) { $status = 'IN_PROGRESS'; $reason = 'agent running' }
-        elseif ($null -ne $local -and $local.Phase -eq 'approved') { $status = 'APPROVED'; $reason = 'reviewed, awaiting integration' }
+        elseif (@('VALIDATED', 'INTEGRATING') -contains $localPhase) { $status = 'APPROVED'; $reason = 'validated, awaiting integration' }
         elseif ($gaps.Count -gt 0) { $status = 'NEEDS_HUMAN'; $reason = ($gaps -join '; ') }
         else {
             $pending = @($depDetails | Where-Object { $_.Status -ne 'DONE' })
             if ($pending.Count -eq 0) {
                 $status = 'RUNNABLE'
-                if ($null -ne $local -and $local.Phase) { $reason = 'resume (' + $local.Phase + ')' }
+                if ($localPhase) {
+                    $where = $localPhase
+                    if ($localPhase -eq 'INTERRUPTED' -and $local.ContainsKey('InterruptedPhase') -and $local.InterruptedPhase) { $where += ' during ' + $local.InterruptedPhase }
+                    $reason = 'resume (' + $where + ')'
+                }
             } else { $status = 'WAITING'; $reason = 'waiting for ' + (($pending | ForEach-Object { '#' + $_.Number }) -join ', ') }
         }
 
@@ -494,6 +499,206 @@ function ConvertFrom-AgentResult {
 function Test-HumanStopCategory {
     param([string]$Category)
     return (@('HUMAN_DECISION', 'REQUIREMENTS_CONFLICT', 'MISSING_CREDENTIAL', 'MAIN_OR_PRODUCTION') -contains $Category)
+}
+
+# ---------------------------------------------------------------------------
+# Item phases and crash recovery
+#
+# Claude Code processes, workers and the orchestrator itself are disposable: any of them can
+# die at any moment. The phase persisted per item is a checkpoint, never the truth: on every
+# start the orchestrator reconciles it with Git (integration trailers, branch heads, worktree
+# status) and decides, with Get-RecoveryAction, how the item continues.
+# ---------------------------------------------------------------------------
+
+# PLANNED      worktree/branch prepared, no worker ran yet
+# RUNNING      implementation agent running
+# IMPLEMENTED  implementation agent finished
+# TESTING      deterministic gate running
+# REVIEWING    independent reviewers running
+# FIXING       fix agent running for persisted findings (PendingFix)
+# VALIDATED    gate green, no BLOCKER/HIGH: ready to integrate (Head = validated commit)
+# INTEGRATING  orchestrator is syncing/merging/pushing (IntegrationStep)
+# INTEGRATED   on the integration branch
+# BLOCKED      needs a human; work preserved
+# INTERRUPTED  a process died or Claude was unavailable; InterruptedPhase = where it stopped
+$script:ItemPhases = @('PLANNED', 'RUNNING', 'IMPLEMENTED', 'TESTING', 'REVIEWING', 'FIXING', 'VALIDATED', 'INTEGRATING', 'INTEGRATED', 'BLOCKED', 'INTERRUPTED')
+$script:LegacyPhases = @{ developing = 'RUNNING'; reviewing = 'REVIEWING'; approved = 'VALIDATED'; blocked = 'BLOCKED'; integrated = 'INTEGRATED' }
+$script:WorkerPhases = @('PLANNED', 'RUNNING', 'IMPLEMENTED', 'TESTING', 'REVIEWING', 'FIXING')
+
+function Get-ItemPhases { return $script:ItemPhases }
+
+# Canonical upper-case phase; state files written by the first orchestrator version used
+# developing/reviewing/approved/blocked/integrated. Unknown values are treated as RUNNING.
+function ConvertTo-ItemPhase {
+    param([string]$Phase)
+    if ([string]::IsNullOrWhiteSpace($Phase)) { return '' }
+    $p = $Phase.Trim()
+    if ($script:LegacyPhases.ContainsKey($p.ToLowerInvariant())) { return $script:LegacyPhases[$p.ToLowerInvariant()] }
+    $u = $p.ToUpperInvariant()
+    if ($script:ItemPhases -contains $u) { return $u }
+    return 'RUNNING'
+}
+
+function Test-WorkerPhase {
+    param([string]$Phase)
+    return ($script:WorkerPhases -contains (ConvertTo-ItemPhase $Phase))
+}
+
+# The phase a worker resumes from (INTERRUPTED -> the phase it was interrupted in).
+function Get-ResumePhase {
+    param([string]$Phase, [string]$InterruptedPhase)
+    $p = ConvertTo-ItemPhase $Phase
+    if ($p -eq 'INTERRUPTED') {
+        $p = ConvertTo-ItemPhase $InterruptedPhase
+        if (-not $p -or $p -eq 'INTERRUPTED') { $p = 'RUNNING' }
+    }
+    if (-not $p -or $p -eq 'PLANNED') { $p = 'RUNNING' }
+    return $p
+}
+
+<#
+    Decides how an item continues after a restart, from its persisted checkpoint and the
+    Git reality. Git wins: an item found on the integration branch is INTEGRATED whatever
+    the state file says; a validated item whose branch moved is re-validated; existing
+    commits or uncommitted files are never discarded but continued by a recovery agent.
+
+    $Facts = @{
+        HasState; Phase; InterruptedPhase; PendingFix (bool)
+        Integrated        # Integrates-Issue trailer or validated head reachable from the integration branch
+        WorkerAlive       # recorded worker PID alive with the same start time
+        WorktreeExists; BranchExists; Dirty; CommitsAhead; MergeInProgress
+        HeadMatchesValidated  # current branch head == the validated Head
+    }
+    Returns @{ Phase; InterruptedPhase; Action; Detail } with Action one of
+        skip | blocked | adopt | integrate | resume-review | resume-fix | recovery-agent | restart | new
+#>
+function Get-RecoveryAction {
+    param([hashtable]$Facts)
+    $f = @{ HasState = $true; Phase = ''; InterruptedPhase = ''; PendingFix = $false; Integrated = $false; WorkerAlive = $false
+        WorktreeExists = $false; BranchExists = $false; Dirty = $false; CommitsAhead = 0; MergeInProgress = $false; HeadMatchesValidated = $false }
+    foreach ($k in $Facts.Keys) { $f[$k] = $Facts[$k] }
+    $phase = ConvertTo-ItemPhase ([string]$f.Phase)
+    $ahead = [int]$f.CommitsAhead
+    $work = @()
+    if ($ahead -gt 0) { $work += ($ahead.ToString() + ' commit(s)') }
+    if ($f.Dirty) { $work += 'uncommitted work' }
+    $workText = $work -join ' + '
+    $decide = { param($p, $ip, $a, $d) return @{ Phase = $p; InterruptedPhase = $ip; Action = $a; Detail = $d } }
+
+    if ($f.Integrated) {
+        $d = 'already on the integration branch'
+        if ($f.HasState -and $phase -ne 'INTEGRATED') { $d += ' (state said ' + $phase + '; Git wins, state corrected)' }
+        return (& $decide 'INTEGRATED' '' 'skip' $d)
+    }
+    if (-not $f.HasState) {
+        if ($f.BranchExists -and ($ahead -gt 0 -or $f.Dirty)) { return (& $decide 'INTERRUPTED' 'RUNNING' 'recovery-agent' ('existing branch with ' + $workText + ' but no state file')) }
+        return (& $decide '' '' 'new' 'not started')
+    }
+    if ($phase -eq 'BLOCKED') { return (& $decide 'BLOCKED' '' 'blocked' 'kept blocked, work preserved (-RetryBlocked retries it)') }
+    if ($phase -eq 'INTEGRATED') {
+        return (& $decide 'INTERRUPTED' 'REVIEWING' 'resume-review' 'state said INTEGRATED but the integration branch does not contain it; re-validating')
+    }
+    if ($f.WorkerAlive) { return (& $decide $phase ([string]$f.InterruptedPhase) 'adopt' 'worker process still running') }
+
+    $resume = Get-ResumePhase $phase ([string]$f.InterruptedPhase)
+    if ($resume -eq 'INTEGRATING') { return (& $decide 'INTEGRATING' '' 'integrate' 'integration was interrupted; resumed idempotently') }
+    if ($f.MergeInProgress) { return (& $decide 'BLOCKED' '' 'blocked' 'a merge is in progress in the Issue worktree outside integration; inspect it manually (work preserved)') }
+    if ($resume -eq 'VALIDATED') {
+        if ($f.HeadMatchesValidated -and -not $f.Dirty) { return (& $decide 'VALIDATED' '' 'integrate' 'validated, not integrated yet') }
+        if ($f.Dirty) { return (& $decide 'INTERRUPTED' 'RUNNING' 'recovery-agent' 'worktree has uncommitted work after validation') }
+        return (& $decide 'INTERRUPTED' 'REVIEWING' 'resume-review' 'branch moved after validation; re-validating')
+    }
+    if ($resume -eq 'FIXING' -or $f.PendingFix) {
+        $d = 'fix pass interrupted; resumed with the persisted findings'
+        if ($workText) { $d += ' (' + $workText + ' kept)' }
+        return (& $decide 'INTERRUPTED' 'FIXING' 'resume-fix' $d)
+    }
+    if (@('IMPLEMENTED', 'TESTING', 'REVIEWING') -contains $resume) {
+        if ($f.Dirty) { return (& $decide 'INTERRUPTED' 'RUNNING' 'recovery-agent' ('interrupted during ' + $resume + ' with ' + $workText)) }
+        if ($ahead -gt 0) { return (& $decide 'INTERRUPTED' $resume 'resume-review' ('interrupted during ' + $resume + '; ' + $workText + ' kept, passed gate and unchanged reviews reused')) }
+        return (& $decide 'INTERRUPTED' 'RUNNING' 'restart' ('interrupted during ' + $resume + ' with no commit; implementation restarts'))
+    }
+    # PLANNED / RUNNING
+    if ($ahead -gt 0 -or $f.Dirty) { return (& $decide 'INTERRUPTED' 'RUNNING' 'recovery-agent' ('implementation interrupted with ' + $workText)) }
+    if ($phase -eq 'PLANNED') { return (& $decide 'PLANNED' '' 'restart' 'planned, worker never ran') }
+    return (& $decide 'INTERRUPTED' 'RUNNING' 'restart' 'implementation interrupted before any commit or file change; fresh implementation')
+}
+
+function Format-RecoveryLine {
+    param([string]$Label, [hashtable]$Decision)
+    $actionText = @{
+        'skip' = 'skip'; 'blocked' = 'stays blocked'; 'adopt' = 'adopt running worker'; 'integrate' = 'integrate'
+        'resume-review' = 'resume review'; 'resume-fix' = 'resume fix'; 'recovery-agent' = 'recovery agent'; 'restart' = 'restart implementation'; 'new' = 'start'
+    }[$Decision.Action]
+    $state = [string]$Decision.Phase
+    if ($state -eq 'INTERRUPTED' -and $Decision.InterruptedPhase) { $state += ' during ' + $Decision.InterruptedPhase }
+    if (-not $state) { $state = 'NEW' }
+    return ($Label + ' ' + $state + ' -> ' + $actionText + ' (' + $Decision.Detail + ')')
+}
+
+<#
+    Concise restart report: one line per item with a state file (recovery decision) and one
+    line per remaining planned Issue (DAG status). $Entries: objects with Label, Issue, Decision.
+#>
+function Format-RecoveryReport {
+    param($Entries, [hashtable]$Plan)
+    $lines = New-Object System.Collections.ArrayList
+    $seen = @{}
+    foreach ($e in @($Entries | Sort-Object @{ Expression = { [int]$_.Issue } }, Label)) {
+        [void]$lines.Add((Format-RecoveryLine $e.Label $e.Decision))
+        if ([int]$e.Issue -gt 0) { $seen[[int]$e.Issue] = $true }
+    }
+    if ($null -ne $Plan) {
+        foreach ($p in ($Plan.Values | Sort-Object Number)) {
+            if ($seen.ContainsKey([int]$p.Number)) { continue }
+            $text = switch ($p.Status) {
+                'DONE' { 'INTEGRATED -> skip' }
+                'RUNNABLE' { 'RUNNABLE -> continue' }
+                'WAITING' { 'WAITING -> dependency ' + ((@($p.Dependencies | Where-Object { $_.Status -ne 'DONE' }) | ForEach-Object { '#' + $_.Number }) -join ', ') }
+                'IN_PROGRESS' { 'RUNNING -> adopt' }
+                'APPROVED' { 'VALIDATED -> integrate' }
+                default { $p.Status + ' -> ' + $p.Reason }
+            }
+            [void]$lines.Add('#' + $p.Number + ' ' + $text)
+        }
+    }
+    return , $lines
+}
+
+# Classifies a failed Claude Code process that produced no ORCHESTRATOR-RESULT:
+#   AUTH      session/token expired, not logged in, credit/usage limit -> stop the run, rerun later
+#   TRANSIENT overloaded, rate limited, network -> relaunch the item later (fresh process)
+#   CRASH     anything else (timeout, crash) -> bounded relaunch with recovery context
+$script:AgentAuthPattern = '(?i)(/login\b|not logged in|log in again|oauth token|token (has )?expired|session (has )?expired|invalid api key|invalid x-api-key|authentication[_ ]error|authentication failed|unauthori[sz]ed|\b401\b|credit balance|usage limit|limit reached|billing)'
+$script:AgentTransientPattern = '(?i)(overloaded|\b529\b|rate[ _-]?limit|\b429\b|too many requests|econnreset|econnrefused|enotfound|etimedout|eai_again|getaddrinfo|socket hang up|network error|fetch failed|connection error|service unavailable|\b503\b|\b502\b)'
+
+function Get-AgentFailureKind {
+    param([string]$Text, [bool]$TimedOut = $false)
+    if ($TimedOut) { return 'CRASH' }
+    if ([string]$Text -match $script:AgentAuthPattern) { return 'AUTH' }
+    if ([string]$Text -match $script:AgentTransientPattern) { return 'TRANSIENT' }
+    return 'CRASH'
+}
+
+# DryRun guarantees: only these read-only Git / GitHub CLI commands may run.
+function Test-ReadOnlyGitCommand {
+    param([string[]]$Arguments)
+    $args_ = @($Arguments | Where-Object { $_ -ne $null })
+    if ($args_.Count -eq 0) { return $false }
+    $sub = $args_[0]
+    if (@('rev-parse', 'rev-list', 'log', 'for-each-ref', 'merge-base', 'status', 'diff', 'show', 'ls-remote', 'cat-file', '--version') -contains $sub) { return $true }
+    if ($sub -eq 'worktree' -and $args_.Count -ge 2 -and $args_[1] -eq 'list') { return $true }
+    return $false
+}
+
+function Test-ReadOnlyGhCommand {
+    param([string[]]$Arguments)
+    $args_ = @($Arguments | Where-Object { $_ -ne $null })
+    if ($args_.Count -eq 0) { return $false }
+    if ($args_[0] -eq '--version') { return $true }
+    if ($args_.Count -lt 2) { return $false }
+    $cmd = $args_[0] + ' ' + $args_[1]
+    return (@('issue list', 'issue view', 'pr list', 'pr view', 'repo view', 'auth status') -contains $cmd)
 }
 
 # ---------------------------------------------------------------------------

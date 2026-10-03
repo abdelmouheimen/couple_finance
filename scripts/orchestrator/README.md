@@ -6,12 +6,13 @@ work: everything is integrated into `integration/mvp`; `main` stays untouched un
 Pull Request. Rules: [CLAUDE.md "Autonomous development orchestration"](../../CLAUDE.md#autonomous-development-orchestration).
 
 ```powershell
-# Preview: DAG, runnable Issues, waves, worktrees, agent roles, validation steps. Changes nothing.
+# Preview: DAG, runnable Issues, waves, worktrees, agent roles, validation steps and, after an interruption,
+# the RECOVERY PREVIEW. Read-only and enforced: no fetch, and only read-only git/gh commands are allowed.
 powershell.exe -ExecutionPolicy Bypass -File .\scripts\autonomous-development.ps1 -DryRun
 # Same, as if every Issue were already approved (planning preview only)
 powershell.exe -ExecutionPolicy Bypass -File .\scripts\autonomous-development.ps1 -DryRun -AssumeApproved
 
-# Real run
+# Real run (also the restart command after any crash, token/session expiration or reboot)
 powershell.exe -ExecutionPolicy Bypass -File .\scripts\autonomous-development.ps1 -Target mvp -Parallelism 3 -AutoMergeIntegration
 ```
 
@@ -32,7 +33,7 @@ autonomous-development.ps1  (orchestrator, single instance, lock file)
  ├─ runtime : AutonomousDev.Runtime.psm1    processes + timeouts, git, claude agents, gates, state files
  ├─ workers : Invoke-IssueWorker.ps1         one background process per Issue / repair item
  │     develop (issue-developer | integration-validator)  -> gate -> code-reviewer
- │       -> security-reviewer (if relevant) -> mobile-ux-reviewer (if relevant) -> fix -> ... -> approved|blocked
+ │       -> security-reviewer (if relevant) -> mobile-ux-reviewer (if relevant) -> fix -> ... -> VALIDATED|BLOCKED
  ├─ integration (serialized in the orchestrator): sync with integration tip -> re-gate -> merge --no-ff --signoff -> push
  └─ final acceptance: full gate, expo config, android bundle, API journey, holistic UX review, optional APK, PR -> main
 ```
@@ -69,7 +70,7 @@ Every agent is a fresh `claude -p --agent <name>` process with a short prompt; i
    one fix pass; LOW findings are recorded. Rejected findings must be justified and are shown to the reviewer next time.
 4. Reviewers re-run only when the part of the net diff they cover changed (per-file fingerprints), or when they had
    open findings: no repeated reviews when nothing relevant changed.
-5. After `-MaxReviewCycles` (default 3) with BLOCKER/HIGH or a red gate left: the Issue is `blocked`, its dependents
+5. After `-MaxReviewCycles` (default 3) with BLOCKER/HIGH or a red gate left: the Issue is `BLOCKED`, its dependents
    wait, unrelated DAG branches continue.
 
 An agent stops an Issue only for the human stop conditions (contradicting requirements, missing credential, change of
@@ -84,25 +85,78 @@ Serialized, one approved item at a time:
 2. if `origin/integration/mvp` moved, it is merged into the item branch (`--no-ff --signoff`); a conflict is aborted
    and handed to a conflict-resolution agent (regenerates generated files, never edits integrated changesets); then
    the worker re-runs the gate and only the reviews whose scope changed (max 5 re-syncs);
-3. the branch is merged into `integration/mvp` with `--no-ff --signoff` and the trailers
+3. the validated commit is merged into `integration/mvp` with `--no-ff --signoff` (idempotent, see below) and the trailers
    `Integrates-Issue: #N`, `Integrated-Branch`, `Reviewed-Head`; the merged tree must equal the validated tree;
 4. `integration/mvp` and the Issue branch are pushed (never forced); dependents become runnable.
 
 At start-up `origin/main` is merged into `integration/mvp` when it moved: a clean merge is gated before it is committed
 (otherwise aborted); conflicts or failures become an `integration-validator` repair item.
 
-## Resumability
+## Crash recovery
 
-Rerunning the same command continues safely. State comes from:
+Claude Code sessions, workers and the orchestrator are disposable: any of them may die at any moment (token/session
+expiration, timeout, network failure, closed terminal, killed PowerShell, machine restart). Nothing depends on a
+conversation history. The recoverable source of truth is:
 
-- Git: `Integrates-Issue: #N` trailers on `integration/mvp` (done), existing `feature|fix/<N>-*` branches and worktrees;
+- Git: `Integrates-Issue: #N` trailers and validated heads on `integration/mvp`, `feature|fix/<N>-*` branches, the
+  worktrees with their commits and uncommitted/untracked files;
 - GitHub: open Issues, open PRs to `main` (Issue then left to the human flow), PRs merged into `main`;
-- local state files `.autonomous-dev/state/<issue-N|repair-*>.json` (phase, approved commit, review fingerprints,
-  cycles, blocked reason, worker PID).
+- `.autonomous-dev/state/<issue-N|repair-*>.json`: a per-item **checkpoint**, never trusted blindly, and
+  `.autonomous-dev/runs/<run-id>/` logs (timeline, prompts, agent reports, findings).
 
-Workers still running from an interrupted orchestrator are adopted by PID; dead workers are relaunched (bounded);
-approved items are integrated; interrupted implementations resume on their branch. `-RetryBlocked` retries blocked
-items (keeping their work).
+**After any interruption, rerun exactly the same command.**
+
+### Checkpoints
+
+| Phase | Persisted when | Resumes as |
+|---|---|---|
+| `PLANNED` | worktree ready, before the worker process starts | implementation |
+| `RUNNING` | before the implementation agent starts | recovery agent if commits/files exist, else implementation |
+| `IMPLEMENTED`, `TESTING`, `REVIEWING` | after the agent / before the gate / before reviewers (gate result and each review persisted with its HEAD and diff fingerprint) | review loop: a passed gate for the same HEAD and reviews of unchanged scopes are reused |
+| `FIXING` | before the fix agent, with `PendingFix` (cycle, findings file, HEAD) | the same fix cycle with the same findings (no extra review cycle) |
+| `VALIDATED` | gate green, no BLOCKER/HIGH (`Head` = validated commit) | integration |
+| `INTEGRATING` | before each integration step (`IntegrationStep` = check / sync / merge / push) | idempotent integration |
+| `INTEGRATED`, `BLOCKED` | terminal (BLOCKED keeps worktree, branch, merge state and logs) | skipped (`-RetryBlocked` retries) |
+| `INTERRUPTED` | a worker died, or Claude was unavailable (`InterruptedPhase`, `InterruptKind` AUTH/TRANSIENT) | from `InterruptedPhase` |
+
+### What happens on restart
+
+1. A stale lock (dead PID, or a PID reused after a reboot: start time recorded) is ignored.
+2. An interrupted merge in the integration worktree is rolled forward, never discarded: an integration merge of a
+   validated head is concluded; an interrupted `main` sync (clean, staged) is gated again. Anything else stops the run.
+3. A validated merge that was committed but not pushed is pushed.
+4. Every checkpoint is reconciled with Git (`Get-RecoveryAction`), and a report is printed:
+
+   ```text
+   RECOVERY DETECTED
+   #76 INTEGRATED -> skip (already on the integration branch (state said VALIDATED; Git wins, state corrected))
+   #77 INTERRUPTED during REVIEWING -> resume review (... 2 commit(s) kept, passed gate and unchanged reviews reused)
+   #68 INTERRUPTED during RUNNING -> recovery agent (implementation interrupted with uncommitted work)
+   #69 WAITING -> dependency #68
+   #73 RUNNABLE -> continue
+   ```
+
+   - on the integration branch (trailer or validated head reachable) -> `INTEGRATED`, never merged again;
+   - worker process still alive (PID + start time) -> adopted;
+   - validated and branch unchanged -> integrated; branch moved -> re-validated;
+   - commits and/or uncommitted/untracked files -> continued by a **new** Claude process whose prompt carries a
+     recovery context: `git status`, commits and diff against `origin/integration/mvp`, the orchestration timeline and
+     the previous log directories, plus the rule to never reset/clean/stash/rebase/restore that work;
+   - state `INTEGRATED` without trace on the integration branch -> re-validated (Git wins).
+5. A relaunched worker first waits for an agent orphaned by its dead predecessor (`<key>.agent.pid`), so two agents
+   never work in the same worktree; an interrupted conflict resolution is continued by a new agent (never aborted).
+6. Blocked items only stop their dependents; unrelated DAG branches continue.
+
+Nothing is ever reset, cleaned, stashed or rebased; worktrees with uncommitted work are never removed. The only
+`merge --abort` left is on a merge the orchestrator itself just created and that holds no agent work.
+
+### Claude unavailable
+
+A Claude process that fails without a result is classified: **AUTH** (session/token expired, not logged in,
+usage/credit limit) pauses the run: no new agent starts, running workers checkpoint themselves as `INTERRUPTED`, and
+the orchestrator exits with code `3`. **TRANSIENT** (overloaded, rate limit, network) relaunches only that item later
+(exponential back-off, max 4, then pause). Anything else (crash, timeout) relaunches the worker from its checkpoint
+(max 3, then `BLOCKED`). `-RetryBlocked` retries blocked items, keeping their work.
 
 ## Logs
 
@@ -124,7 +178,8 @@ minimum context. Each agent's reported cost is accumulated in its item state (`C
 |---|---|
 | 0 | `READY FOR HUMAN ACCEPTANCE TESTING` (or a dry run) |
 | 2 | human input needed: Issues without approval, open questions, blocked Issues (with their waiting dependents), unresolved final validation/journey/UX BLOCKER-HIGH findings |
-| 1 | unsafe/unexpected state (diverged integration branch, rejected push, dirty integration worktree, missing tools) |
+| 3 | paused: Claude Code unavailable (session/token expired, usage limit, persistent overload/network); restore it, then rerun the same command |
+| 1 | unsafe/unexpected state (diverged integration branch, rejected push, dirty integration worktree, unattributable merge in progress, missing tools) |
 
 ## Human acceptance testing
 
@@ -145,8 +200,8 @@ and runs `npx expo start --android`. With `-BuildAndroidApk` (and an Android SDK
 ## Tests
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\orchestrator\tests\Run-Tests.ps1                     # unit + worker smoke test (fake claude, temp repo)
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\orchestrator\tests\Run-Tests.ps1 -IncludeDryRunSmoke # + real DryRun, asserts no repository change
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\orchestrator\tests\Run-Tests.ps1                     # unit, recovery and worker tests (fake claude, temp repos, real killed processes)
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\orchestrator\tests\Run-Tests.ps1 -IncludeDryRunSmoke # + real DryRun: refs (incl. remote-tracking), index, worktrees, .autonomous-dev unchanged
 ```
 
 The Issue gate also runs these tests whenever orchestrator files change.
