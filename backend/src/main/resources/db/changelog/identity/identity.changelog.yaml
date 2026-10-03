@@ -4,3 +4,7 @@ databaseChangeLog:
       file: db/changelog/identity/changes/0001-create-identity-schema.yaml
   - include:
       file: db/changelog/identity/changes/0002-create-user-account.yaml
+  - include:
+      file: db/changelog/identity/changes/0003-create-session.yaml
+  - include:
+      file: db/changelog/identity/changes/0004-create-refresh-token.yaml

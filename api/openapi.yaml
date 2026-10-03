@@ -183,6 +183,55 @@ paths:
       summary: Net totals of the last 6 budget periods
       tags:
       - Analytics
+  /api/v1/auth/login:
+    post:
+      description: "Public. Creates a session and returns a short-lived access token\
+        \ and an opaque refresh token (returned once). Wrong password, unknown email\
+        \ and deleted account are indistinguishable (INVALID_CREDENTIALS). An account\
+        \ whose email is not verified receives tokens; protected endpoints then answer\
+        \ EMAIL_NOT_VERIFIED."
+      operationId: login
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+          description: Tokens issued
+        "400":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: VALIDATION_FAILED or MALFORMED_REQUEST
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: INVALID_CREDENTIALS
+        "413":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: PAYLOAD_TOO_LARGE
+        "429":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: "RATE_LIMITED, with a Retry-After header"
+      security: []
+      summary: Log in with email and password
+      tags:
+      - Authentication
   /api/v1/budgets/{periodStart}:
     get:
       description: "The budget of the household's period starting on periodStart.\
@@ -1291,6 +1340,33 @@ paths:
       summary: Revoke an invitation
       tags:
       - Households
+  /api/v1/me:
+    get:
+      description: "Returns the identity of the authenticated user, derived from the\
+        \ access token only."
+      operationId: getCurrentUser
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CurrentUserResponse"
+          description: The caller's identity
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: AUTHENTICATION_REQUIRED
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: EMAIL_NOT_VERIFIED
+      summary: Get the authenticated user
+      tags:
+      - Identity
   /api/v1/merchant-rules:
     put:
       description: "Creates or replaces the rule of the caller's scope for the normalised\
@@ -1728,6 +1804,26 @@ components:
       - code
       - expiresAt
       - id
+    CurrentUserResponse:
+      type: object
+      properties:
+        displayName:
+          type: string
+        email:
+          type: string
+        id:
+          type: string
+          format: uuid
+        locale:
+          type: string
+          description: BCP 47 language tag.
+          example: fr-FR
+        status:
+          type: string
+          description: Account status; only ACTIVE accounts reach protected endpoints.
+          enum:
+          - PENDING_VERIFICATION
+          - ACTIVE
     DailyCumulativePoint:
       type: object
       properties:
@@ -2023,6 +2119,49 @@ components:
           - ON_TRACK
           - WARNING
           - EXCEEDED
+    LoginRequest:
+      type: object
+      properties:
+        deviceLabel:
+          type: string
+          description: "Free label of the device, shown in the session list."
+          example: Alex's phone
+          maxLength: 80
+          minLength: 1
+          pattern: "[^\\p{Cntrl}]*\\S[^\\p{Cntrl}]*"
+        email:
+          type: string
+          format: email
+          example: alex@example.com
+          maxLength: 254
+          minLength: 0
+        password:
+          type: string
+          format: password
+          description: The account password.
+          maxLength: 128
+          minLength: 0
+      required:
+      - email
+      - password
+    LoginResponse:
+      type: object
+      properties:
+        accessToken:
+          type: string
+          description: "Short-lived ES256 JWT, sent as a Bearer token."
+        expiresIn:
+          type: integer
+          format: int64
+          description: Access-token lifetime in seconds.
+          example: 900
+        refreshToken:
+          type: string
+          description: "Opaque refresh token, returned only once. Keep it in secure\
+            \ storage."
+        tokenType:
+          type: string
+          example: Bearer
     MerchantRule:
       type: object
       properties:

@@ -42,6 +42,8 @@ dependencies {
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:$springdocVersion")
     // Rate limiting (security.md section 5); approved for Issue 6, in-memory buckets only.
     implementation("com.bucket4j:bucket4j_jdk17-core:8.20.0")
+    // Argon2id password hashing: Spring Security's Argon2PasswordEncoder needs the Bouncy Castle primitives.
+    implementation("org.bouncycastle:bcprov-jdk18on:1.82")
     runtimeOnly("org.postgresql:postgresql")
 
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")

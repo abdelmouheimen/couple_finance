@@ -1,0 +1,34 @@
+databaseChangeLog:
+  - changeSet:
+      id: identity-0004-create-refresh-token
+      author: couplefinance
+      comment: >
+        Opaque refresh tokens, stored only as SHA-256 hashes (database-schema.md §4.3).
+        uq_refresh_token_hash: lookup of the presented token on every refresh.
+        ix_refresh_token_session: revoke all the tokens of a session.
+      changes:
+        - sql:
+            sql: |
+              CREATE TABLE identity.refresh_token (
+                  id             uuid        NOT NULL,
+                  session_id     uuid        NOT NULL,
+                  token_hash     bytea       NOT NULL,
+                  issued_at      timestamptz NOT NULL,
+                  expires_at     timestamptz NOT NULL,
+                  rotated_at     timestamptz,
+                  replaced_by_id uuid,
+                  revoked_at     timestamptz,
+                  CONSTRAINT pk_refresh_token PRIMARY KEY (id),
+                  CONSTRAINT fk_refresh_token_session FOREIGN KEY (session_id)
+                      REFERENCES identity.session (id) ON DELETE CASCADE,
+                  CONSTRAINT fk_refresh_token_replaced_by FOREIGN KEY (replaced_by_id)
+                      REFERENCES identity.refresh_token (id),
+                  CONSTRAINT uq_refresh_token_hash UNIQUE (token_hash),
+                  CONSTRAINT ck_refresh_token_hash CHECK (octet_length(token_hash) = 32),
+                  CONSTRAINT ck_refresh_token_expiry CHECK (expires_at > issued_at),
+                  CONSTRAINT ck_refresh_token_rotation CHECK ((rotated_at IS NULL) = (replaced_by_id IS NULL))
+              );
+              CREATE INDEX ix_refresh_token_session ON identity.refresh_token (session_id);
+      rollback:
+        - sql:
+            sql: DROP TABLE identity.refresh_token
