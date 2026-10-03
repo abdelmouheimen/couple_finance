@@ -64,6 +64,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Log in with email and password
+         * @description Public. Creates a session and returns a short-lived access token and an opaque refresh token (returned once). Wrong password, unknown email and deleted account are indistinguishable (INVALID_CREDENTIALS). An account whose email is not verified receives tokens; protected endpoints then answer EMAIL_NOT_VERIFIED.
+         */
+        post: operations["login"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/budgets/{periodStart}": {
         parameters: {
             query?: never;
@@ -348,6 +368,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get the authenticated user
+         * @description Returns the identity of the authenticated user, derived from the access token only.
+         */
+        get: operations["getCurrentUser"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/merchant-rules": {
         parameters: {
             query?: never;
@@ -620,6 +660,22 @@ export interface components {
             /** Format: uuid */
             id: string;
         };
+        CurrentUserResponse: {
+            displayName?: string;
+            email?: string;
+            /** Format: uuid */
+            id?: string;
+            /**
+             * @description BCP 47 language tag.
+             * @example fr-FR
+             */
+            locale?: string;
+            /**
+             * @description Account status; only ACTIVE accounts reach protected endpoints.
+             * @enum {string}
+             */
+            status?: "PENDING_VERIFICATION" | "ACTIVE";
+        };
         DailyCumulativePoint: {
             /** @description Net spending from the period start through this day inclusive. */
             cumulative?: components["schemas"]["Money"];
@@ -786,6 +842,37 @@ export interface components {
              * @enum {string}
              */
             status?: "ON_TRACK" | "WARNING" | "EXCEEDED";
+        };
+        LoginRequest: {
+            /**
+             * @description Free label of the device, shown in the session list.
+             * @example Alex's phone
+             */
+            deviceLabel?: string;
+            /**
+             * Format: email
+             * @example alex@example.com
+             */
+            email: string;
+            /**
+             * Format: password
+             * @description The account password.
+             */
+            password: string;
+        };
+        LoginResponse: {
+            /** @description Short-lived ES256 JWT, sent as a Bearer token. */
+            accessToken?: string;
+            /**
+             * Format: int64
+             * @description Access-token lifetime in seconds.
+             * @example 900
+             */
+            expiresIn?: number;
+            /** @description Opaque refresh token, returned only once. Keep it in secure storage. */
+            refreshToken?: string;
+            /** @example Bearer */
+            tokenType?: string;
         };
         MerchantRule: {
             /** Format: uuid */
@@ -1131,6 +1218,66 @@ export interface operations {
             };
             /** @description HOUSEHOLD_NOT_FOUND */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    login: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoginRequest"];
+            };
+        };
+        responses: {
+            /** @description Tokens issued */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoginResponse"];
+                };
+            };
+            /** @description VALIDATION_FAILED or MALFORMED_REQUEST */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description INVALID_CREDENTIALS */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description PAYLOAD_TOO_LARGE */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description RATE_LIMITED, with a Retry-After header */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2353,6 +2500,44 @@ export interface operations {
             };
             /** @description INVITATION_NOT_REVOCABLE: already redeemed */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getCurrentUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The caller's identity */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CurrentUserResponse"];
+                };
+            };
+            /** @description AUTHENTICATION_REQUIRED */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description EMAIL_NOT_VERIFIED */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
