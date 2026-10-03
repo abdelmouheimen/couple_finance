@@ -114,6 +114,40 @@ final class PrivacyProbes {
         }
     }
 
+    static void dailyCumulativeSeries(AuthzWorld world, SeededHousehold s) {
+        String uri = "/api/v1/analytics/periods/" + s.periodStart() + "/daily-cumulative?scope=HOUSEHOLD";
+        addPeriodExpenses(world, s);
+        for (UUID caller : new UUID[] {s.owner(), s.partner()}) {
+            MvcTestResult result = world.get(caller, uri);
+            assertThat(result).hasStatus(HttpStatus.OK);
+            assertNoPrivateData(s, AuthzWorld.text(result), uri);
+            assertThat(AuthzWorld.text(result)).doesNotContain("99.99");
+            JsonNode points = world.body(result).get("points");
+            assertThat(points.get(points.size() - 1).get("cumulative").get("amount").asString())
+                    .as("PERSONAL spending is not a household figure").isEqualTo("7.00");
+        }
+    }
+
+    static void trendSeries(AuthzWorld world, SeededHousehold s) {
+        String uri = "/api/v1/analytics/trend?scope=HOUSEHOLD";
+        addPeriodExpenses(world, s);
+        for (UUID caller : new UUID[] {s.owner(), s.partner()}) {
+            MvcTestResult result = world.get(caller, uri);
+            assertThat(result).hasStatus(HttpStatus.OK);
+            assertNoPrivateData(s, AuthzWorld.text(result), uri);
+            assertThat(AuthzWorld.text(result)).doesNotContain("99.99");
+            JsonNode periods = world.body(result).get("periods");
+            assertThat(periods.get(periods.size() - 1).get("total").get("amount").asString()).isEqualTo("7.00");
+        }
+    }
+
+    private static void addPeriodExpenses(AuthzWorld world, SeededHousehold s) {
+        assertThat(world.send(s.owner(), Call.with(HttpMethod.POST, "/api/v1/expenses",
+                periodExpense(s, "SHARED", "7.00")))).hasStatus(HttpStatus.CREATED);
+        assertThat(world.send(s.owner(), Call.with(HttpMethod.POST, "/api/v1/expenses",
+                periodExpense(s, "PERSONAL", "99.99")))).hasStatus(HttpStatus.CREATED);
+    }
+
     private static String periodExpense(SeededHousehold s, String sharing, String amount) {
         String money = "{\"amount\":\"" + amount + "\",\"currency\":\"EUR\"}";
         return "{\"amount\":" + money + ",\"date\":\"" + s.periodStart() + "\",\"paidByUserId\":\"" + s.owner()
