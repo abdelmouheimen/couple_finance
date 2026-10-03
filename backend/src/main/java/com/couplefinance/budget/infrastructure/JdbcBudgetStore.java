@@ -26,9 +26,9 @@ class JdbcBudgetStore implements BudgetStore {
         int inserted = jdbc.sql("""
                         INSERT INTO budget.budget
                             (id, household_id, period_start, period_end, currency, overall_limit_minor,
-                             created_at, created_by, updated_at, updated_by, version)
+                             copied_from_budget_id, created_at, created_by, updated_at, updated_by, version)
                         VALUES (:id, :householdId, :periodStart, :periodEnd, :currency, :overallLimitMinor,
-                                :createdAt, :createdBy, :updatedAt, :updatedBy, 0)
+                                :copiedFrom, :createdAt, :createdBy, :updatedAt, :updatedBy, 0)
                         ON CONFLICT (household_id, period_start) DO NOTHING
                         """)
                 .param("id", budget.id())
@@ -37,6 +37,7 @@ class JdbcBudgetStore implements BudgetStore {
                 .param("periodEnd", budget.periodEnd())
                 .param("currency", budget.currency().value())
                 .param("overallLimitMinor", budget.overallLimitMinor())
+                .param("copiedFrom", budget.copiedFromBudgetId())
                 .param("createdAt", OffsetDateTime.ofInstant(budget.createdAt(), ZoneOffset.UTC))
                 .param("createdBy", budget.createdBy())
                 .param("updatedAt", OffsetDateTime.ofInstant(budget.updatedAt(), ZoneOffset.UTC))

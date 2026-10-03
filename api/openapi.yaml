@@ -215,6 +215,69 @@ paths:
       summary: Create or update the budget of a period
       tags:
       - Budgets
+  /api/v1/budgets/{periodStart}/copy-previous:
+    post:
+      description: "Explicit action (BR-BUD-02): creates the budget of the period\
+        \ starting on periodStart as a copy of the budget of the period immediately\
+        \ preceding it. The overall limit and the category limits are copied; lines\
+        \ of since-archived categories are omitted (BR-CAT-03); nothing else is carried\
+        \ over (no rollover) and nothing is copied automatically. The new budget records\
+        \ copiedFromBudgetId. No request body. 404 when the date is not the start\
+        \ of a period (BUDGET_PERIOD_NOT_FOUND) or the preceding period has no budget\
+        \ (PREVIOUS_BUDGET_NOT_FOUND); 409 BUDGET_ALREADY_EXISTS when the period already\
+        \ has a budget (nothing is overwritten, including when a concurrent request\
+        \ wins); 400 BUDGET_LIMIT_REQUIRED when the copy would have no limit (overall\
+        \ limit absent and every category archived). Atomic and audited; emits BudgetCreated;\
+        \ the ETag is returned. Rejected on a dissolved household."
+      operationId: copyPreviousBudget
+      parameters:
+      - description: First day of the target budget period (YYYY-MM-DD).
+        in: path
+        name: periodStart
+        required: true
+        schema:
+          type: string
+          format: date
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Budget"
+          description: Budget created as a copy
+        "400":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: VALIDATION_FAILED (malformed date) or BUDGET_LIMIT_REQUIRED
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: AUTHENTICATION_REQUIRED
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: EMAIL_NOT_VERIFIED or HOUSEHOLD_READ_ONLY
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: "HOUSEHOLD_NOT_FOUND, BUDGET_PERIOD_NOT_FOUND or PREVIOUS_BUDGET_NOT_FOUND"
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: BUDGET_ALREADY_EXISTS
+      summary: Copy the previous period's budget into a period
+      tags:
+      - Budgets
   /api/v1/categories:
     get:
       description: "System categories followed by the household's own, ordered by\
@@ -1257,6 +1320,11 @@ components:
           $ref: "#/components/schemas/CategoryLimitsWarning"
           description: "BR-BUD-04: present when the category limits add up to more\
             \ than the overall limit. Computed on read, never stored, never blocking."
+        copiedFromBudgetId:
+          type: string
+          format: uuid
+          description: "BR-BUD-02: id of the budget this one was copied from; absent\
+            \ when created from scratch."
         createdAt:
           type: string
           format: date-time

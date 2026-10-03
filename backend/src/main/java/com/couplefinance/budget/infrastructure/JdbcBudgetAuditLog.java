@@ -42,6 +42,9 @@ class JdbcBudgetAuditLog implements BudgetAuditLog {
         if (!categoryLimitsMinor.isEmpty()) {
             put(changes, "categoryLimitsMinor", null, categoryLimitsMinor);
         }
+        if (budget.copiedFromBudgetId() != null) {
+            put(changes, "copiedFromBudgetId", null, budget.copiedFromBudgetId().toString());
+        }
         insert(budget, "CREATE", actor, changes, budget.createdAt());
     }
 

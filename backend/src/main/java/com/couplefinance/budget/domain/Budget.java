@@ -55,6 +55,9 @@ public class Budget {
     /** {@code null} when the budget has no overall limit (only possible once category limits exist). */
     private Long overallLimitMinor;
 
+    /** BR-BUD-02: the budget this one was copied from; {@code null} when it was created from scratch. */
+    private UUID copiedFromBudgetId;
+
     private Instant createdAt;
 
     private UUID createdBy;
@@ -108,6 +111,22 @@ public class Budget {
         budget.createdBy = creator.value();
         budget.updatedAt = now;
         budget.updatedBy = creator.value();
+        return budget;
+    }
+
+    /**
+     * BR-BUD-02: creates the budget of {@code period} as a copy of {@code source}, the budget of the preceding
+     * period: same overall limit, {@code categoryLimitCount} copied category limits, {@code copiedFrom} recorded.
+     * Nothing else is carried over (no rollover). A copy with no limit at all is rejected.
+     */
+    public static Budget copyOf(Budget source, HouseholdId household, BudgetPeriod period, int decimals, Clock clock,
+            int categoryLimitCount, UserId creator) {
+        Objects.requireNonNull(source, "source");
+        Money overall = source.overallLimitMinor == null ? null
+                : Money.ofMinor(source.overallLimitMinor, source.currency(), decimals);
+        Budget budget = create(household, period, source.currency(), decimals, clock, overall, categoryLimitCount,
+                creator);
+        budget.copiedFromBudgetId = source.id;
         return budget;
     }
 
@@ -188,6 +207,10 @@ public class Budget {
 
     public @Nullable Long overallLimitMinor() {
         return overallLimitMinor;
+    }
+
+    public @Nullable UUID copiedFromBudgetId() {
+        return copiedFromBudgetId;
     }
 
     public Instant createdAt() {
