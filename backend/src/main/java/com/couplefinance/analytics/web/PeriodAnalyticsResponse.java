@@ -12,15 +12,15 @@ import com.couplefinance.shared.money.MoneySchema;
 import io.swagger.v3.oas.annotations.media.Schema;
 import org.jspecify.annotations.Nullable;
 
-/** Household analytics of a budget period as returned by the API. Every figure is HOUSEHOLD scoped (BR-SCP-03). */
+/** Analytics of a budget period as returned by the API. Every figure carries the scope (BR-SCP-03). */
 @Schema(name = "PeriodAnalytics", requiredProperties = {"scope", "periodStart", "periodEnd", "total", "categories",
         "negativeCategories", "members"})
 record PeriodAnalyticsResponse(
-        @Schema(allowableValues = "HOUSEHOLD", description = "Scope of every figure; PERSONAL spending is never "
-                + "included (BR-SCP-01).") SpendingScope scope,
+        @Schema(description = "Scope of every figure (BR-SCP-03); HOUSEHOLD never includes PERSONAL spending "
+                + "(BR-SCP-01), PERSONAL is the caller's own only (BR-SCP-02).") SpendingScope scope,
         @Schema(description = "First day of the period (inclusive).") LocalDate periodStart,
         @Schema(description = "End of the period (exclusive).") LocalDate periodEnd,
-        @Schema(implementation = MoneySchema.class, description = "Net household spending of the period: expenses "
+        @Schema(implementation = MoneySchema.class, description = "Net spending of the period in the scope: expenses "
                 + "minus refunds, deleted expenses and transfers excluded.") Money total,
         @Schema(description = "Categories with a net spending of zero or more, largest first, with their share of "
                 + "the sum of these categories; the percentages sum to exactly 100.0 (BR-ANA-05) unless all are "
@@ -28,7 +28,7 @@ record PeriodAnalyticsResponse(
         @Schema(description = "Categories whose net spending is negative (refunds above purchases), shown as-is "
                 + "and excluded from the percentage breakdown (BR-ANA-06).")
         List<CategoryTotalResponse> negativeCategories,
-        @Schema(description = "Net spending by payer, never by creator (BR-ANA-04).")
+        @Schema(description = "Net spending by payer, never by creator (BR-ANA-04); empty for the PERSONAL scope.")
         List<MemberTotalResponse> members,
         @Schema(description = "Comparison with the preceding calendar period; absent when there is none.")
         @Nullable PreviousPeriodResponse previousPeriod,

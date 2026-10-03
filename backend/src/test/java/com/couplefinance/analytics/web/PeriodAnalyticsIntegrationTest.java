@@ -22,7 +22,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * Household analytics of a period - Issue #30 (BR-ANA-01..06, BR-SCP-01, BR-SCP-03, BR-MON-05, BR-MON-09,
+ * Household (Issue #30) and personal (Issue #31) analytics of a period (BR-ANA-01..06, BR-SCP-01..03, BR-MON-05, BR-MON-09,
  * BR-EXP-07, BR-HH-07).
  */
 @IntegrationTest
@@ -247,13 +247,11 @@ class PeriodAnalyticsIntegrationTest {
     }
 
     @Test
-    void personal_scope_and_unknown_scope_are_400_and_a_missing_scope_too() {
+    void unknown_scope_and_missing_scope_and_malformed_date_are_400() {
         UUID user = users.active();
         UUID household = createHousehold(user);
         LocalDate start = periods(household).get(0);
 
-        assertThat(get(user, start, "PERSONAL")).hasStatus(HttpStatus.BAD_REQUEST).bodyJson()
-                .extractingPath("$.code").isEqualTo("ANALYTICS_SCOPE_UNSUPPORTED");
         assertThat(get(user, start, "EVERYTHING")).hasStatus(HttpStatus.BAD_REQUEST);
         assertThat(mvc.get().uri("/api/v1/analytics/periods/" + start)
                 .header(HttpHeaders.AUTHORIZATION, tokens.bearer(user)).exchange()).hasStatus(HttpStatus.BAD_REQUEST);
@@ -270,6 +268,97 @@ class PeriodAnalyticsIntegrationTest {
         assertThat(mvc.get().uri("/api/v1/analytics/periods/" + start + "?scope=HOUSEHOLD").exchange())
                 .hasStatus(HttpStatus.UNAUTHORIZED);
         assertThat(get(users.active(), start, "HOUSEHOLD")).hasStatus(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void BR_SCP_02_personal_spending_only_includes_own_personal_expenses() {
+        UUID user = users.active();
+        UUID partner = users.active();
+        UUID household = createHousehold(user);
+        addMember(household, partner);
+        List<LocalDate> periods = periods(household);
+        LocalDate start = periods.get(1);
+        seed(household, user, "EXPENSE", 40_000, GROCERIES, start, true, false); // own PERSONAL
+        seed(household, user, "EXPENSE", 10_000, HOUSING, start, true, false); // own PERSONAL
+        seed(household, user, "REFUND", 2_000, TRANSPORT, start, true, false); // own PERSONAL refund
+        seed(household, user, "EXPENSE", 55_500, GROCERIES, start, false, false); // SHARED: not personal
+        seed(household, user, "EXPENSE", 30_000, GROCERIES, start, true, true); // deleted
+        seed(household, partner, "EXPENSE", 77_700, UTILITIES, start, true, false); // partner's PERSONAL
+        seed(household, user, "EXPENSE", 30_000, GROCERIES, periods.get(0), true, false); // previous period
+        setTrackingStart(household, periods.get(0));
+
+        MvcTestResult result = get(user, start, "PERSONAL");
+        assertThat(result).hasStatus(HttpStatus.OK);
+        JsonNode body = json(result);
+        assertThat(body.get("scope").asString()).isEqualTo("PERSONAL");
+        assertThat(body.get("total").get("amount").asString()).isEqualTo("480.00");
+        JsonNode categories = body.get("categories");
+        assertThat(categories).hasSize(2);
+        assertThat(categories.get(0).get("categoryId").asString()).isEqualTo(GROCERIES);
+        assertThat(categories.get(0).get("percentage").asString()).isEqualTo("80.0");
+        assertThat(categories.get(1).get("categoryId").asString()).isEqualTo(HOUSING);
+        assertThat(categories.get(1).get("percentage").asString()).isEqualTo("20.0");
+        assertThat(body.get("negativeCategories")).hasSize(1);
+        assertThat(body.get("negativeCategories").get(0).get("total").get("amount").asString())
+                .isEqualTo("-20.00");
+        assertThat(body.get("members")).isEmpty();
+        assertThat(isAbsent(body.get("budget"))).isTrue(); // BR-BUD-02
+        assertThat(body.get("previousPeriod").get("total").get("amount").asString()).isEqualTo("300.00");
+        assertThat(body.get("previousPeriod").get("difference").get("amount").asString()).isEqualTo("180.00");
+        assertThat(body.get("previousPeriod").get("changePercentage").asString()).isEqualTo("60.0");
+        assertThat(body.get("threePeriodAverage").get("periodsUsed").asInt()).isEqualTo(1);
+        assertThat(body.get("threePeriodAverage").get("average").get("amount").asString()).isEqualTo("300.00");
+        assertThat(body.toString()).doesNotContain(UTILITIES).doesNotContain("777.00").doesNotContain("555.00");
+        assertThat(result.getResponse().getHeader(HttpHeaders.CACHE_CONTROL)).contains("no-store");
+    }
+
+    @Test
+    void BR_ANA_01_BR_EXP_07_the_partner_never_observes_the_other_members_personal_figures() {
+        UUID user = users.active();
+        UUID partner = users.active();
+        UUID household = createHousehold(user);
+        addMember(household, partner);
+        List<LocalDate> periods = periods(household);
+        LocalDate start = periods.get(1);
+        seed(household, user, "EXPENSE", 123_456, UTILITIES, start, true, false);
+        seed(household, user, "EXPENSE", 123_456, UTILITIES, periods.get(0), true, false);
+        seed(household, partner, "EXPENSE", 1_000, GROCERIES, start, true, false);
+        seed(household, user, "EXPENSE", 20_000, HOUSING, start, false, false);
+        setTrackingStart(household, periods.get(0));
+
+        MvcTestResult personal = get(partner, start, "PERSONAL");
+        assertThat(personal).hasStatus(HttpStatus.OK);
+        JsonNode body = json(personal);
+        assertThat(body.get("total").get("amount").asString()).isEqualTo("10.00");
+        assertThat(body.get("categories")).hasSize(1);
+        assertThat(isAbsent(body.get("previousPeriod")) || body.get("previousPeriod").get("total").get("amount")
+                .asString().equals("0.00")).isTrue();
+        assertThat(body.get("threePeriodAverage").get("average").get("amount").asString()).isEqualTo("0.00");
+        assertThat(body.toString()).doesNotContain(UTILITIES).doesNotContain("1234.56").doesNotContain("2469.12");
+
+        // the household view is unchanged by PERSONAL expenses, for both members
+        for (UUID caller : List.of(user, partner)) {
+            JsonNode household_ = json(get(caller, start, "HOUSEHOLD"));
+            assertThat(household_.get("scope").asString()).isEqualTo("HOUSEHOLD");
+            assertThat(household_.get("total").get("amount").asString()).isEqualTo("200.00");
+            assertThat(household_.get("categories")).hasSize(1);
+            assertThat(household_.toString()).doesNotContain(UTILITIES).doesNotContain("1234.56");
+        }
+        // the owner still sees her own figures
+        assertThat(json(get(user, start, "PERSONAL")).get("total").get("amount").asString()).isEqualTo("1234.56");
+    }
+
+    @Test
+    void personal_analytics_authorization_unauthenticated_401_no_household_404_and_unknown_period_404() {
+        UUID user = users.active();
+        UUID household = createHousehold(user);
+        LocalDate start = periods(household).get(0);
+
+        assertThat(mvc.get().uri("/api/v1/analytics/periods/" + start + "?scope=PERSONAL").exchange())
+                .hasStatus(HttpStatus.UNAUTHORIZED);
+        assertThat(get(users.active(), start, "PERSONAL")).hasStatus(HttpStatus.NOT_FOUND);
+        assertThat(get(user, start.plusDays(1), "PERSONAL")).hasStatus(HttpStatus.NOT_FOUND).bodyJson()
+                .extractingPath("$.code").isEqualTo("ANALYTICS_PERIOD_NOT_FOUND");
     }
 
     @Test
