@@ -19,7 +19,11 @@ public enum BudgetErrorCode implements ErrorCode {
     /** BR-HH-07: the path date is not the start of an existing period of the household calendar (404). */
     BUDGET_PERIOD_NOT_FOUND(HttpStatus.NOT_FOUND),
     /** The period exists but has no budget yet (404). */
-    BUDGET_NOT_FOUND(HttpStatus.NOT_FOUND);
+    BUDGET_NOT_FOUND(HttpStatus.NOT_FOUND),
+    /** BR-BUD-02: there is no budget in the preceding period to copy (404). */
+    PREVIOUS_BUDGET_NOT_FOUND(HttpStatus.NOT_FOUND),
+    /** BR-BUD-01: the target period already has a budget; a copy never overwrites (409). */
+    BUDGET_ALREADY_EXISTS(HttpStatus.CONFLICT);
 
     private final HttpStatus status;
 

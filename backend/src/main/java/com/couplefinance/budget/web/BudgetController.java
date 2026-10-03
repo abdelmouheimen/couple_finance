@@ -18,6 +18,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -109,5 +110,42 @@ class BudgetController {
         var budget = result.budget();
         return ResponseEntity.status(result.created() ? HttpStatus.CREATED : HttpStatus.OK)
                 .eTag(VersionETag.render(budget.version())).body(BudgetResponse.from(budget));
+    }
+
+    @PostMapping("/{periodStart}/copy-previous")
+    @Operation(operationId = "copyPreviousBudget", summary = "Copy the previous period's budget into a period",
+            description = "Explicit action (BR-BUD-02): creates the budget of the period starting on periodStart "
+                    + "as a copy of the budget of the period immediately preceding it. The overall limit and the "
+                    + "category limits are copied; lines of since-archived categories are omitted (BR-CAT-03); "
+                    + "nothing else is carried over (no rollover) and nothing is copied automatically. The new "
+                    + "budget records copiedFromBudgetId. No request body. 404 when the date is not the start of a "
+                    + "period (BUDGET_PERIOD_NOT_FOUND) or the preceding period has no budget "
+                    + "(PREVIOUS_BUDGET_NOT_FOUND); 409 BUDGET_ALREADY_EXISTS when the period already has a "
+                    + "budget (nothing is overwritten, including when a concurrent request wins); 400 "
+                    + "BUDGET_LIMIT_REQUIRED when the copy would have no limit (overall limit absent and every "
+                    + "category archived). Atomic and audited; emits BudgetCreated; the ETag is returned. "
+                    + "Rejected on a dissolved household.")
+    @ApiResponse(responseCode = "201", description = "Budget created as a copy")
+    @ApiResponse(responseCode = "400", description = "VALIDATION_FAILED (malformed date) or BUDGET_LIMIT_REQUIRED",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ProblemSchema.class)))
+    @ApiResponse(responseCode = "401", description = "AUTHENTICATION_REQUIRED",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ProblemSchema.class)))
+    @ApiResponse(responseCode = "403", description = "EMAIL_NOT_VERIFIED or HOUSEHOLD_READ_ONLY",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ProblemSchema.class)))
+    @ApiResponse(responseCode = "404", description = "HOUSEHOLD_NOT_FOUND, BUDGET_PERIOD_NOT_FOUND or "
+            + "PREVIOUS_BUDGET_NOT_FOUND", content = @Content(mediaType = "application/problem+json",
+            schema = @Schema(implementation = ProblemSchema.class)))
+    @ApiResponse(responseCode = "409", description = "BUDGET_ALREADY_EXISTS",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ProblemSchema.class)))
+    ResponseEntity<BudgetResponse> copyPrevious(
+            @Parameter(description = "First day of the target budget period (YYYY-MM-DD).")
+            @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodStart) {
+        var budget = budgets.copyPrevious(periodStart);
+        return ResponseEntity.status(HttpStatus.CREATED).eTag(VersionETag.render(budget.version()))
+                .body(BudgetResponse.from(budget));
     }
 }

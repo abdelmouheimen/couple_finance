@@ -20,7 +20,7 @@ import org.jspecify.annotations.Nullable;
 public record BudgetView(UUID id, LocalDate periodStart, LocalDate periodEnd, @Nullable Money overallLimit,
         @Nullable LimitConsumption overallConsumption, List<CategoryLimit> categoryLimits,
         @Nullable CategoryLimitsWarning categoryLimitsWarning, UUID createdBy, Instant createdAt, UUID updatedBy,
-        Instant updatedAt, long version) {
+        Instant updatedAt, long version, @Nullable UUID copiedFromBudgetId) {
 
     static BudgetView of(Budget budget, int decimals, @Nullable LimitConsumption overallConsumption,
             List<CategoryLimit> categoryLimits, @Nullable CategoryLimitsWarning warning) {
@@ -28,6 +28,6 @@ public record BudgetView(UUID id, LocalDate periodStart, LocalDate periodEnd, @N
         return new BudgetView(budget.id(), budget.periodStart(), budget.periodEnd(),
                 limit == null ? null : Money.ofMinor(limit, budget.currency(), decimals), overallConsumption,
                 categoryLimits, warning, budget.createdBy(), budget.createdAt(), budget.updatedBy(),
-                budget.updatedAt(), budget.version());
+                budget.updatedAt(), budget.version(), budget.copiedFromBudgetId());
     }
 }

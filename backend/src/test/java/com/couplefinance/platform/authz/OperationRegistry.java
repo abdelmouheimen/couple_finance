@@ -131,6 +131,10 @@ public final class OperationRegistry {
                 "{\"overallLimit\":{\"amount\":\"2000.00\",\"currency\":\"EUR\"}}", "\"0\""), false,
                 EXEMPT_BUDGETS + "; the budget is keyed by a period of the caller's own household calendar, not by "
                         + "a foreign id: a foreign caller only ever reads or writes its own household's budget"));
+        registry.put("copyPreviousBudget", householdWithoutPersonalData(s -> Call.without(HttpMethod.POST,
+                "/api/v1/budgets/" + s.target().periodStart() + "/copy-previous"), false,
+                EXEMPT_BUDGETS + "; the budget is keyed by a period of the caller's own household calendar, not by "
+                        + "a foreign id: a foreign caller only ever copies within its own household"));
         registry.put("getPeriodAnalytics", household(s -> Call.get("/api/v1/analytics/periods/"
                 + s.target().periodStart() + "?scope=HOUSEHOLD"), false, PrivacyProbes::periodAnalytics));
         return registry;

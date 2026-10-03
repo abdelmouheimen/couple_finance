@@ -16,6 +16,7 @@ import com.couplefinance.budget.domain.Budget;
 import com.couplefinance.budget.domain.BudgetAuditLog;
 import com.couplefinance.budget.domain.BudgetCategoryLimits;
 import com.couplefinance.budget.domain.BudgetCategoryLimits.Line;
+import com.couplefinance.budget.domain.BudgetCopy;
 import com.couplefinance.budget.domain.BudgetErrorCode;
 import com.couplefinance.budget.domain.BudgetRepository;
 import com.couplefinance.budget.domain.BudgetStore;
@@ -161,6 +162,52 @@ public class BudgetService {
         events.publishEvent(new BudgetUpdated(saved.id(), saved.householdId(), saved.periodStart(),
                 saved.updatedAt()));
         return new SetBudgetResult(view(saved, ledger.decimals(), null, now), false);
+    }
+
+    /**
+     * BR-BUD-02: explicit copy of the budget of the period immediately preceding {@code periodStart} into that
+     * period, as a starting point. Overall limit and category limits are copied, lines of since-archived
+     * categories are omitted (BR-CAT-03), nothing else is carried over (no rollover), nothing is ever copied
+     * automatically. Never overwrites: a target that already has a budget is a 409 (BR-BUD-01). One transaction
+     * covers the budget, its lines, the audit entry and the event.
+     */
+    @Transactional
+    public BudgetView copyPrevious(LocalDate periodStart) {
+        HouseholdContext context = currentHousehold.currentHousehold();
+        context.requireWritable(); // BR-HH-10
+        BudgetPeriod period = requirePeriod(context, periodStart);
+        UUID household = context.householdId().value();
+        LedgerProfile ledger = ledgerRules.profile(context.householdId());
+
+        if (budgets.lockByPeriod(household, period.start()).isPresent()) {
+            throw new ApplicationException(BudgetErrorCode.BUDGET_ALREADY_EXISTS,
+                    "The period already has a budget; it is never overwritten by a copy.");
+        }
+        Budget source = periods.findPeriodContaining(context, periodStart.minusDays(1))
+                .flatMap(previous -> budgets.lockByPeriod(household, previous.start()))
+                .orElseThrow(() -> new ApplicationException(BudgetErrorCode.PREVIOUS_BUDGET_NOT_FOUND,
+                        "The preceding period has no budget to copy."));
+        List<Line> sourceLines = lines.findByBudget(household, source.id());
+        Set<UUID> unusable = sourceLines.isEmpty() ? Set.of()
+                : categories.unusableCategories(context.householdId(),
+                        sourceLines.stream().map(Line::categoryId).toList());
+        List<Line> copied = BudgetCopy.copiedLines(sourceLines, unusable);
+
+        // BR-BUD-02: a copy left without any limit is rejected by the aggregate.
+        Budget budget = Budget.copyOf(source, context.householdId(), period, ledger.decimals(), clock,
+                copied.size(), context.userId());
+        if (!store.insertIfAbsent(budget)) {
+            // A concurrent request created the target period's budget first (uq_budget_period).
+            throw new ApplicationException(BudgetErrorCode.BUDGET_ALREADY_EXISTS,
+                    "The period already has a budget; it is never overwritten by a copy.");
+        }
+        Budget saved = budgets.findByPeriod(household, period.start()).orElseThrow();
+        copied.forEach(line -> lines.insert(saved, line.categoryId(), line.limitMinor(), context.userId()));
+        List<Line> stored = lines.findByBudget(household, saved.id());
+        audit.created(saved, minorByCategory(stored), context.userId());
+        events.publishEvent(new BudgetCreated(saved.id(), saved.householdId(), saved.periodStart(),
+                saved.createdAt()));
+        return view(saved, ledger.decimals(), null, stored);
     }
 
     private SetBudgetResult create(HouseholdContext context, BudgetPeriod period, LedgerProfile ledger,

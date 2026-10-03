@@ -32,7 +32,9 @@ record BudgetResponse(
         Instant createdAt,
         UUID updatedBy,
         Instant updatedAt,
-        @Schema(description = "Version, also sent as ETag.") long version) {
+        @Schema(description = "Version, also sent as ETag.") long version,
+        @Schema(description = "BR-BUD-02: id of the budget this one was copied from; absent when created from scratch.")
+        @Nullable UUID copiedFromBudgetId) {
 
     static BudgetResponse from(BudgetView budget) {
         LimitConsumptionResponse consumption = budget.overallConsumption() == null ? null
@@ -42,6 +44,6 @@ record BudgetResponse(
                 budget.categoryLimitsWarning() == null ? null
                         : CategoryLimitsWarningResponse.from(budget.categoryLimitsWarning()),
                 budget.createdBy(), budget.createdAt(), budget.updatedBy(), budget.updatedAt(),
-                budget.version());
+                budget.version(), budget.copiedFromBudgetId());
     }
 }
