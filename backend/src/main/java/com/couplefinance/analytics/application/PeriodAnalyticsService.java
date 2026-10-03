@@ -34,9 +34,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Household analytics of a budget period. Read-only: the household comes from the authenticated user, every
- * figure from the spending query (BR-SCP-01, so PERSONAL spending is structurally absent), the budget facade and
- * the period calendar. No external call is made.
+ * Analytics of a budget period, HOUSEHOLD or the caller's PERSONAL scope. Read-only: the household and the user
+ * come from the authenticated user, every figure from the spending query (BR-SCP-01/02: the scopes are never
+ * mixed), the budget facade and the period calendar. No external call is made.
  */
 @Service
 public class PeriodAnalyticsService {
@@ -60,22 +60,23 @@ public class PeriodAnalyticsService {
     }
 
     /**
-     * @throws ApplicationException {@code ANALYTICS_SCOPE_UNSUPPORTED} (400) for a scope other than HOUSEHOLD,
-     *         {@code ANALYTICS_PERIOD_NOT_FOUND} (404) when {@code periodStart} starts no period of the household
+     * Analytics of the period for the requested scope. PERSONAL covers only the caller's own PERSONAL expenses
+     * (BR-SCP-02, BR-ANA-01): the spending query takes the user from the authenticated context, so the partner's
+     * personal spending is unreachable. It has no payer breakdown and no budget (BR-BUD-02).
+     *
+     * @throws ApplicationException {@code ANALYTICS_PERIOD_NOT_FOUND} (404) when {@code periodStart} starts no
+     *         period of the household
      */
     @Transactional(readOnly = true)
-    public PeriodAnalytics household(SpendingScope scope, LocalDate periodStart) {
-        if (scope != SpendingScope.HOUSEHOLD) {
-            throw new ApplicationException(AnalyticsErrorCode.ANALYTICS_SCOPE_UNSUPPORTED,
-                    "Only the HOUSEHOLD scope is supported.");
-        }
+    public PeriodAnalytics analytics(SpendingScope scope, LocalDate periodStart) {
+        boolean personal = scope == SpendingScope.PERSONAL;
         HouseholdContext context = currentHousehold.currentHousehold();
         BudgetPeriod period = periods.findPeriodContaining(context, periodStart)
                 .filter(p -> p.start().equals(periodStart))
                 .orElseThrow(() -> new ApplicationException(AnalyticsErrorCode.ANALYTICS_PERIOD_NOT_FOUND,
                         "There is no budget period starting on this date."));
 
-        SpendingReport report = spending.spending(context, SpendingScope.HOUSEHOLD, period.start(), period.end(),
+        SpendingReport report = spending.spending(context, scope, period.start(), period.end(),
                 Set.of(SpendingGrouping.CATEGORY, SpendingGrouping.PAYER));
         Money total = report.total();
 
@@ -95,15 +96,16 @@ public class PeriodAnalyticsService {
         List<CategoryTotal> negative = byCategory.stream().filter(c -> c.total().isNegative())
                 .map(c -> new CategoryTotal(c.categoryId(), c.total())).toList();
         // BR-ANA-04: by payer, as reported by the spending query.
-        List<MemberTotal> members = report.byPayer().stream()
+        List<MemberTotal> members = personal ? List.<MemberTotal>of() : report.byPayer().stream()
                 .sorted(Comparator.<PayerSpending, Long>comparing(p -> p.total().minorUnits()).reversed()
                         .thenComparing(PayerSpending::userId))
                 .map(p -> new MemberTotal(p.userId(), p.total())).toList();
 
         List<BudgetPeriod> preceding = precedingPeriods(context, period);
-        return new PeriodAnalytics(SpendingScope.HOUSEHOLD, period.start(), period.end(), total, categories,
-                negative, members, comparison(context, total, preceding), average(context, total, preceding),
-                budgets.overallSummary(context, period.start()).orElse(null));
+        return new PeriodAnalytics(scope, period.start(), period.end(), total, categories,
+                negative, members, comparison(context, scope, total, preceding),
+                average(context, scope, total, preceding),
+                personal ? null : budgets.overallSummary(context, period.start()).orElse(null));
     }
 
     /** Up to {@link #AVERAGE_PERIODS} calendar periods immediately before {@code period}, most recent first. */
@@ -121,13 +123,13 @@ public class PeriodAnalyticsService {
         return result;
     }
 
-    private @Nullable PeriodComparison comparison(HouseholdContext context, Money total,
+    private @Nullable PeriodComparison comparison(HouseholdContext context, SpendingScope scope, Money total,
             List<BudgetPeriod> preceding) {
         if (preceding.isEmpty()) {
             return null;
         }
         BudgetPeriod previous = preceding.get(0);
-        Money previousTotal = totalOf(context, previous);
+        Money previousTotal = totalOf(context, scope, previous);
         Money difference = total.subtract(previousTotal);
         BigDecimal change = previousTotal.isPositive() ? difference.percentageOf(previousTotal) : null;
         return new PeriodComparison(previous.start(), previous.end(), previousTotal, difference, change);
@@ -137,7 +139,7 @@ public class PeriodAnalyticsService {
      * BR-ANA-03: the (up to 3) periods preceding the reference one that start on or after the tracking start;
      * minimum 1. The mean of their minor-unit totals is rounded once, HALF_EVEN, at the end.
      */
-    private @Nullable PeriodAverage average(HouseholdContext context, Money total, List<BudgetPeriod> preceding) {
+    private @Nullable PeriodAverage average(HouseholdContext context, SpendingScope scope, Money total, List<BudgetPeriod> preceding) {
         LocalDate tracking = trackingStart.of(context.householdId());
         List<BudgetPeriod> eligible = preceding.stream().filter(p -> !p.start().isBefore(tracking)).toList();
         if (eligible.isEmpty()) {
@@ -145,7 +147,7 @@ public class PeriodAnalyticsService {
         }
         long sum = 0;
         for (BudgetPeriod p : eligible) {
-            sum = Math.addExact(sum, totalOf(context, p).minorUnits());
+            sum = Math.addExact(sum, totalOf(context, scope, p).minorUnits());
         }
         long average = BigDecimal.valueOf(sum)
                 .divide(BigDecimal.valueOf(eligible.size()), 0, RoundingMode.HALF_EVEN).longValueExact();
@@ -153,7 +155,7 @@ public class PeriodAnalyticsService {
                 eligible.size());
     }
 
-    private Money totalOf(HouseholdContext context, BudgetPeriod period) {
-        return spending.spending(context, SpendingScope.HOUSEHOLD, period.start(), period.end(), Set.of()).total();
+    private Money totalOf(HouseholdContext context, SpendingScope scope, BudgetPeriod period) {
+        return spending.spending(context, scope, period.start(), period.end(), Set.of()).total();
     }
 }

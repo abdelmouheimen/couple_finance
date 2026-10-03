@@ -15,10 +15,12 @@ paths:
       description: "Total spending of the period, breakdown by category (percentages\
         \ summing to 100.0, negative net categories shown apart) and by payer, comparison\
         \ with the previous period, 3-period average and overall budget consumption.\
-        \ Computed on read by the backend from household spending only (BR-SCP-01):\
-        \ no PERSONAL expense contributes to any figure. Only scope=HOUSEHOLD is supported\
-        \ for now. A date that is not the start of a period of the household calendar\
-        \ is a 404. Readable by archive readers of a dissolved household."
+        \ Computed on read by the backend from the requested scope only: HOUSEHOLD\
+        \ never includes a PERSONAL expense (BR-SCP-01); PERSONAL covers the caller's\
+        \ own PERSONAL expenses only (BR-SCP-02, BR-ANA-01), never the partner's,\
+        \ with no payer breakdown (empty members) and no budget (BR-BUD-02). A date\
+        \ that is not the start of a period of the household calendar is a 404. Readable\
+        \ by archive readers of a dissolved household."
       operationId: getPeriodAnalytics
       parameters:
       - description: First day of the budget period (YYYY-MM-DD).
@@ -28,7 +30,7 @@ paths:
         schema:
           type: string
           format: date
-      - description: HOUSEHOLD is the only supported scope.
+      - description: "HOUSEHOLD, or PERSONAL for the caller's own personal spending."
         in: query
         name: scope
         required: true
@@ -49,8 +51,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
-          description: "VALIDATION_FAILED (malformed date, unknown scope) or ANALYTICS_SCOPE_UNSUPPORTED\
-            \ (PERSONAL)"
+          description: "VALIDATION_FAILED (malformed date, missing or unknown scope)"
         "401":
           content:
             application/problem+json:
@@ -69,7 +70,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
           description: HOUSEHOLD_NOT_FOUND or ANALYTICS_PERIOD_NOT_FOUND
-      summary: Household analytics of a budget period
+      summary: Household or personal analytics of a budget period
       tags:
       - Analytics
   /api/v1/budgets/{periodStart}:
@@ -1944,7 +1945,8 @@ components:
             $ref: "#/components/schemas/AnalyticsCategoryShare"
         members:
           type: array
-          description: "Net spending by payer, never by creator (BR-ANA-04)."
+          description: "Net spending by payer, never by creator (BR-ANA-04); empty\
+            \ for the PERSONAL scope."
           items:
             $ref: "#/components/schemas/AnalyticsMemberTotal"
         negativeCategories:
@@ -1967,10 +1969,11 @@ components:
             there is none.
         scope:
           type: string
-          description: Scope of every figure; PERSONAL spending is never included
-            (BR-SCP-01).
+          description: "Scope of every figure (BR-SCP-03); HOUSEHOLD never includes\
+            \ PERSONAL spending (BR-SCP-01), PERSONAL is the caller's own only (BR-SCP-02)."
           enum:
           - HOUSEHOLD
+          - PERSONAL
         threePeriodAverage:
           $ref: "#/components/schemas/AnalyticsThreePeriodAverage"
           description: "BR-ANA-03: average of the up to 3 complete periods preceding\
@@ -1978,7 +1981,7 @@ components:
             \ when none is eligible."
         total:
           $ref: "#/components/schemas/Money"
-          description: "Net household spending of the period: expenses minus refunds,\
+          description: "Net spending of the period in the scope: expenses minus refunds,\
             \ deleted expenses and transfers excluded."
       required:
       - categories

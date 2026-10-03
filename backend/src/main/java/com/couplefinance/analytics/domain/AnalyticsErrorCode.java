@@ -7,9 +7,7 @@ import org.springframework.http.HttpStatus;
 public enum AnalyticsErrorCode implements ErrorCode {
 
     /** BR-HH-07: the path date is not the start of an existing period of the household calendar (404). */
-    ANALYTICS_PERIOD_NOT_FOUND(HttpStatus.NOT_FOUND),
-    /** The requested scope is not served by this endpoint yet (400). */
-    ANALYTICS_SCOPE_UNSUPPORTED(HttpStatus.BAD_REQUEST);
+    ANALYTICS_PERIOD_NOT_FOUND(HttpStatus.NOT_FOUND);
 
     private final HttpStatus status;
 
