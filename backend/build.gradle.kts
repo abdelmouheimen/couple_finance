@@ -2,6 +2,7 @@ import org.springframework.boot.gradle.tasks.run.BootRun
 
 plugins {
     java
+    jacoco
     id("org.springframework.boot") version "4.1.1"
     id("io.spring.dependency-management") version "1.1.7"
 }
@@ -71,6 +72,22 @@ tasks.test {
     useJUnitPlatform()
     systemProperty("openapi.spec", openApiSpec.absolutePath)
     inputs.file(openApiSpec).optional().withPropertyName("openApiSpec")
+    finalizedBy(tasks.jacocoTestReport)
+}
+
+// Test coverage (unit + Testcontainers integration tests). Informational only: no threshold is enforced.
+// HTML: build/reports/jacoco/test/html/index.html, XML: build/reports/jacoco/test/jacocoTestReport.xml.
+jacoco {
+    // 0.8.14+ is required to instrument Java 25 class files.
+    toolVersion = "0.8.15"
+}
+
+tasks.jacocoTestReport {
+    dependsOn(tasks.test)
+    reports {
+        xml.required = true
+        html.required = true
+    }
 }
 
 tasks.register<Test>("updateOpenApi") {
@@ -83,6 +100,8 @@ tasks.register<Test>("updateOpenApi") {
     systemProperty("openapi.spec", openApiSpec.absolutePath)
     systemProperty("openapi.update", "true")
     outputs.upToDateWhen { false }
+    // Contract regeneration is not a coverage run.
+    extensions.configure<JacocoTaskExtension> { isEnabled = false }
 }
 
 tasks.named<BootRun>("bootRun") {
