@@ -247,6 +247,43 @@ class BudgetIntegrationTest {
     }
 
     @Test
+    void BR_BUD_07_a_past_period_budget_can_be_created_and_edited_and_every_edit_is_audited() {
+        UUID user = users.active();
+        UUID stranger = users.active();
+        UUID household = createHousehold(user);
+        createHousehold(stranger);
+        LocalDate start = LocalDate.of(2020, 1, 1);
+        LocalDate end = LocalDate.of(2020, 2, 1);
+        jdbc.sql("INSERT INTO household.budget_period (household_id, period_start, period_end) "
+                + "VALUES (:h, :s, :e)").param("h", household).param("s", start).param("e", end).update();
+
+        MvcTestResult created = put(user, start, limit("100.00"), null);
+        assertThat(created).hasStatus(HttpStatus.CREATED);
+        UUID id = UUID.fromString(json(created).get("id").asString());
+        MvcTestResult edited = put(user, start, limit("150.00"), "\"0\"");
+
+        assertThat(edited).hasStatus(HttpStatus.OK);
+        assertThat(json(edited).get("periodStart").asString()).isEqualTo(start.toString());
+        assertThat(json(edited).get("periodEnd").asString()).isEqualTo(end.toString());
+        assertThat(jdbc.sql("SELECT period_start || '/' || period_end FROM budget.budget WHERE id = :id")
+                .param("id", id).query(String.class).single()).isEqualTo("2020-01-01/2020-02-01");
+        assertThat(jdbc.sql("SELECT action || ':' || actor_user_id || ':' || household_id "
+                + "FROM budget.audit_event WHERE entity_id = :id ORDER BY occurred_at, id").param("id", id)
+                .query(String.class).list()).containsExactly("CREATE:" + user + ":" + household,
+                        "UPDATE:" + user + ":" + household);
+        assertThat(jdbc.sql("""
+                SELECT (changes -> 'overallLimitMinor' ->> 'old') || '>' || (changes -> 'overallLimitMinor' ->> 'new')
+                FROM budget.audit_event WHERE entity_id = :id AND action = 'UPDATE'
+                """).param("id", id).query(String.class).single()).isEqualTo("10000>15000");
+        // the audit of this household never belongs to another one
+        assertThat(jdbc.sql("SELECT count(*) FROM budget.audit_event WHERE entity_id = :id AND household_id <> :h")
+                .param("id", id).param("h", household).query(Integer.class).single()).isZero();
+        // the stranger cannot reach the past budget
+        assertThat(get(stranger, start)).hasStatus(HttpStatus.NOT_FOUND);
+        assertThat(put(stranger, start, limit("1.00"), "\"1\"")).hasStatus(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
     void BR_HH_03_both_members_create_and_edit_a_budget() {
         UUID user = users.active();
         UUID partner = users.active();
