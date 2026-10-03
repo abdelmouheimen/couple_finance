@@ -104,6 +104,22 @@ class BudgetTest {
     }
 
     @Test
+    void BR_BUD_07_past_period_edit_is_audited() {
+        // the clock is long after the period ended: the edit is still allowed and the calendar bounds are kept
+        Budget budget = budget("1500.00");
+        Clock muchLater = Clock.fixed(Instant.parse("2030-01-01T10:00:00Z"), ZoneOffset.UTC);
+        UserId editor = new UserId(UUID.randomUUID());
+
+        boolean changed = budget.setOverallLimit(eur("1600.00"), 2, muchLater, editor);
+
+        assertThat(changed).isTrue(); // the caller then writes the audit entry with old/new values
+        assertThat(budget.overallLimitMinor()).isEqualTo(160_000L);
+        assertThat(budget.updatedBy()).isEqualTo(editor.value());
+        assertThat(budget.periodStart()).isEqualTo(PERIOD.start());
+        assertThat(budget.periodEnd()).isEqualTo(PERIOD.end());
+    }
+
+    @Test
     void setting_the_same_limit_changes_nothing() {
         Budget budget = budget("1500.00");
         Instant updatedAt = budget.updatedAt();
