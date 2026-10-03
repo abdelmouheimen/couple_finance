@@ -36,6 +36,60 @@ orchestration belongs to the external PowerShell orchestrator.
 Never enable auto-merge, approve your own PR, push to `main`, force-push,
 or bypass branch protection or CI.
 
+# Integration mode (autonomous MVP orchestration)
+
+When your prompt starts with `ORCHESTRATION MODE: integration`, you were
+started by `scripts/autonomous-development.ps1` inside a dedicated Git
+worktree, on a branch it created from the integration branch
+(`origin/integration/mvp`). In that mode the following OVERRIDES the
+main-branch, push, PR and reviewer steps of this file; every engineering,
+security, Money, database, test and scope rule still applies unchanged.
+
+- Do not run `git checkout main`, `git pull`, or create/switch branches:
+  the branch is already checked out in the worktree you run in.
+- Dependencies are satisfied when they are on the integration base
+  (`git log origin/integration/mvp`), reviewed and integrated by the
+  orchestrator; they do not need to be merged into `main`. Never build on
+  any other unmerged branch.
+- Commit all work on the branch with `git commit --signoff` (Conventional
+  Commits, referencing the Issue), and leave the worktree clean.
+- Do NOT push, create or edit Pull Requests, merge, or edit Issues/labels:
+  the orchestrator pushes branches and integrates them; the human owns `main`.
+- Do NOT invoke the `code-reviewer` / `security-reviewer` subagents: the
+  orchestrator runs independent reviewers (and a mobile UX reviewer) in
+  fresh processes after a deterministic gate and sends you their findings
+  in a later "FIX MODE" run. Your mandatory self-review (§ "Mandatory
+  self-review") still happens before you finish.
+- RECOVERY (your prompt contains `RECOVERY:`): a previous process on this
+  item was interrupted and you have none of its memory. Rebuild the context
+  from CLAUDE.md, the Issue, `git status`, `git log`/`git diff` against
+  `origin/integration/mvp`, the existing code/tests and the orchestration
+  logs named in the prompt, then continue the existing work. Keep every
+  valid commit and uncommitted/untracked file; never `git reset`, `clean`,
+  `stash`, `rebase`, `restore` or `checkout -- <path>` it; fix genuinely
+  wrong work with a new commit.
+- FIX MODE: validate each finding against CLAUDE.md, BR rules, ADRs and
+  scope; fix valid BLOCKER/HIGH (and in-scope MEDIUM) findings with tests;
+  list rejected findings with a precise justification in `rejected`.
+- Merge conflicts with the integration branch: resolve them preserving
+  both sides' approved behaviour; regenerate generated files
+  (`gradlew.bat updateOpenApi`, `npm run generate:api`) instead of
+  hand-merging; never modify a Liquibase changeset that is already on the
+  integration base (renumber your own instead).
+- Autonomous decision policy: ordinary technical choices, compilation,
+  test, lint, build and conflict problems are yours to solve. Stop with
+  `BLOCKED` only when (1) authoritative requirements genuinely contradict
+  each other, (2) an unavailable external secret/account is strictly
+  required, (3) an approved product/security/architecture decision would
+  have to change, or (4) an action against `main` or production would be
+  required. Never weaken a requirement, test or check to get green.
+- End with exactly one line:
+
+      ORCHESTRATOR-RESULT: {"status":"DONE|BLOCKED","category":"NONE|HUMAN_DECISION|REQUIREMENTS_CONFLICT|MISSING_CREDENTIAL|MAIN_OR_PRODUCTION|TECHNICAL","summary":"...","rejected":[]}
+
+On Windows run the Gradle wrapper as `gradlew.bat` (or `./gradlew` from
+Git Bash) from `backend/`.
+
 # Context loading
 
 Read, in this order:

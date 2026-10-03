@@ -193,6 +193,12 @@ Workflow:
 
 Never automatically start the next Issue.
 
+When the external orchestrator runs an Issue in integration mode (prompt
+starting with `ORCHESTRATION MODE: integration`), steps 4-6 and 17-18 are
+replaced as described in "Autonomous development orchestration" below:
+the branch already exists in a dedicated worktree, and the orchestrator
+pushes and integrates it into `integration/mvp` instead of a per-Issue PR.
+
 ---
 
 ## 4.1 Branches
@@ -1205,24 +1211,49 @@ A change is done only when **all** of the following hold:
 - [ ] No secrets, no debug leftovers, no unrelated changes in the diff.
 
 When reporting completion, state what was verified and how; if something could not be run, say so explicitly.
+
 ## Autonomous development orchestration
 
 Autonomous backlog development is orchestrated **outside Claude** by the
-PowerShell script `scripts/autonomous-development.ps1`.
+PowerShell script `scripts/autonomous-development.ps1` (details:
+`scripts/orchestrator/README.md`).
 
 ```powershell
-.\scripts\autonomous-development.ps1 -DryRun        # analysis only, changes nothing
-.\scripts\autonomous-development.ps1 -MaxIssues 1   # one fresh Claude process, one PR
+.\scripts\autonomous-development.ps1 -DryRun                                   # DAG, waves, roles; changes nothing
+.\scripts\autonomous-development.ps1 -Target mvp -Parallelism 3 -AutoMergeIntegration
 ```
 
 Claude sessions must not orchestrate the backlog themselves: they never
 select, chain or start further Issues. The `development-orchestrator`
 subagent is superseded by the external script and must not be used.
 
+### Integration mode (approved by the Tech Lead, 2026-10-03)
+
+The orchestrator implements the approved backlog DAG without a human
+merge per Issue:
+
+- `main` stays the hard human boundary: no agent or script merges into,
+  pushes to or force-pushes `main`, bypasses branch protection, or
+  modifies production infrastructure.
+- Reviewed work is integrated automatically into the dedicated
+  integration branch `integration/mvp` (never force-pushed), by the
+  orchestrator only, with `merge --no-ff --signoff` and an
+  `Integrates-Issue: #N` trailer. Agents never push.
+- Each Issue gets a fresh Claude Code process per role, its own Git
+  worktree and its own `feature/<N>-<desc>` / `fix/<N>-<desc>` branch
+  created from the integration branch. In that mode no per-Issue Pull
+  Request is created; the "Integration mode" section of
+  `.claude/agents/issue-developer.md` overrides §4's branch/push/PR steps.
+  Everything else in this file (rules, tests, self-review, DCO sign-off,
+  Conventional Commits, scope discipline) applies unchanged.
+- When the DAG is complete and the integrated MVP is validated, the
+  orchestrator opens ONE Pull Request `integration/mvp -> main`. The
+  human performs acceptance testing and decides whether to merge.
+
 ### Fresh-context execution
 
 Autonomous backlog development uses one fresh Claude Code process per
-GitHub Issue.
+GitHub Issue (and per reviewer / fix pass).
 
 Each Issue implementation must run in an independent Claude Code context.
 
@@ -1241,22 +1272,24 @@ All required context must be reconstructed from durable project sources:
 
 Do not load all documentation into every context: read CLAUDE.md, the
 target Issue, its referenced rules and documents, and the relevant
-code/tests. One development context covers the whole Issue lifecycle; do
-not split one Issue into several fresh contexts per layer.
+code/tests. One development context covers the implementation of an
+Issue; review findings come back to a fresh fix context with the findings
+only.
 
-The external development orchestrator is responsible for selecting the
-next READY Issue and starting a new Claude Code process.
+The external development orchestrator is responsible for selecting READY
+Issues and starting new Claude Code processes.
 
-One Issue = one development context = one feature/fix branch = one Pull
-Request.
+One Issue = one development context = one worktree = one feature/fix
+branch = one integration merge.
 
-Dependent Issues must not start until their prerequisite implementation
-has been merged into main.
+Dependent Issues must not start until every prerequisite is integrated
+into the integration branch (or merged into `main`). Never build on an
+unreviewed or unintegrated branch.
 
-Independent READY Issues may be implemented while other Pull Requests
-wait for human review.
+Independent READY Issues run concurrently (default parallelism 3), each
+in its own worktree.
 
-Claude must never merge Pull Requests automatically.
+Claude must never merge Pull Requests.
 
 ### READY Issues
 
@@ -1269,12 +1302,18 @@ An Issue is eligible for autonomous implementation only when ALL hold:
 5. its acceptance criteria are sufficiently defined;
 6. required human product/architecture decisions are resolved (no
    unresolved `## Open question` section);
-7. no active Pull Request already implements it;
+7. no active Pull Request to `main` already implements it;
 8. every implementation dependency listed in its `## Dependencies`
-   section has a Pull Request MERGED into `main`.
+   section is integrated into the integration branch (an
+   `Integrates-Issue: #N` merge on it) or has a Pull Request MERGED into
+   `main`.
 
 A dependency is not satisfied merely because work started, a branch or PR
 exists, the Issue was closed, or Claude says implementation is complete.
+
+Labels and Issue bodies are human approval gates: the orchestrator and
+agents never add `status:ready` or remove `status:blocked` / open
+questions themselves.
 
 Dependencies are declared in the Issue body:
 
@@ -1287,33 +1326,55 @@ None
 or bullet lines referencing real Issue numbers, e.g. `- HOUSEHOLD-002 (#8)`.
 Non-bullet notes in that section are informational, not blocking.
 
-Selection order among eligible Issues: dependency order (Issues unblocking
-the most open work first), then `priority:high` / `priority:medium` /
-`priority:low`, then GitHub Issue number as final tie-breaker. Execution
-is sequential: one implementation process at a time unless the human
-explicitly authorizes parallel runs.
+Launch order among runnable Issues: Issues unblocking the most open work
+first, then `priority:high` / `priority:medium` / `priority:low`, then
+GitHub Issue number.
 
 ### Review loop
 
-Each Issue's diff is reviewed, before commit, by the independent
-read-only `code-reviewer` and `security-reviewer` subagents in addition to
-the issue-developer's mandatory self-review (§4.5). Valid BLOCKER/HIGH
-findings are fixed and re-verified; reviewer suggestions that conflict
-with approved rules, ADRs, the security model or the Issue scope require a
-human decision and stop the Issue.
+For every Issue: implementation -> deterministic verification gate (the
+CI commands) -> independent read-only `code-reviewer` -> `security-reviewer`
+when the change touches security-relevant areas -> `mobile-ux-reviewer`
+when it touches mobile UI -> fix -> gate -> re-review of what changed,
+bounded (default 3 cycles). BLOCKER and HIGH findings must be fixed before
+integration; in-scope MEDIUM findings get one fix pass; LOW findings are
+recorded. An Issue that still has BLOCKER/HIGH findings after the bound is
+marked blocked, its branch/worktree/logs are preserved, and only its
+dependents wait. Reviewer suggestions that conflict with approved rules,
+ADRs, the security model or the Issue scope are rejected with a
+justification or, when a human decision is needed, stop the Issue.
+
+After the DAG: full backend and mobile validation, an API acceptance
+journey (`integration-validator`), a holistic `mobile-ux-reviewer` pass
+with bounded fixes, then the human acceptance report.
+
+### Autonomous decision policy
+
+Agents resolve compilation, test, lint and build failures, ordinary merge
+conflicts, review findings, generated-client / OpenAPI synchronization
+and ordinary implementation choices themselves. Human input is required
+only when:
+
+1. authoritative requirements genuinely contradict each other and
+   repository precedence cannot resolve it;
+2. an unavailable external secret/account/credential is strictly required;
+3. proceeding requires changing an approved product, security or
+   architecture decision;
+4. a destructive action against `main` or production would be required;
+5. the integrated MVP is ready for human acceptance testing.
 
 ### Stop conditions
 
-The autonomous loop stops when:
+The autonomous run stops when:
 
-- no READY Issue remains;
-- human input is required;
-- a blocking failure occurs;
-- continuing would be unsafe.
+- the integrated MVP is ready for human acceptance testing;
+- no runnable Issue remains and the remaining ones need a human
+  (approval labels, open questions, blocked Issues and their dependents);
+- continuing would be unsafe (unexpected repository state).
 
 The orchestrator and all agents must never merge Pull Requests, enable
 auto-merge, approve their own Pull Requests, push to `main`, force-push,
-build dependent work on unmerged feature branches, invent missing
+build dependent work on unintegrated branches, invent missing
 requirements, or bypass branch protection, CI or required checks.
 
-Human review and merge remain mandatory.
+Human acceptance and the merge into `main` remain mandatory.

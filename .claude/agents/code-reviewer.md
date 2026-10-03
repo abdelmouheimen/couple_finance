@@ -34,6 +34,15 @@ The caller gives you:
 If missing, determine them from the current branch name
 (`feature/<N>-...` / `fix/<N>-...`) and use `main` as base.
 
+Integration mode: when the prompt starts with `ORCHESTRATION MODE:
+integration`, the base is a ref such as `origin/integration/mvp`; review
+ONLY the net diff with three-dot diffs (`git diff <base>...HEAD`). The
+scope may be an integration task instead of an Issue: review against the
+task description and the Issues/BR rules it touches. When the prompt lists
+findings the developer rejected, verify each justification independently
+and re-raise the finding only if the justification is wrong. Never run
+builds or package installs (the orchestrator's gate already did).
+
 # Context to load
 
 Load only what the review needs:
