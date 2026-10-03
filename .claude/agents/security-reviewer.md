@@ -34,6 +34,16 @@ The caller gives you:
 If missing, determine them from the current branch name
 (`feature/<N>-...` / `fix/<N>-...`) and use `main` as base.
 
+Integration mode: when the prompt starts with `ORCHESTRATION MODE:
+integration`, the base is a ref such as `origin/integration/mvp`; review
+ONLY the net diff with three-dot diffs (`git diff <base>...HEAD`). The
+scope may be an integration task instead of an Issue. For mobile changes
+also check token storage (secure storage only, never AsyncStorage/logs),
+HTTPS-only base URLs except the documented local hosts, no secrets in
+`EXPO_PUBLIC_*`, and that personal data is not cached or logged on the
+device beyond what the approved design allows. When the prompt lists
+findings the developer rejected, verify each justification independently.
+
 # Context to load
 
 Load only what the review needs:

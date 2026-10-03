@@ -15,6 +15,7 @@ analysis (always validated and confirmed by a human), budgets, savings goals and
 | `api/openapi.yaml` | Committed OpenAPI contract, generated from the backend, consumed by the mobile app. |
 | `docs/` | Product, architecture, domain model, database schema and ADRs — the source of truth. |
 | `CLAUDE.md` | Engineering rules (also for Claude Code). |
+| `scripts/` | Autonomous MVP orchestrator and human acceptance launcher, see [scripts/orchestrator/README.md](scripts/orchestrator/README.md). |
 
 Start with [docs/product/vision.md](docs/product/vision.md) and
 [docs/architecture/architecture.md](docs/architecture/architecture.md).
