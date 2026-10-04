@@ -6,7 +6,6 @@ import { useHouseholdContext } from "@/features/household/HouseholdProvider";
 import { errorMessage } from "@/shared/i18n/errorMessage";
 import { strings } from "@/shared/i18n/strings";
 import {
-    Button,
     Card,
     Chip,
     EmptyState,
@@ -113,13 +112,22 @@ export function ExpenseListScreen() {
             <Text variant="headline" accessibilityRole="header">
                 {strings.expense.title}
             </Text>
+            {totals ? (
+                <Card>
+                    <Text variant="caption" tone="secondary" bold>
+                        {strings.expense.total}
+                    </Text>
+                    {/* Period total comes from the API (ExpenseTotals); never summed on the device. */}
+                    <MoneyText money={toMoney(totals.net)} scope={totals.scope} />
+                </Card>
+            ) : null}
             <Selector
                 label={strings.expense.scopeLabel}
                 value={scope}
                 onChange={setScope}
                 options={[
-                    { value: "HOUSEHOLD", label: strings.expense.shared },
-                    { value: "PERSONAL", label: strings.expense.personal },
+                    { value: "HOUSEHOLD", label: strings.scope.HOUSEHOLD },
+                    { value: "PERSONAL", label: strings.scope.PERSONAL },
                 ]}
             />
             <TextInput
@@ -191,20 +199,6 @@ export function ExpenseListScreen() {
                     />
                 ))}
             </View>
-            {totals ? (
-                <Card>
-                    <Text variant="caption" tone="secondary" bold>
-                        {strings.expense.total}
-                    </Text>
-                    {/* Period total comes from the API (ExpenseTotals); never summed on the device. */}
-                    <MoneyText money={toMoney(totals.net)} scope={totals.scope} />
-                </Card>
-            ) : null}
-            <Button
-                variant="secondary"
-                label={strings.category.manage}
-                onPress={() => router.push("/categories")}
-            />
         </View>
     );
 

@@ -57,6 +57,9 @@ function EditForm({
                 label={strings.budget.overallField}
                 value={form.overall}
                 currency={currency}
+                autoFocus
+                returnKeyType="done"
+                {...(form.lines.length === 0 ? { onSubmitEditing: submit } : {})}
                 onChangeValue={(overall) => setForm((f) => ({ ...f, overall }))}
                 {...(errors.overall ? { error: errors.overall } : {})}
             />
@@ -70,6 +73,11 @@ function EditForm({
                                 label={strings.budget.categoryField(name)}
                                 value={line.amount}
                                 currency={currency}
+                                returnKeyType="done"
+                                {...(line.categoryId ===
+                                form.lines[form.lines.length - 1]?.categoryId
+                                    ? { onSubmitEditing: submit }
+                                    : {})}
                                 onChangeValue={(amount) =>
                                     setForm((f) => ({
                                         ...f,

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { RefreshControl, StyleSheet, View } from "react-native";
 import { shiftBudgetPeriod } from "@/features/household/currentPeriod";
 import { useHouseholdContext } from "@/features/household/HouseholdProvider";
 import type { components } from "@/shared/api/client";
@@ -129,6 +129,8 @@ export function BudgetScreen() {
     const { household, readOnly, currentPeriod } = useHouseholdContext();
     const queryClient = useQueryClient();
     const toast = useToast();
+    const colors = useColors();
+    const [refreshing, setRefreshing] = useState(false);
     const [offset, setOffset] = useState(0);
     const [editing, setEditing] = useState(false);
     const [copyError, setCopyError] = useState<unknown>(null);
@@ -146,6 +148,14 @@ export function BudgetScreen() {
         queryFn: fetchAllCategories,
         retry: false,
     });
+    const refresh = async () => {
+        setRefreshing(true);
+        try {
+            await Promise.all([budgetQuery.refetch(), categoriesQuery.refetch()]);
+        } finally {
+            setRefreshing(false);
+        }
+    };
     const categories = categoriesQuery.data ?? [];
     const budget = budgetQuery.data ?? null;
 
@@ -253,7 +263,19 @@ export function BudgetScreen() {
     }
 
     return (
-        <Screen bottomInset={fabContentInset}>
+        <Screen
+            bottomInset={fabContentInset}
+            refreshControl={
+                <RefreshControl
+                    refreshing={refreshing}
+                    onRefresh={() => void refresh()}
+                    tintColor={colors.primary}
+                />
+            }
+        >
+            <Text variant="headline" accessibilityRole="header">
+                {strings.tabs.budget}
+            </Text>
             <View style={styles.header}>
                 <IconButton
                     icon="chevronBack"

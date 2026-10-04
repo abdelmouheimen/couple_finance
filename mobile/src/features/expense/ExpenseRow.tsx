@@ -20,7 +20,7 @@ export function ExpenseRow({ expense, title, dateLabel, categoryLabel, onPress }
     const colors = useColors();
     const money = toMoney(expense.amount);
     const personal = expense.sharingType === "PERSONAL";
-    const scope = personal ? strings.expense.personalBadge : strings.expense.shared;
+    const scope = personal ? strings.scope.PERSONAL : strings.scope.HOUSEHOLD;
     const shownTitle = expense.kind === "REFUND" ? `${strings.expense.refund}: ${title}` : title;
     return (
         <Pressable
@@ -37,13 +37,15 @@ export function ExpenseRow({ expense, title, dateLabel, categoryLabel, onPress }
         >
             <View style={styles.main}>
                 <Text bold>{shownTitle}</Text>
-                <Text variant="caption" tone="secondary">
-                    {categoryLabel ? `${categoryLabel} · ${scope}` : scope}
-                </Text>
+                {categoryLabel ? (
+                    <Text variant="caption" tone="secondary">
+                        {categoryLabel}
+                    </Text>
+                ) : null}
                 {personal ? (
                     <View style={[styles.badge, { borderColor: colors.primary }]}>
                         <Text variant="caption" tone="primary" bold>
-                            {strings.expense.personalBadge}
+                            {strings.scope.PERSONAL}
                         </Text>
                     </View>
                 ) : null}

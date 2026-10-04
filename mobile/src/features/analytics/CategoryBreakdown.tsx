@@ -27,20 +27,7 @@ export function CategoryBreakdown({ rows, refunds, onSelect }: Props) {
             <Text variant="title" accessibilityRole="header">
                 {strings.dashboard.whereTitle}
             </Text>
-            <View
-                testID="category-chart"
-                accessibilityLabel={
-                    rows.length > 0
-                        ? `${strings.dashboard.chartSummary(rows.length)}: ${rows
-                              .map(
-                                  (r) =>
-                                      `${r.name} ${formatMoney(r.total)} ${r.percentage ?? ""} %`,
-                              )
-                              .join(", ")}`
-                        : undefined
-                }
-                style={styles.chart}
-            >
+            <View testID="category-chart" style={styles.chart}>
                 {rows.map((r) => (
                     <View key={r.categoryId}>
                         <ListRow
@@ -51,6 +38,7 @@ export function CategoryBreakdown({ rows, refunds, onSelect }: Props) {
                                     ? `${formatMoney(r.total)} · ${r.percentage} %`
                                     : formatMoney(r.total)
                             }
+                            accessibilityHint={strings.dashboard.categoryHint}
                             onPress={() => onSelect(r.categoryId)}
                         />
                         <View

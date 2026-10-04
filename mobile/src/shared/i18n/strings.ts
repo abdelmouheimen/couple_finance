@@ -81,6 +81,8 @@ export const strings = {
         resend: "Resend the email",
         resent: "If your account is pending, a new email is on its way.",
         signOut: "Sign out",
+        signOutTitle: "Sign out?",
+        signOutMessage: "You will need to sign in again to see your household.",
         restoreFailed: "We couldn't restore your session.",
     },
     household: {
@@ -134,7 +136,7 @@ export const strings = {
         setBudget: "Set a budget",
         noBudgetMessage: "No budget set for this period.",
         whereTitle: "Where it goes",
-        chartSummary: (count: number) => `Spending by category, ${count} top categories`,
+        categoryHint: "Shows these expenses",
         barLabel: (name: string, percentage: string) => `${name}, ${percentage} %`,
         refundsTitle: "Net refunds",
         unknownCategory: "Category",
@@ -240,9 +242,7 @@ export const strings = {
         searchLabel: "Search expenses",
         searchPlaceholder: "Merchant or note",
         scopeLabel: "View",
-        shared: "Shared",
-        personal: "Personal",
-        personalBadge: "Personal",
+        // One label set for the scope everywhere (same wording as strings.scope).
         periodLabel: "Period",
         periodCurrent: "This period",
         periodAll: "All time",

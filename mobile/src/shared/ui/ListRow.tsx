@@ -11,9 +11,10 @@ interface Props {
     trailing?: ReactNode;
     onPress?: () => void;
     testID?: string;
+    accessibilityHint?: string;
 }
 
-export function ListRow({ title, subtitle, trailing, onPress, testID }: Props) {
+export function ListRow({ title, subtitle, trailing, onPress, testID, accessibilityHint }: Props) {
     const colors = useColors();
     const content = (
         <>
@@ -41,6 +42,7 @@ export function ListRow({ title, subtitle, trailing, onPress, testID }: Props) {
             testID={testID}
             accessibilityRole="button"
             accessibilityLabel={subtitle ? `${title}, ${subtitle}` : title}
+            accessibilityHint={accessibilityHint}
             onPress={onPress}
             style={styles.row}
         >
