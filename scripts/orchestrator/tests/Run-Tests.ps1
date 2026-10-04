@@ -278,6 +278,20 @@ Test-Case 'Claude failures are classified' {
     Assert-Equal 'TRANSIENT' (Get-AgentFailureKind 'request failed: getaddrinfo ENOTFOUND api.anthropic.com')
     Assert-Equal 'CRASH' (Get-AgentFailureKind 'something odd'); Assert-Equal 'CRASH' (Get-AgentFailureKind 'token expired' -TimedOut $true)
 }
+Test-Case 'REGRESSION run 20261003T180545Z: subscription session limit is AUTH, not a crash' {
+    $real = 'You''ve hit your session limit ' + [char]0x00B7 + ' resets 10:30pm (Europe/Paris)'
+    Assert-Equal 'AUTH' (Get-AgentFailureKind $real)
+    Assert-Equal 'AUTH' (Get-AgentFailureKind $real -ApiErrorStatus 429)
+    Assert-Equal 'AUTH' (Get-AgentFailureKind 'You''ve hit your weekly limit')
+    Assert-Equal 'AUTH' (Get-AgentFailureKind '' -ApiErrorStatus 401)
+    Assert-Equal 'TRANSIENT' (Get-AgentFailureKind 'API Error' -ApiErrorStatus 429)
+    Assert-Equal 'TRANSIENT' (Get-AgentFailureKind '' -ApiErrorStatus 529)
+    # The run object Invoke-ClaudeAgent returned for issue-69/develop-resume.
+    $run = [pscustomobject]@{ ExitCode = 1; TimedOut = $false; IsError = $true; Text = $real; StderrTail = ''; ApiErrorStatus = 429 }
+    Assert-Equal 'AUTH' (Get-AgentRunFailure $run $false)
+    $legacy = [pscustomobject]@{ ExitCode = 1; TimedOut = $false; IsError = $true; Text = 'boom'; StderrTail = '' }
+    Assert-Equal 'CRASH' (Get-AgentRunFailure $legacy $false) 'a run without ApiErrorStatus must still classify'
+}
 Test-Case 'plan uses canonical phases (VALIDATED awaits integration, INTERRUPTED resumes)' {
     $plan = New-ExecutionPlan -Issues (New-ExampleIssues) -Context @{ Done = $done; LocalState = @{ 76 = @{ Phase = 'VALIDATED' }; 77 = @{ Phase = 'INTERRUPTED'; InterruptedPhase = 'FIXING' } } }
     Assert-Equal 'APPROVED' $plan[76].Status
@@ -485,6 +499,23 @@ Test-Case 'RECOVERY expired Claude session checkpoints INTERRUPTED (exit 3) and 
         Assert-Equal 0 $r2.ExitCode ("`n" + $r2.Output)
         Assert-Equal 'VALIDATED' (Read-FixtureState $fx 'issue-7').Phase
         Assert-Equal 'issue-developer:auth-failed,issue-developer,code-reviewer' (Get-Calls $fx)
+    } finally { Remove-Fixture $fx }
+}
+Test-Case 'REGRESSION run 20261003T180545Z: session limit mid-implementation pauses (exit 3) and keeps the work' {
+    $fx = New-Fixture
+    try {
+        $wt = Add-FixtureWorktree $fx 'issue-7' 'feature/7-doc'
+        $r1 = Invoke-FixtureWorker $fx $wt 'feature/7-doc' @{ FAKE_CLAUDE_FAIL = 'session-limit'; FAKE_CLAUDE_REVIEW_CLEAN = '1' }
+        Assert-Equal 3 $r1.ExitCode ('limit treated as a crash (exit 1 -> bounded relaunch -> BLOCKED)' + "`n" + $r1.Output)
+        $s = Read-FixtureState $fx 'issue-7'
+        Assert-Equal 'INTERRUPTED' $s.Phase; Assert-Equal 'RUNNING' $s.InterruptedPhase; Assert-Equal 'AUTH' $s.InterruptKind
+        Assert-Equal 'partial feature' ((Get-Content -LiteralPath (Join-Path $wt 'docs\feature.md') -Raw).Trim()) 'partial work lost'
+        Assert-Equal 'recovery-agent' (Invoke-FixtureRecovery $fx)[0].Decision.Action
+        $r2 = Invoke-FixtureWorker $fx $wt 'feature/7-doc' @{ FAKE_CLAUDE_REVIEW_CLEAN = '1' }
+        Assert-Equal 0 $r2.ExitCode ("`n" + $r2.Output)
+        Assert-Equal 'VALIDATED' (Read-FixtureState $fx 'issue-7').Phase
+        Assert-Equal 'issue-developer:session-limit,issue-developer,code-reviewer' (Get-Calls $fx)
+        Assert-Equal 'partial feature' ((Get-Content -LiteralPath (Join-Path $wt 'docs\feature.md') -Raw).Trim()) 'recovery restarted from scratch'
     } finally { Remove-Fixture $fx }
 }
 
