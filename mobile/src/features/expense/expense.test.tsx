@@ -18,7 +18,11 @@ const mockRouter = {
     replace: jest.fn(),
     canGoBack: () => true,
 };
-jest.mock("expo-router", () => ({ useRouter: () => mockRouter }));
+let mockParams: Record<string, string> = {};
+jest.mock("expo-router", () => ({
+    useRouter: () => mockRouter,
+    useLocalSearchParams: () => mockParams,
+}));
 
 const NOW = () => new Date("2026-03-15T10:00:00Z");
 const ME = "00000000-0000-7000-8000-00000000000a";
@@ -133,6 +137,7 @@ async function mount(ui: ReactNode) {
 }
 
 beforeEach(() => {
+    mockParams = {};
     Object.values(mockRouter).forEach((f) => {
         if (jest.isMockFunction(f)) f.mockClear();
     });
@@ -269,6 +274,43 @@ describe("quick add", () => {
 });
 
 describe("expense list", () => {
+    test("dashboard_drill_down_seeds_scope_and_category_filters", async () => {
+        mockParams = { categoryId: "cat-1", periodStart: "2026-03-01", scope: "PERSONAL" };
+        const api = installApi({
+            "GET /api/v1/expenses": () => json(200, page([expense()], {}, "PERSONAL")),
+        });
+        await mount(<ExpenseListScreen />);
+        await screen.findByText(/Bakery/);
+        const first = api.of("GET /api/v1/expenses")[0]!;
+        expect(first.url.searchParams.get("scope")).toBe("PERSONAL");
+        expect(first.url.searchParams.get("categoryId")).toBe("cat-1");
+        expect(first.url.searchParams.get("dateFrom")).toBe("2026-03-01");
+    });
+
+    test("repeat_drill_down_with_a_new_navigation_nonce_reseeds_the_filters", async () => {
+        mockParams = {
+            categoryId: "cat-1",
+            periodStart: "2026-03-01",
+            scope: "HOUSEHOLD",
+            nav: "1",
+        };
+        const api = installApi({
+            "GET /api/v1/expenses": () => json(200, page([])),
+        });
+        await mount(<ExpenseListScreen />);
+        await fireEvent.press(await screen.findByText("Clear filters"));
+        await waitFor(() => {
+            const calls = api.of("GET /api/v1/expenses");
+            expect(calls[calls.length - 1]!.url.searchParams.get("categoryId")).toBeNull();
+        });
+        mockParams = { ...mockParams, nav: "2" };
+        await fireEvent.changeText(screen.getByPlaceholderText("Merchant or note"), "x"); // re-render
+        await waitFor(() => {
+            const calls = api.of("GET /api/v1/expenses");
+            expect(calls[calls.length - 1]!.url.searchParams.get("categoryId")).toBe("cat-1");
+        });
+    });
+
     test("BR_SCP_03_paginates_by_cursor_and_shows_the_api_total", async () => {
         const second = expense({ id: "e-2", merchant: "Market", date: "2026-03-14" });
         const api = installApi({

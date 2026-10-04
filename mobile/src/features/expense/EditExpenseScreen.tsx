@@ -41,7 +41,7 @@ export function EditExpenseScreen({ id }: { id: string }) {
     }
     if (expense.isPending || categories.isPending || me.isPending) {
         return (
-            <Screen>
+            <Screen onClose={close}>
                 <Skeleton variant="card" />
             </Screen>
         );

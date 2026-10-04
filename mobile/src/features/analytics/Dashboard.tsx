@@ -64,7 +64,12 @@ export function Dashboard() {
     const openCategory = (categoryId: string) =>
         router.push({
             pathname: "/expenses",
-            params: { categoryId, periodStart: currentPeriod.start },
+            params: {
+                categoryId,
+                periodStart: currentPeriod.start,
+                scope,
+                nav: String(Date.now()), // per-navigation nonce: re-seeds the filters on a repeat drill-down
+            },
         });
     const openBudget = () => router.push("/budget");
     const openAdd = () => router.push("/add-expense");
