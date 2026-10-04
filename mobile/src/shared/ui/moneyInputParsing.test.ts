@@ -8,7 +8,7 @@ import {
 } from "./moneyInputParsing";
 
 test("BR_MON_01_keeps_digits_and_one_separator_only", () => {
-    expect(sanitizeAmount("1a2b.3c.4", 2)).toBe("12.34");
+    expect(sanitizeAmount("1a2b.3c", 2)).toBe("12.3");
     expect(sanitizeAmount("12,5", 2)).toBe("12.5");
     expect(sanitizeAmount("-5", 2)).toBe("5");
     expect(sanitizeAmount("1e5", 2)).toBe("15");
@@ -56,4 +56,10 @@ test("property: output only ever holds digits and at most one dot", () => {
             expect(sanitizeAmount(raw, 2)).toMatch(/^\d*(\.\d{0,2})?$/);
         }),
     );
+});
+
+test("BR_MON_01_pasted_grouped_input_is_not_truncated", () => {
+    expect(sanitizeAmount("1,234.50", 2)).toBe("1234.50");
+    expect(sanitizeAmount("1.234,50", 2)).toBe("1234.50");
+    expect(sanitizeAmount("1,234,567", 2)).toBe("1234.56");
 });

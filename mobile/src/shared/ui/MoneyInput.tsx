@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { StyleSheet, TextInput as RNTextInput, View } from "react-native";
+import { StyleSheet, TextInput as RNTextInput, type TextInputProps, View } from "react-native";
 import { currencyDecimals } from "@/shared/money/money";
 import { Text } from "./Text";
 import {
@@ -20,7 +20,12 @@ import {
     tabularFigures,
 } from "./theme/tokens";
 
-interface Props {
+type Forwarded = Pick<
+    TextInputProps,
+    "autoFocus" | "returnKeyType" | "onSubmitEditing" | "placeholder" | "testID"
+>;
+
+interface Props extends Forwarded {
     label: string;
     /** Canonical decimal string ("12.50") or "". */
     value: string;
@@ -31,7 +36,19 @@ interface Props {
     error?: string;
 }
 
-export function MoneyInput({ label, value, onChangeValue, currency, locale, error }: Props) {
+export function MoneyInput({
+    label,
+    value,
+    onChangeValue,
+    currency,
+    locale,
+    error,
+    autoFocus,
+    returnKeyType,
+    onSubmitEditing,
+    placeholder,
+    testID,
+}: Props) {
     const colors = useColors();
     const decimals = currencyDecimals(currency);
     const separator = decimalSeparator(locale);
@@ -56,6 +73,12 @@ export function MoneyInput({ label, value, onChangeValue, currency, locale, erro
                 <RNTextInput
                     accessibilityLabel={`${label} (${currency})`}
                     accessibilityHint={error}
+                    autoFocus={autoFocus}
+                    returnKeyType={returnKeyType}
+                    onSubmitEditing={onSubmitEditing}
+                    placeholder={placeholder ?? toDisplay(padAmount("0", decimals), separator)}
+                    placeholderTextColor={colors.textSecondary}
+                    testID={testID}
                     keyboardType={decimals > 0 ? "decimal-pad" : "number-pad"}
                     maxFontSizeMultiplier={maxFontScale}
                     value={shown}

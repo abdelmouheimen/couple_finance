@@ -154,3 +154,12 @@ export type IconName = keyof typeof icons;
 export const iconSize = { md: 20, lg: 28 } as const;
 export const progressBarHeight = 10;
 export const fabSize = 56;
+/** Opacity tokens (disabled controls are exempt from WCAG contrast; the intent is explicit here). */
+export const opacity = { disabled: 0.5, pressed: 0.85, opaque: 1 } as const;
+/** Reserved bottom inset so tab content is never hidden under the floating action button. */
+export const fabContentInset = fabSize + spacing.xl;
+
+/** Sheets never grow past this share of the window height; their content scrolls. */
+export const sheetMaxHeightRatio = 0.9;
+/** Error toasts stay long enough to be read (WCAG 2.2.1); success toasts are brief. */
+export const errorToastDurationMs = 8000;

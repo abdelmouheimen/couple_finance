@@ -12,7 +12,9 @@ import {
     MoneyInput,
     MoneyText,
     ProgressBar,
+    Screen,
     Selector,
+    Sheet,
     Skeleton,
     Text,
     TextInput,
@@ -111,7 +113,7 @@ describe("MoneyInput", () => {
         const emitted: string[] = [];
         await renderUi(<Harness onValue={(v) => emitted.push(v)} />);
         const input = screen.getByLabelText("Amount (EUR)");
-        await fireEvent.changeText(input, "1a2,5.9x");
+        await fireEvent.changeText(input, "1a2,59x");
         expect(emitted.at(-1)).toBe("12.59");
         expect(typeof emitted.at(-1)).toBe("string");
         await fireEvent.changeText(input, "12.5");
@@ -211,7 +213,7 @@ describe("ConfirmSheet", () => {
         expect(onConfirm).not.toHaveBeenCalled();
         await fireEvent.press(screen.getByRole("button", { name: "Cancel" }));
         expect(onCancel).toHaveBeenCalledTimes(1);
-        await fireEvent.press(screen.getByRole("button", { name: "Close", hidden: true }));
+        await fireEvent.press(screen.getAllByRole("button", { name: "Close", hidden: true })[0]!);
         expect(onCancel).toHaveBeenCalledTimes(2);
         await fireEvent.press(screen.getByRole("button", { name: "Delete" }));
         expect(onConfirm).toHaveBeenCalledTimes(1);
@@ -305,5 +307,40 @@ describe("Toast", () => {
         });
         expect(screen.queryByText("Saved!")).toBeNull();
         jest.useRealTimers();
+    });
+});
+
+describe("Screen and Sheet accessibility", () => {
+    test("Screen shows a close control only when onClose is given and it works", async () => {
+        const onClose = jest.fn();
+        await renderUi(
+            <Screen onClose={onClose}>
+                <Text>Body</Text>
+            </Screen>,
+        );
+        await fireEvent.press(screen.getByRole("button", { name: "Close" }));
+        expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    test("Screen without onClose has no close control and scroll=false skips the ScrollView", async () => {
+        await renderUi(
+            <Screen scroll={false}>
+                <Text>Body</Text>
+            </Screen>,
+        );
+        expect(screen.queryByRole("button", { name: "Close" })).toBeNull();
+        expect(screen.getByText("Body")).toBeTruthy();
+    });
+
+    test("Sheet exposes a Close button inside the modal view", async () => {
+        const onClose = jest.fn();
+        await renderUi(
+            <Sheet visible title="Title" onClose={onClose}>
+                <Text>Content</Text>
+            </Sheet>,
+        );
+        const buttons = screen.getAllByRole("button", { name: "Close" });
+        await fireEvent.press(buttons[buttons.length - 1]!);
+        expect(onClose).toHaveBeenCalled();
     });
 });

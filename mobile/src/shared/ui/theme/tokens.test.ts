@@ -34,6 +34,7 @@ describe("no hard-coded visual values outside tokens", () => {
         ["rgb(a) color", /rgba?\(/],
         ["literal color", /[cC]olor\s*:\s*["']/],
         ["literal font size", /fontSize\s*:\s*\d/],
+        ["literal opacity", /opacity\s*:\s*[0-9.]/],
         ["literal spacing/radius", /(padding|margin|gap|[rR]adius|borderWidth)\w*\s*:\s*[1-9]/],
     ];
 

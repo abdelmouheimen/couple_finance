@@ -22,6 +22,8 @@ export default function TabsLayout() {
     const colors = useColors();
     const router = useRouter();
     const insets = useSafeAreaInsets();
+    // Explicit, deterministic tab bar height so the FAB offset never relies on a guess.
+    const tabBarHeight = minTouchTarget + spacing.lg + insets.bottom;
     return (
         <View style={styles.flex}>
             <Tabs
@@ -29,7 +31,11 @@ export default function TabsLayout() {
                     headerShown: false,
                     tabBarActiveTintColor: colors.primary,
                     tabBarInactiveTintColor: colors.textSecondary,
-                    tabBarStyle: { backgroundColor: colors.surface, minHeight: minTouchTarget },
+                    tabBarStyle: {
+                        backgroundColor: colors.surface,
+                        height: tabBarHeight,
+                        paddingBottom: insets.bottom,
+                    },
                     tabBarItemStyle: { minHeight: minTouchTarget },
                 }}
             >
@@ -55,7 +61,7 @@ export default function TabsLayout() {
                     elevation.floating,
                     {
                         backgroundColor: colors.primary,
-                        bottom: insets.bottom + minTouchTarget + spacing.xl,
+                        bottom: tabBarHeight + spacing.md,
                     },
                 ]}
             >

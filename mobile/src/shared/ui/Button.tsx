@@ -2,7 +2,7 @@ import { ActivityIndicator, Pressable, StyleSheet } from "react-native";
 import { strings } from "@/shared/i18n/strings";
 import { Text } from "./Text";
 import { useColors } from "./theme/theme";
-import { borderWidth, minTouchTarget, radius, spacing } from "./theme/tokens";
+import { borderWidth, minTouchTarget, opacity, radius, spacing } from "./theme/tokens";
 
 export type ButtonVariant = "primary" | "secondary" | "destructive";
 
@@ -36,7 +36,11 @@ export function Button({ label, onPress, variant = "primary", loading, disabled,
                 {
                     backgroundColor: palette.bg,
                     borderColor: palette.bg,
-                    opacity: inactive ? 0.5 : pressed ? 0.85 : 1,
+                    opacity: inactive
+                        ? opacity.disabled
+                        : pressed
+                          ? opacity.pressed
+                          : opacity.opaque,
                 },
             ]}
         >

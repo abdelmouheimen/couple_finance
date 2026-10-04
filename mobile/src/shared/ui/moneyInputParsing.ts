@@ -4,7 +4,14 @@
  */
 
 /** Keeps digits and a single decimal separator ("." or ","), truncated to `decimals` fraction digits. */
-export function sanitizeAmount(raw: string, decimals: number): string {
+export function sanitizeAmount(input: string, decimals: number): string {
+    // With several separators (pasted "1,234.50") the last one is the decimal point and the
+    // earlier ones are grouping separators, so a pasted value is never silently truncated.
+    let raw = input;
+    if ((input.match(/[.,]/g) ?? []).length > 1) {
+        const last = Math.max(input.lastIndexOf("."), input.lastIndexOf(","));
+        raw = input.slice(0, last).replace(/[.,]/g, "") + input.slice(last);
+    }
     let whole = "";
     let fraction = "";
     let seenSeparator = false;
