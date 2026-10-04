@@ -1,13 +1,5 @@
-import { Placeholder } from "@/shared/ui";
-import { fabContentInset } from "@/shared/ui/theme/tokens";
-import { strings } from "@/shared/i18n/strings";
+import { BudgetScreen } from "@/features/budget/BudgetScreen";
 
 export default function Budget() {
-    return (
-        <Placeholder
-            title={strings.tabs.budget}
-            message={strings.placeholders.budget}
-            bottomInset={fabContentInset}
-        />
-    );
+    return <BudgetScreen />;
 }

@@ -6,6 +6,9 @@ import Expenses from "../app/(tabs)/expenses";
 import Budget from "../app/(tabs)/budget";
 import AddExpense from "../app/add-expense";
 
+// Navigation-only test: the budget screen needs the household provider.
+jest.mock("@/features/budget/BudgetScreen", () => ({ BudgetScreen: () => null }));
+
 const routes = {
     "(tabs)/_layout": TabsLayout,
     "(tabs)/index": Home,
