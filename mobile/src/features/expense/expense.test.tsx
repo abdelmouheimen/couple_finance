@@ -287,6 +287,25 @@ describe("expense list", () => {
         expect(first.url.searchParams.get("dateFrom")).toBe("2026-03-01");
     });
 
+    test("repeat_drill_down_with_a_new_navigation_nonce_reseeds_the_filters", async () => {
+        mockParams = { categoryId: "cat-1", periodStart: "2026-03-01", scope: "HOUSEHOLD", nav: "1" };
+        const api = installApi({
+            "GET /api/v1/expenses": () => json(200, page([])),
+        });
+        await mount(<ExpenseListScreen />);
+        await fireEvent.press(await screen.findByText("Clear filters"));
+        await waitFor(() => {
+            const calls = api.of("GET /api/v1/expenses");
+            expect(calls[calls.length - 1]!.url.searchParams.get("categoryId")).toBeNull();
+        });
+        mockParams = { ...mockParams, nav: "2" };
+        await fireEvent.changeText(screen.getByPlaceholderText("Merchant or note"), "x"); // re-render
+        await waitFor(() => {
+            const calls = api.of("GET /api/v1/expenses");
+            expect(calls[calls.length - 1]!.url.searchParams.get("categoryId")).toBe("cat-1");
+        });
+    });
+
     test("BR_SCP_03_paginates_by_cursor_and_shows_the_api_total", async () => {
         const second = expense({ id: "e-2", merchant: "Market", date: "2026-03-14" });
         const api = installApi({

@@ -57,6 +57,7 @@ export function ExpenseListScreen() {
         categoryId?: string;
         periodStart?: string;
         scope?: string;
+        nav?: string;
     }>();
     const [scope, setScope] = useState<ExpenseScope>(
         params.scope === "PERSONAL" ? "PERSONAL" : "HOUSEHOLD",
@@ -72,11 +73,11 @@ export function ExpenseListScreen() {
 
     // The tab stays mounted: re-seed the filters whenever a drill-down pushes new params
     // (adjusting state during render, keyed on the params, instead of an effect).
-    const paramsKey = `${params.categoryId ?? ""}|${params.periodStart ?? ""}|${params.scope ?? ""}`;
+    const paramsKey = `${params.categoryId ?? ""}|${params.periodStart ?? ""}|${params.scope ?? ""}|${params.nav ?? ""}`;
     const [seenParams, setSeenParams] = useState(paramsKey);
     if (seenParams !== paramsKey) {
         setSeenParams(paramsKey);
-        if (paramsKey !== "||") {
+        if (paramsKey !== "|||") {
             setCategoryId(params.categoryId);
             setScope(params.scope === "PERSONAL" ? "PERSONAL" : "HOUSEHOLD");
             setPeriod(

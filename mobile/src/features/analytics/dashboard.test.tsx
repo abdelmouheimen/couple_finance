@@ -205,7 +205,12 @@ describe("dashboard", () => {
         fireEvent.press(await screen.findByTestId(`category-row-${GROCERIES}`));
         expect(mockPush).toHaveBeenCalledWith({
             pathname: "/expenses",
-            params: { categoryId: GROCERIES, periodStart: "2026-03-01", scope: "HOUSEHOLD" },
+            params: {
+                categoryId: GROCERIES,
+                periodStart: "2026-03-01",
+                scope: "HOUSEHOLD",
+                nav: expect.any(String),
+            },
         });
     });
 
