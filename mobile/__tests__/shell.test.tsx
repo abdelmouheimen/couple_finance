@@ -9,6 +9,9 @@ import AddExpense from "../app/add-expense";
 // The dashboard needs the household/query providers, covered by its own tests.
 jest.mock("@/features/analytics/Dashboard", () => ({ Dashboard: () => null }));
 
+// Navigation-only test: the budget screen needs the household provider.
+jest.mock("@/features/budget/BudgetScreen", () => ({ BudgetScreen: () => null }));
+
 const routes = {
     "(tabs)/_layout": TabsLayout,
     "(tabs)/index": Home,
