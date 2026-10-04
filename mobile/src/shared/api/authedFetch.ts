@@ -14,15 +14,15 @@ function withBearer(request: Request, token: string | null): Request {
  * Fetch wrapper: adds the in-memory access token and, on a 401 from a protected endpoint, refreshes
  * (single-flight, via the session) and retries the request once with the new token.
  * Public auth endpoints (login, register, ...) never carry a token and are never retried;
- * logout carries the token but is not retried.
+ * logout carries the token and is retried once after a refresh.
  */
 export function createAuthedFetch(session: SessionManager, baseFetch: Fetch): Fetch {
     return async (request) => {
         const p = new URL(request.url).pathname;
-        if (p.startsWith(LOGOUT_PREFIX)) {
-            return baseFetch(withBearer(request, session.getAccessToken()));
-        }
-        if (p.startsWith(AUTH_PREFIX)) return baseFetch(request);
+        // Logout is a protected call: an expired access token is refreshed and the call retried once,
+        // so the server-side session/refresh token is really revoked.
+        const isLogout = p.startsWith(LOGOUT_PREFIX);
+        if (!isLogout && p.startsWith(AUTH_PREFIX)) return baseFetch(request);
         const retry = request.clone();
         const used = session.getAccessToken();
         const first = await baseFetch(withBearer(request, used));

@@ -35,7 +35,8 @@ export default function VerifyEmail() {
         setError(null);
         setResending(true);
         try {
-            if (email) await resendVerification(email);
+            if (!email) return;
+            await resendVerification(email);
             setInfo(strings.auth.resent);
         } catch (e) {
             setError(e);
@@ -74,12 +75,14 @@ export default function VerifyEmail() {
                 label={strings.auth.verifyCheckAgain}
                 onPress={() => refetch()}
             />
-            <Button
-                variant="secondary"
-                label={strings.auth.resend}
-                loading={resending}
-                onPress={() => void resend()}
-            />
+            {pendingEmail.get() ? (
+                <Button
+                    variant="secondary"
+                    label={strings.auth.resend}
+                    loading={resending}
+                    onPress={() => void resend()}
+                />
+            ) : null}
             <Button
                 variant="secondary"
                 label={strings.auth.signOut}

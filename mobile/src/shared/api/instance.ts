@@ -1,3 +1,4 @@
+import { pendingEmail } from "@/features/identity/pendingEmail";
 import { QueryClient } from "@tanstack/react-query";
 import createClient from "openapi-fetch";
 import { SessionManager } from "@/shared/auth/session";
@@ -18,7 +19,10 @@ export const session = new SessionManager({
 export const queryClient = new QueryClient();
 
 // Sign-out wipes every cached server response (no financial data survives the session).
-session.onSignedOut(() => queryClient.clear());
+session.onSignedOut(() => {
+    queryClient.clear();
+    pendingEmail.clear();
+});
 
 export const api = createClient<paths>({
     baseUrl: appConfig.apiBaseUrl,

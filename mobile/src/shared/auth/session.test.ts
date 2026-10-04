@@ -95,4 +95,24 @@ describe("SessionManager", () => {
         expect(onOut).toHaveBeenCalledTimes(1);
         expect(await storage.get()).toBeNull();
     });
+
+    test("a refresh in flight when signOut runs does not revive the session", async () => {
+        const storage = memoryStorage("stored-refresh");
+        let release: (r: Response) => void = () => undefined;
+        const fetchMock = jest.fn(
+            () =>
+                new Promise<Response>((resolve) => {
+                    release = resolve;
+                }),
+        );
+        const s = new SessionManager({ storage, fetch: fetchMock, baseUrl: "http://x" });
+        const restoring = s.restore();
+        await new Promise((r) => setTimeout(r, 0));
+        await s.signOut();
+        release(tokenResponse("access-1", "refresh-2"));
+        await restoring;
+        expect(s.getStatus()).toBe("signedOut");
+        expect(s.getAccessToken()).toBeNull();
+        expect(storage.set).not.toHaveBeenCalled();
+    });
 });

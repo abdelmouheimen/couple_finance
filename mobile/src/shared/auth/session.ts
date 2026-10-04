@@ -25,6 +25,8 @@ interface Deps {
 export class SessionManager {
     private accessToken: string | null = null;
     private status: SessionStatus = "restoring";
+    /** Bumped by signOut(); a refresh started before it must not revive the session. */
+    private generation = 0;
     private inFlight: Promise<RefreshOutcome> | null = null;
     private readonly listeners = new Set<() => void>();
     private readonly signedOutHandlers = new Set<() => void>();
@@ -76,6 +78,7 @@ export class SessionManager {
 
     /** Ends the session locally: clears every token and notifies cache owners. Idempotent. */
     async signOut(): Promise<void> {
+        this.generation++;
         const wasSignedOut = this.status === "signedOut" && this.accessToken === null;
         this.accessToken = null;
         try {
@@ -118,6 +121,7 @@ export class SessionManager {
             await this.signOut();
             return "invalid";
         }
+        const startedGeneration = this.generation;
         let response: Response;
         try {
             response = await this.deps.fetch(`${this.deps.baseUrl}/api/v1/auth/refresh`, {
@@ -128,6 +132,7 @@ export class SessionManager {
         } catch {
             return "unavailable";
         }
+        if (startedGeneration !== this.generation) return "invalid";
         if (response.status === 400 || response.status === 401) {
             await this.signOut();
             return "invalid";
