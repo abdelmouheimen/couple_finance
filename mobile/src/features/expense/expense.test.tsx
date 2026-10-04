@@ -412,7 +412,7 @@ describe("edit expense", () => {
         });
         expect(put.headers.get("If-Match")).toBe('"3"');
         expect(
-            await screen.findByText("This changed elsewhere. Reload to see the latest version."),
+            await screen.findByText("This was changed elsewhere. Reload it before editing again; nothing was overwritten."),
         ).toBeTruthy();
         await pressButton("Reload");
         await waitFor(() => expect(gets).toBe(2));

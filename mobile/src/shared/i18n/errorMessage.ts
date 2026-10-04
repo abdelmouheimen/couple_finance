@@ -22,12 +22,6 @@ export function errorMessage(error: unknown): string {
             return strings.errors.invitationNotAllowed;
         case "INVITATION_NOT_REVOCABLE":
             return strings.errors.invitationNotRevocable;
-        case "INVALID_AMOUNT_FORMAT":
-            return strings.errors.amountInvalid;
-        case "AMOUNT_NOT_POSITIVE":
-            return strings.errors.amountNotPositive;
-        case "AMOUNT_EXCEEDS_MAXIMUM":
-            return strings.errors.amountTooLarge;
         case "EXPENSE_DATE_OUT_OF_RANGE":
         case "EXPENSE_REFUND_DATE_BEFORE_ORIGINAL":
             return strings.errors.dateOutOfRange;
@@ -38,8 +32,6 @@ export function errorMessage(error: unknown): string {
         case "EXPENSE_CATEGORY_ARCHIVED":
         case "CATEGORY_ARCHIVED":
             return strings.errors.categoryArchived;
-        case "CATEGORY_NOT_FOUND":
-            return strings.errors.categoryNotFound;
         case "EXPENSE_MERCHANT_INVALID":
             return strings.errors.merchantInvalid;
         case "EXPENSE_SHARING_CHANGE_FORBIDDEN":
@@ -51,8 +43,6 @@ export function errorMessage(error: unknown): string {
             return strings.errors.hasLiveRefunds;
         case "REQUEST_IN_PROGRESS":
             return strings.errors.requestInProgress;
-        case "VERSION_CONFLICT":
-            return strings.errors.conflict;
         case "CATEGORY_NAME_ALREADY_EXISTS":
             return strings.errors.categoryNameTaken;
         case "SYSTEM_CATEGORY_IMMUTABLE":
@@ -64,9 +54,40 @@ export function errorMessage(error: unknown): string {
         case "EXPENSE_REFUND_VISIBILITY_MISMATCH":
         case "EXPENSE_REFUND_EXCEEDS_ORIGINAL":
             return strings.errors.refundProblem;
+        case "PREVIOUS_BUDGET_NOT_FOUND":
+            return strings.errors.previousBudgetNotFound;
+        case "BUDGET_ALREADY_EXISTS":
+            return strings.errors.budgetAlreadyExists;
+        case "BUDGET_LIMIT_REQUIRED":
+            return strings.errors.budgetLimitRequired;
+        case "DUPLICATE_CATEGORY_LIMIT":
+        case "TOO_MANY_CATEGORY_LIMITS":
+        case "BUDGET_CATEGORY_ARCHIVED":
+        case "CATEGORY_NOT_FOUND":
+            return strings.errors.budgetCategories;
+        case "INVALID_AMOUNT_FORMAT":
+            return strings.errors.amountInvalid;
+        case "AMOUNT_NOT_POSITIVE":
+            return strings.errors.amountNotPositive;
+        case "AMOUNT_EXCEEDS_MAXIMUM":
+            return strings.errors.amountTooLarge;
+        case "TOO_MANY_DECIMALS":
+        case "CURRENCY_MISMATCH":
+            return strings.errors.budgetAmount;
+        case "VERSION_CONFLICT":
+        case "IF_MATCH_REQUIRED":
+            return strings.errors.versionConflict;
         default:
             return strings.errorDefault;
     }
+}
+
+/** True for the stale-version answers (412 / 428): the caller must reload, never overwrite. */
+export function isVersionConflict(error: unknown): boolean {
+    return (
+        error instanceof ApiError &&
+        (error.code === "VERSION_CONFLICT" || error.code === "IF_MATCH_REQUIRED")
+    );
 }
 
 /** Server-side field violations keyed by field name, with a generic human message. */

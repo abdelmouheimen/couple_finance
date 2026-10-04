@@ -147,6 +147,7 @@ export const icons = {
     expenses: "≡",
     budget: "◔",
     chevron: "›",
+    chevronBack: "‹",
     settings: "⚙",
     empty: "○",
 } as const;

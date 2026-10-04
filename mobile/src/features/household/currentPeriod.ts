@@ -46,3 +46,18 @@ export function currentBudgetPeriod(
         end: iso(Math.floor(endIndex / 12), (endIndex % 12) + 1, periodStartDay),
     };
 }
+
+/**
+ * The period `offset` periods after (positive) or before (negative) `period`, on the same calendar
+ * (same day of month; month-index arithmetic only). Used by the budget period switcher so there is
+ * still a single period computation in the app.
+ */
+export function shiftBudgetPeriod(period: BudgetPeriod, offset: number): BudgetPeriod {
+    const [y, m, d] = period.start.split("-").map(Number) as [number, number, number];
+    const index = y * 12 + (m - 1) + offset;
+    const next = index + 1;
+    return {
+        start: iso(Math.floor(index / 12), (index % 12) + 1, d),
+        end: iso(Math.floor(next / 12), (next % 12) + 1, d),
+    };
+}

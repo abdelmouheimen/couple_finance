@@ -1,4 +1,4 @@
-import { currentBudgetPeriod } from "./currentPeriod";
+import { currentBudgetPeriod, shiftBudgetPeriod } from "./currentPeriod";
 
 const at = (iso: string) => new Date(iso);
 
@@ -50,5 +50,14 @@ describe("currentBudgetPeriod (BR-HH-05)", () => {
         expect(() => currentBudgetPeriod(0, "Europe/Paris")).toThrow(RangeError);
         expect(() => currentBudgetPeriod(29, "Europe/Paris")).toThrow(RangeError);
         expect(() => currentBudgetPeriod(1, "Not/AZone")).toThrow();
+    });
+});
+
+describe("shiftBudgetPeriod", () => {
+    test("moves by whole periods across year boundaries, keeping the start day", () => {
+        const base = { start: "2026-01-15", end: "2026-02-15" };
+        expect(shiftBudgetPeriod(base, -1)).toEqual({ start: "2025-12-15", end: "2026-01-15" });
+        expect(shiftBudgetPeriod(base, 1)).toEqual({ start: "2026-02-15", end: "2026-03-15" });
+        expect(shiftBudgetPeriod(base, 0)).toEqual(base);
     });
 });
