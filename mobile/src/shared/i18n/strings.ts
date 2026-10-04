@@ -107,7 +107,6 @@ export const strings = {
         pastNote: "This is a past period. Edits to it are audited.",
         overall: "Overall budget",
         remaining: "Remaining",
-        overBy: "Over by",
         consumed: "Spent",
         limit: "Limit",
         noOverall: "No overall limit for this period.",

@@ -22,7 +22,7 @@ import {
     useColors,
     useToast,
 } from "@/shared/ui";
-import { fabContentInset, radius, spacing } from "@/shared/ui/theme/tokens";
+import { fabContentInset, minTouchTarget, radius, spacing } from "@/shared/ui/theme/tokens";
 import { BudgetEditSheet } from "./BudgetEditSheet";
 import {
     type Budget,
@@ -59,7 +59,7 @@ function OverallCard({ budget }: { budget: Budget }) {
             {c && limit && remaining && consumed && c.status && c.percentage !== undefined ? (
                 <>
                     <Text variant="caption" tone="secondary" bold>
-                        {c.status === "EXCEEDED" ? strings.budget.overBy : strings.budget.remaining}
+                        {strings.budget.remaining}
                     </Text>
                     <MoneyText money={remaining} scope="HOUSEHOLD" variant="headline" />
                     <ProgressBar
@@ -167,6 +167,7 @@ export function BudgetScreen() {
         },
         onError: (e) => {
             setCopyError(e);
+            toast(errorMessage(e), "error");
             void queryClient.invalidateQueries({ queryKey: key });
         },
     });
@@ -300,7 +301,7 @@ const styles = StyleSheet.create({
     header: { flexDirection: "row", alignItems: "center", gap: spacing.md },
     flex: { flex: 1 },
     centered: { textAlign: "center" },
-    spacer: { width: spacing.xxl },
+    spacer: { width: minTouchTarget },
     pair: { flexDirection: "row", gap: spacing.md },
     banner: {
         flexDirection: "row",

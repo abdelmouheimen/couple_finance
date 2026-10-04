@@ -135,7 +135,7 @@ describe("BudgetScreen", () => {
             ),
         );
         await mount();
-        expect(await screen.findByText("Over by")).toBeTruthy();
+        expect(await screen.findByText("Remaining")).toBeTruthy();
         expect(screen.getByText("Exceeded")).toBeTruthy();
         expect(screen.getByText("110.0 %")).toBeTruthy();
         expect(screen.getByLabelText(`${fmt("-50.00")}, Household`)).toBeTruthy();
