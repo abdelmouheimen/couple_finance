@@ -464,20 +464,21 @@ function Invoke-ClaudeAgent {
     $r = Invoke-LoggedProcess -FilePath $Settings.Claude -Arguments $claudeArgs -WorkingDirectory $WorkingDirectory -StdoutFile $stdout -StderrFile $stderr -StdinFile $promptFile -TimeoutMinutes $Settings.AgentTimeoutMinutes -PidFile $PidFile
     if ($PidFile -and (Test-Path -LiteralPath $PidFile)) { Remove-Item -LiteralPath $PidFile -Force -ErrorAction SilentlyContinue }
     $raw = Read-TextFile $stdout
-    $text = ''; $isError = $true; $cost = $null; $session = ''
+    $text = ''; $isError = $true; $cost = $null; $session = ''; $apiStatus = 0
     try {
         $json = ConvertFrom-Json -InputObject $raw
         if ($json.PSObject.Properties.Name -contains 'result') { $text = [string]$json.result }
         if ($json.PSObject.Properties.Name -contains 'is_error') { $isError = [bool]$json.is_error } else { $isError = $false }
         if ($json.PSObject.Properties.Name -contains 'total_cost_usd') { $cost = $json.total_cost_usd }
         if ($json.PSObject.Properties.Name -contains 'session_id') { $session = [string]$json.session_id }
+        if ($json.PSObject.Properties.Name -contains 'api_error_status' -and $null -ne $json.api_error_status) { $apiStatus = [int]$json.api_error_status }
     } catch { $text = $raw }
     if ($r.TimedOut -or $r.ExitCode -ne 0) { $isError = $true }
     Write-TextFile $resultFile $text
     return [pscustomobject]@{
         ExitCode = $r.ExitCode; TimedOut = $r.TimedOut; IsError = $isError; Text = $text; CostUsd = $cost
         SessionId = $session; ResultFile = $resultFile; Minutes = [Math]::Round(((Get-Date) - $started).TotalMinutes, 1)
-        StderrTail = (Get-TextTail (Read-TextFile $stderr) 40)
+        StderrTail = (Get-TextTail (Read-TextFile $stderr) 40); ApiErrorStatus = $apiStatus
     }
 }
 
@@ -486,7 +487,9 @@ function Invoke-ClaudeAgent {
 function Get-AgentRunFailure($Run, [bool]$HasResult) {
     if ($HasResult -and -not $Run.TimedOut) { return '' }
     if (-not $Run.IsError -and -not $Run.TimedOut) { return '' }
-    return (Get-AgentFailureKind -Text ([string]$Run.Text + "`n" + [string]$Run.StderrTail) -TimedOut ([bool]$Run.TimedOut))
+    $apiStatus = 0
+    if ($Run.PSObject.Properties.Name -contains 'ApiErrorStatus') { $apiStatus = [int]$Run.ApiErrorStatus }
+    return (Get-AgentFailureKind -Text ([string]$Run.Text + "`n" + [string]$Run.StderrTail) -TimedOut ([bool]$Run.TimedOut) -ApiErrorStatus $apiStatus)
 }
 
 # ---------------------------------------------------------------------------

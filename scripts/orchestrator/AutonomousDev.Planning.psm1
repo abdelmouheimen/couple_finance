@@ -669,14 +669,20 @@ function Format-RecoveryReport {
 #   AUTH      session/token expired, not logged in, credit/usage limit -> stop the run, rerun later
 #   TRANSIENT overloaded, rate limited, network -> relaunch the item later (fresh process)
 #   CRASH     anything else (timeout, crash) -> bounded relaunch with recovery context
-$script:AgentAuthPattern = '(?i)(/login\b|not logged in|log in again|oauth token|token (has )?expired|session (has )?expired|invalid api key|invalid x-api-key|authentication[_ ]error|authentication failed|unauthori[sz]ed|\b401\b|credit balance|usage limit|limit reached|billing)'
+# Subscription limits are AUTH: the CLI reports them as "You've hit your session limit - resets
+# 10:30pm" (api_error_status 429), and relaunching before the reset only burns the crash budget.
+# $ApiErrorStatus is the CLI's structured api_error_status (0 when absent): 401/403 -> AUTH,
+# 429/5xx -> TRANSIENT unless the text names a subscription limit.
+$script:AgentAuthPattern = '(?i)(/login\b|not logged in|log in again|oauth token|token (has )?expired|session (has )?expired|invalid api key|invalid x-api-key|authentication[_ ]error|authentication failed|unauthori[sz]ed|\b401\b|credit balance|usage limit|limit reached|session limit|weekly limit|hit your [a-z0-9 -]*limit|out of extra usage|billing)'
 $script:AgentTransientPattern = '(?i)(overloaded|\b529\b|rate[ _-]?limit|\b429\b|too many requests|econnreset|econnrefused|enotfound|etimedout|eai_again|getaddrinfo|socket hang up|network error|fetch failed|connection error|service unavailable|\b503\b|\b502\b)'
 
 function Get-AgentFailureKind {
-    param([string]$Text, [bool]$TimedOut = $false)
+    param([string]$Text, [bool]$TimedOut = $false, [int]$ApiErrorStatus = 0)
     if ($TimedOut) { return 'CRASH' }
     if ([string]$Text -match $script:AgentAuthPattern) { return 'AUTH' }
+    if ($ApiErrorStatus -eq 401 -or $ApiErrorStatus -eq 403) { return 'AUTH' }
     if ([string]$Text -match $script:AgentTransientPattern) { return 'TRANSIENT' }
+    if ($ApiErrorStatus -eq 429 -or $ApiErrorStatus -ge 500) { return 'TRANSIENT' }
     return 'CRASH'
 }
 
