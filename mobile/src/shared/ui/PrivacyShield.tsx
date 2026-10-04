@@ -3,7 +3,6 @@ import { AppState, type AppStateStatus, StyleSheet, View } from "react-native";
 import { strings } from "@/shared/i18n/strings";
 import { Text } from "./Text";
 import { useColors } from "./theme/theme";
-import { spacing } from "./theme/tokens";
 
 /**
  * Privacy screen (security.md §9): while the app is not active (app switcher snapshot, incoming
@@ -18,7 +17,7 @@ export function PrivacyShield() {
         const subscription = AppState.addEventListener("change", setState);
         return () => subscription.remove();
     }, []);
-    if (state === "active") return null;
+    if (state !== "inactive" && state !== "background") return null;
     return (
         <View
             testID="privacy-shield"
@@ -26,7 +25,9 @@ export function PrivacyShield() {
             importantForAccessibility="no-hide-descendants"
             style={[styles.cover, { backgroundColor: colors.background }]}
         >
-            <Text bold>{strings.appName}</Text>
+            <Text bold variant="title">
+                {strings.appName}
+            </Text>
         </View>
     );
 }
@@ -41,6 +42,5 @@ const styles = StyleSheet.create({
         zIndex: 1000,
         alignItems: "center",
         justifyContent: "center",
-        gap: spacing.md,
     },
 });

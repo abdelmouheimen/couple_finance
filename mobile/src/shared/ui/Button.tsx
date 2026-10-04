@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet } from "react-native";
 import { strings } from "@/shared/i18n/strings";
 import { Text } from "./Text";
@@ -25,6 +25,13 @@ export function Button({ label, onPress, variant = "primary", loading, disabled,
         destructive: { bg: colors.danger, fg: colors.onDanger },
     }[variant];
     const inFlight = useRef(false);
+    const mounted = useRef(true);
+    useEffect(() => {
+        mounted.current = true;
+        return () => {
+            mounted.current = false;
+        };
+    }, []);
     const [pending, setPending] = useState(false);
     const busy = !!loading || pending;
     const inactive = disabled || busy;
@@ -37,7 +44,7 @@ export function Button({ label, onPress, variant = "primary", loading, disabled,
             setPending(true);
             const release = () => {
                 inFlight.current = false;
-                setPending(false);
+                if (mounted.current) setPending(false);
             };
             (result as Promise<unknown>).then(release, release);
         }

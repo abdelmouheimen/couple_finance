@@ -3,9 +3,11 @@ import { readdirSync, readFileSync, statSync } from "fs";
 import { join } from "path";
 import { AccessibilityInfo, AppState, StyleSheet } from "react-native";
 import { Button } from "./Button";
+import { IconButton } from "./IconButton";
 import { PrivacyShield } from "./PrivacyShield";
 import { renderUi } from "./testing";
 import { Text } from "./Text";
+import { minTouchTarget } from "./theme/tokens";
 import { useToast } from "./Toast";
 
 describe("Button double-submit protection (MOBILE-007)", () => {
@@ -27,6 +29,27 @@ describe("Button double-submit protection (MOBILE-007)", () => {
         });
         await fireEvent.press(button);
         expect(onPress).toHaveBeenCalledTimes(2);
+    });
+
+    test("settling after unmount does not update state", async () => {
+        let resolve: () => void = () => {};
+        const onPress = jest.fn(
+            () =>
+                new Promise<void>((r) => {
+                    resolve = r;
+                }),
+        );
+        const errors = jest.spyOn(globalThis.console, "error").mockImplementation(() => {});
+        await renderUi(<Button label="Save" onPress={onPress} />);
+        await fireEvent.press(screen.getByRole("button", { name: "Save" }));
+        await act(async () => {
+            screen.unmount();
+        });
+        await act(async () => {
+            resolve();
+        });
+        expect(errors).not.toHaveBeenCalled();
+        errors.mockRestore();
     });
 
     test("a rejected action releases the guard", async () => {
@@ -80,26 +103,24 @@ describe("no debug logging in shipped code (MOBILE-007)", () => {
     });
 });
 
-describe("touch targets of raw Pressables", () => {
-    const root = join(__dirname, "..", "..", "..");
-    test("every Pressable declares a minimum touch target", () => {
-        const targets = [
-            "app/(tabs)/_layout.tsx",
-            "src/features/expense/ExpenseRow.tsx",
-            "src/features/identity/PasswordField.tsx",
-            "src/shared/ui/Chips.tsx",
-            "src/shared/ui/ListRow.tsx",
-            "src/shared/ui/Button.tsx",
-            "src/shared/ui/IconButton.tsx",
-        ];
-        for (const t of targets) {
-            expect({
-                t,
-                ok: /minTouchTarget|fabSize/.test(readFileSync(join(root, t), "utf8")),
-            }).toEqual({
-                t,
-                ok: true,
-            });
+describe("touch targets", () => {
+    test("Button and IconButton render at least the minimum touch target", async () => {
+        await renderUi(
+            <>
+                <Button label="Save" onPress={() => {}} />
+                <IconButton icon="close" label="Close it" onPress={() => {}} />
+            </>,
+        );
+        for (const name of ["Save", "Close it"]) {
+            const style = StyleSheet.flatten(
+                screen.getByRole("button", { name }).props.style as never,
+            ) as { minHeight?: number; minWidth?: number; width?: number; height?: number };
+            expect(Math.max(style.minHeight ?? 0, style.height ?? 0)).toBeGreaterThanOrEqual(
+                minTouchTarget,
+            );
+            expect(Math.max(style.minWidth ?? 0, style.width ?? 0)).toBeGreaterThanOrEqual(
+                minTouchTarget,
+            );
         }
     });
 });

@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { strings } from "@/shared/i18n/strings";
 import { Button } from "./Button";
 import { IconButton } from "./IconButton";
+import { PrivacyShield } from "./PrivacyShield";
 import { Text } from "./Text";
 import { useColors, useReducedMotion } from "./theme/theme";
 import { elevation, radius, sheetMaxHeightRatio, spacing } from "./theme/tokens";
@@ -92,6 +93,7 @@ export function Sheet({ visible, title, onClose, children }: SheetProps) {
                         {children}
                     </ScrollView>
                 </View>
+                <PrivacyShield />
             </KeyboardAvoidingView>
         </Modal>
     );
