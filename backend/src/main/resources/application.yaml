@@ -68,8 +68,15 @@ couplefinance:
       auth:
         ip: {capacity: 30, period: 1m}
         user: {capacity: 10, period: 15m}
+      # Refresh route: public (the refresh token is the credential). The user budget is keyed by session id once the
+      # presented token is known, so a stolen/looping client cannot hammer one session. Deploy-time values.
+      auth-refresh:
+        ip: {capacity: 60, period: 1m}
+        user: {capacity: 20, period: 15m}
     # Stricter profiles (invitation redemption, receipt upload) are added with those features.
     routes:
+      # First match wins: the refresh route precedes the generic authentication pattern.
+      - {pattern: "/api/v1/auth/refresh", profile: auth-refresh}
       - {pattern: "/api/v1/auth/**", profile: auth}
       - {pattern: "/api/v1/households/me/invitations/**", profile: invitations}
   pagination:
