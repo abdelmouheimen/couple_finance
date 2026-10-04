@@ -126,8 +126,8 @@ export function ExpenseListScreen() {
                 value={scope}
                 onChange={setScope}
                 options={[
-                    { value: "HOUSEHOLD", label: strings.expense.shared },
-                    { value: "PERSONAL", label: strings.expense.personal },
+                    { value: "HOUSEHOLD", label: strings.scope.HOUSEHOLD },
+                    { value: "PERSONAL", label: strings.scope.PERSONAL },
                 ]}
             />
             <TextInput

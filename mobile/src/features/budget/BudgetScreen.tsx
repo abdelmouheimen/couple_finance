@@ -273,6 +273,9 @@ export function BudgetScreen() {
                 />
             }
         >
+            <Text variant="headline" accessibilityRole="header">
+                {strings.tabs.budget}
+            </Text>
             <View style={styles.header}>
                 <IconButton
                     icon="chevronBack"

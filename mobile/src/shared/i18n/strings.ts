@@ -243,9 +243,6 @@ export const strings = {
         searchPlaceholder: "Merchant or note",
         scopeLabel: "View",
         // One label set for the scope everywhere (same wording as strings.scope).
-        shared: "Household",
-        personal: "Personal",
-        personalBadge: "Personal",
         periodLabel: "Period",
         periodCurrent: "This period",
         periodAll: "All time",

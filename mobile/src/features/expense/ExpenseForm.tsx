@@ -245,8 +245,8 @@ export function ExpenseForm({
                                 value={values.sharingType}
                                 onChange={(s) => set("sharingType", s)}
                                 options={[
-                                    { value: "SHARED", label: strings.expense.shared },
-                                    { value: "PERSONAL", label: strings.expense.personal },
+                                    { value: "SHARED", label: strings.scope.HOUSEHOLD },
+                                    { value: "PERSONAL", label: strings.scope.PERSONAL },
                                 ]}
                             />
                         </View>
