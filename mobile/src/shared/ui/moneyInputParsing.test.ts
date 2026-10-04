@@ -1,4 +1,4 @@
-import fc from "fast-check";
+import { assert, constantFrom, property, string, stringMatching, tuple } from "fast-check";
 import {
     canonicalAmount,
     decimalSeparator,
@@ -39,11 +39,12 @@ test("locale separator", () => {
 });
 
 test("property: canonical string round-trips through the display text and is idempotent", () => {
-    const amount = fc
-        .tuple(fc.stringMatching(/^(0|[1-9][0-9]{0,11})$/), fc.stringMatching(/^[0-9]{0,2}$/))
-        .map(([w, f]) => (f === "" ? w : `${w}.${f}`));
-    fc.assert(
-        fc.property(amount, fc.constantFrom(".", ","), (value, sep) => {
+    const amount = tuple(
+        stringMatching(/^(0|[1-9][0-9]{0,11})$/),
+        stringMatching(/^[0-9]{0,2}$/),
+    ).map(([w, f]) => (f === "" ? w : `${w}.${f}`));
+    assert(
+        property(amount, constantFrom(".", ","), (value, sep) => {
             expect(canonicalAmount(toDisplay(value, sep), 2)).toBe(value);
             expect(canonicalAmount(value, 2)).toBe(canonicalAmount(canonicalAmount(value, 2), 2));
         }),
@@ -51,8 +52,8 @@ test("property: canonical string round-trips through the display text and is ide
 });
 
 test("property: output only ever holds digits and at most one dot", () => {
-    fc.assert(
-        fc.property(fc.string(), (raw) => {
+    assert(
+        property(string(), (raw) => {
             expect(sanitizeAmount(raw, 2)).toMatch(/^\d*(\.\d{0,2})?$/);
         }),
     );

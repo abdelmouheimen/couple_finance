@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { configure, fireEvent, screen, waitFor } from "@testing-library/react-native";
 import { HouseholdProvider, useHouseholdState } from "@/features/household/HouseholdProvider";
+import { formatMoney } from "@/shared/money/money";
 import { renderUi } from "@/shared/ui/testing";
 import { ANALYTICS_QUERY_KEY } from "./analyticsApi";
 import { Dashboard } from "./Dashboard";
@@ -8,7 +9,6 @@ import { Dashboard } from "./Dashboard";
 const mockPush = jest.fn();
 jest.mock("expo-router", () => ({ useRouter: () => ({ push: mockPush }) }));
 
-import { formatMoney } from "@/shared/money/money";
 const fmt = (amount: string) => formatMoney({ amount, currency: "EUR" });
 const eur = (amount: string) => ({ amount, currency: "EUR" });
 const GROCERIES = "019a0000-0000-7000-8000-000000000001";
