@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet } from "react-native";
 import { strings } from "@/shared/i18n/strings";
 import { Text } from "./Text";
@@ -8,7 +9,8 @@ export type ButtonVariant = "primary" | "secondary" | "destructive";
 
 interface Props {
     label: string;
-    onPress: () => void;
+    /** May return a promise: further presses are ignored until it settles (double-submit protection). */
+    onPress: () => void | Promise<unknown>;
     variant?: ButtonVariant;
     loading?: boolean;
     disabled?: boolean;
@@ -22,15 +24,39 @@ export function Button({ label, onPress, variant = "primary", loading, disabled,
         secondary: { bg: colors.secondary, fg: colors.onSecondary },
         destructive: { bg: colors.danger, fg: colors.onDanger },
     }[variant];
-    const inactive = disabled || loading;
+    const inFlight = useRef(false);
+    const mounted = useRef(true);
+    useEffect(() => {
+        mounted.current = true;
+        return () => {
+            mounted.current = false;
+        };
+    }, []);
+    const [pending, setPending] = useState(false);
+    const busy = !!loading || pending;
+    const inactive = disabled || busy;
+    // Guard synchronously (a ref, not state) so two taps in the same frame cannot both fire.
+    const press = useCallback(() => {
+        if (inFlight.current) return;
+        const result = onPress();
+        if (result && typeof (result as Promise<unknown>).then === "function") {
+            inFlight.current = true;
+            setPending(true);
+            const release = () => {
+                inFlight.current = false;
+                if (mounted.current) setPending(false);
+            };
+            (result as Promise<unknown>).then(release, release);
+        }
+    }, [onPress]);
     return (
         <Pressable
             testID={testID}
             accessibilityRole="button"
             accessibilityLabel={label}
-            accessibilityState={{ disabled: !!inactive, busy: !!loading }}
+            accessibilityState={{ disabled: !!inactive, busy }}
             disabled={inactive}
-            onPress={onPress}
+            onPress={press}
             style={({ pressed }) => [
                 styles.base,
                 {
@@ -44,7 +70,7 @@ export function Button({ label, onPress, variant = "primary", loading, disabled,
                 },
             ]}
         >
-            {loading ? (
+            {busy ? (
                 <ActivityIndicator color={palette.fg} accessibilityLabel={strings.loading} />
             ) : null}
             <Text style={{ color: palette.fg }} bold>

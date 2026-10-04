@@ -17,7 +17,12 @@ describe("token contrast (WCAG AA)", () => {
 
 describe("no hard-coded visual values outside tokens", () => {
     const root = join(__dirname, "..", "..", "..", "..");
-    const roots = [join(root, "app"), join(root, "src", "shared", "ui")];
+    const roots = [
+        join(root, "app"),
+        join(root, "src", "shared", "ui"),
+        join(root, "src", "shared", "forms"),
+        join(root, "src", "features"),
+    ];
     const allowed = ["tokens.ts", "contrast.ts"];
 
     function files(dir: string): string[] {

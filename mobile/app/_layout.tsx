@@ -8,6 +8,7 @@ import { useSessionStatus } from "@/shared/auth/useSession";
 import { errorMessage } from "@/shared/i18n/errorMessage";
 import { strings } from "@/shared/i18n/strings";
 import { Button, ErrorState, Screen, Skeleton, ToastProvider } from "@/shared/ui";
+import { PrivacyShield } from "@/shared/ui/PrivacyShield";
 import { useColors } from "@/shared/ui/theme/theme";
 
 function Splash() {
@@ -87,6 +88,7 @@ export default function RootLayout() {
         <QueryClientProvider client={queryClient}>
             <ToastProvider>
                 <Root />
+                <PrivacyShield />
             </ToastProvider>
         </QueryClientProvider>
     );

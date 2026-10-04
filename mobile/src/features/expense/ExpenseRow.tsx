@@ -3,7 +3,7 @@ import { strings } from "@/shared/i18n/strings";
 import { formatMoney, spokenMoney } from "@/shared/money/money";
 import { Text } from "@/shared/ui";
 import { useColors } from "@/shared/ui/theme/theme";
-import { minTouchTarget, radius, spacing } from "@/shared/ui/theme/tokens";
+import { borderWidth, minTouchTarget, radius, spacing } from "@/shared/ui/theme/tokens";
 import type { Expense } from "./expenseApi";
 import { toMoney } from "./expenseRules";
 
@@ -65,7 +65,7 @@ const styles = StyleSheet.create({
     },
     main: { flex: 1, gap: spacing.xs, alignItems: "flex-start" },
     badge: {
-        borderWidth: 1,
+        borderWidth: borderWidth.hairline,
         borderRadius: radius.pill,
         paddingHorizontal: spacing.sm,
     },
