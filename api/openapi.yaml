@@ -232,6 +232,115 @@ paths:
       summary: Log in with email and password
       tags:
       - Authentication
+  /api/v1/auth/register:
+    post:
+      description: Public. Creates a PENDING_VERIFICATION account and sends a verification
+        email. The response is identical whether or not the email is already registered
+        (the existing owner receives a notice mail instead; no second account is created).
+      operationId: register
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+        required: true
+      responses:
+        "202":
+          description: Accepted; a mail is sent in every case
+        "400":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: VALIDATION_FAILED (including the password policy)
+        "413":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: PAYLOAD_TOO_LARGE
+        "429":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: "RATE_LIMITED, with a Retry-After header"
+      security: []
+      summary: Register an account
+      tags:
+      - Authentication
+  /api/v1/auth/resend-verification:
+    post:
+      description: Public. Same 202 response whether or not the email is registered
+        or already verified.
+      operationId: resendVerification
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResendVerificationRequest"
+        required: true
+      responses:
+        "202":
+          description: Accepted
+        "400":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: VALIDATION_FAILED
+        "413":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: PAYLOAD_TOO_LARGE
+        "429":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: "RATE_LIMITED, with a Retry-After header"
+      security: []
+      summary: Resend the verification email
+      tags:
+      - Authentication
+  /api/v1/auth/verify-email:
+    post:
+      description: "Public. Consumes a single-use, 24-hour token and makes the account\
+        \ ACTIVE. Unknown, expired and already used tokens are indistinguishable (INVALID_OR_EXPIRED_TOKEN)."
+      operationId: verifyEmail
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifyEmailRequest"
+        required: true
+      responses:
+        "204":
+          description: "Email verified, account ACTIVE"
+        "400":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: INVALID_OR_EXPIRED_TOKEN or VALIDATION_FAILED
+        "413":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: PAYLOAD_TOO_LARGE
+        "429":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: "RATE_LIMITED, with a Retry-After header"
+      security: []
+      summary: Verify an email address
+      tags:
+      - Authentication
   /api/v1/budgets/{periodStart}:
     get:
       description: "The budget of the household's period starting on periodStart.\
@@ -2316,6 +2425,49 @@ components:
       - code
       - status
       - title
+    RegisterRequest:
+      type: object
+      properties:
+        displayName:
+          type: string
+          example: Alex
+          maxLength: 60
+          minLength: 1
+          pattern: "[^\\p{Cntrl}]*"
+        email:
+          type: string
+          format: email
+          example: alex@example.com
+          maxLength: 254
+          minLength: 0
+        locale:
+          type: string
+          description: "BCP 47 language tag, the account preference; defaults to fr-FR."
+          example: fr-FR
+          maxLength: 35
+          minLength: 2
+          pattern: "[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*"
+        password:
+          type: string
+          format: password
+          description: Between 10 and 128 characters.
+          maxLength: 128
+          minLength: 10
+      required:
+      - displayName
+      - email
+      - password
+    ResendVerificationRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          example: alex@example.com
+          maxLength: 254
+          minLength: 0
+      required:
+      - email
     SetBudgetRequest:
       type: object
       properties:
@@ -2448,6 +2600,16 @@ components:
       - items
       - paidByUserId
       - sharingType
+    VerifyEmailRequest:
+      type: object
+      properties:
+        token:
+          type: string
+          description: The opaque token received by email.
+          maxLength: 128
+          minLength: 0
+      required:
+      - token
   securitySchemes:
     bearerAuth:
       bearerFormat: JWT

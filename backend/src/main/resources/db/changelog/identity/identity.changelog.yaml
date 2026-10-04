@@ -8,3 +8,5 @@ databaseChangeLog:
       file: db/changelog/identity/changes/0003-create-session.yaml
   - include:
       file: db/changelog/identity/changes/0004-create-refresh-token.yaml
+  - include:
+      file: db/changelog/identity/changes/0005-create-one-time-token.yaml
