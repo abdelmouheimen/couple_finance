@@ -167,7 +167,6 @@ export function BudgetScreen() {
         },
         onError: (e) => {
             setCopyError(e);
-            toast(errorMessage(e), "error");
             void queryClient.invalidateQueries({ queryKey: key });
         },
     });
@@ -207,6 +206,11 @@ export function BudgetScreen() {
                     title={strings.budget.emptyTitle}
                     message={readOnly ? strings.budget.emptyReadOnly : strings.budget.emptyMessage}
                 />
+                {copyError ? (
+                    <Text tone="danger" accessibilityLiveRegion="polite">
+                        {errorMessage(copyError)}
+                    </Text>
+                ) : null}
                 {readOnly ? null : (
                     <>
                         <Button label={strings.budget.set} onPress={openEditor} />
@@ -218,11 +222,6 @@ export function BudgetScreen() {
                         />
                     </>
                 )}
-                {copyError ? (
-                    <Text tone="danger" accessibilityLiveRegion="polite">
-                        {errorMessage(copyError)}
-                    </Text>
-                ) : null}
             </>
         );
     } else {
