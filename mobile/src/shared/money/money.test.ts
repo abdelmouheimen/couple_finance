@@ -1,5 +1,6 @@
 import { assert, bigInt, constantFrom, property } from "fast-check";
 import {
+    spokenMoney,
     MoneyError,
     currencyDecimals,
     formatMoney,
@@ -80,5 +81,14 @@ describe("money (BR-MON-02, BR-MON-03)", () => {
                 return fromMinorUnits(toMinorUnits(s, "EUR"), "EUR") === s;
             }),
         );
+    });
+});
+
+describe("spokenMoney (accessibility)", () => {
+    test("announces whole units, currency name and minor units without floats", () => {
+        expect(spokenMoney({ amount: "12.50", currency: "EUR" }, "en")).toBe("12 euros 50");
+        expect(spokenMoney({ amount: "1.00", currency: "EUR" }, "en")).toBe("1 euro");
+        expect(spokenMoney({ amount: "0.05", currency: "EUR" }, "en")).toBe("0 euros 5");
+        expect(spokenMoney({ amount: "-3.20", currency: "EUR" }, "en")).toBe("minus 3 euros 20");
     });
 });

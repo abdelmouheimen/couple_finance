@@ -22,6 +22,48 @@ export function errorMessage(error: unknown): string {
             return strings.errors.invitationNotAllowed;
         case "INVITATION_NOT_REVOCABLE":
             return strings.errors.invitationNotRevocable;
+        case "INVALID_AMOUNT_FORMAT":
+            return strings.errors.amountInvalid;
+        case "AMOUNT_NOT_POSITIVE":
+            return strings.errors.amountNotPositive;
+        case "AMOUNT_EXCEEDS_MAXIMUM":
+            return strings.errors.amountTooLarge;
+        case "EXPENSE_DATE_OUT_OF_RANGE":
+        case "EXPENSE_REFUND_DATE_BEFORE_ORIGINAL":
+            return strings.errors.dateOutOfRange;
+        case "EXPENSE_ITEMS_SUM_MISMATCH":
+        case "EXPENSE_ITEM_COUNT_INVALID":
+        case "EXPENSE_ITEM_DUPLICATE_CATEGORY":
+            return strings.errors.itemsMismatch;
+        case "EXPENSE_CATEGORY_ARCHIVED":
+        case "CATEGORY_ARCHIVED":
+            return strings.errors.categoryArchived;
+        case "CATEGORY_NOT_FOUND":
+            return strings.errors.categoryNotFound;
+        case "EXPENSE_MERCHANT_INVALID":
+            return strings.errors.merchantInvalid;
+        case "EXPENSE_SHARING_CHANGE_FORBIDDEN":
+        case "EXPENSE_PERSONAL_PAYER_MISMATCH":
+            return strings.errors.sharingForbidden;
+        case "EXPENSE_NOT_FOUND":
+            return strings.errors.expenseNotFound;
+        case "EXPENSE_HAS_LIVE_REFUNDS":
+            return strings.errors.hasLiveRefunds;
+        case "REQUEST_IN_PROGRESS":
+            return strings.errors.requestInProgress;
+        case "VERSION_CONFLICT":
+            return strings.errors.conflict;
+        case "CATEGORY_NAME_ALREADY_EXISTS":
+            return strings.errors.categoryNameTaken;
+        case "SYSTEM_CATEGORY_IMMUTABLE":
+            return strings.errors.categorySystem;
+        case "CATEGORY_LIMIT_REACHED":
+            return strings.errors.categoryLimit;
+        case "EXPENSE_REFUND_OF_NOT_ALLOWED":
+        case "EXPENSE_REFUND_ORIGINAL_INVALID":
+        case "EXPENSE_REFUND_VISIBILITY_MISMATCH":
+        case "EXPENSE_REFUND_EXCEEDS_ORIGINAL":
+            return strings.errors.refundProblem;
         default:
             return strings.errorDefault;
     }
