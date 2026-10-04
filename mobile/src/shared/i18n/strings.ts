@@ -191,7 +191,7 @@ export const strings = {
         updated: "Expense updated",
         deleted: "Expense deleted",
         restored: "Expense restored",
-        undo: "Undo",
+        dateFormatError: "Use the format YYYY-MM-DD",
         restore: "Restore",
         view: "View",
         edit: "Edit",

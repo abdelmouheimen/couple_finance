@@ -11,11 +11,12 @@ interface Props {
     expense: Expense;
     title: string;
     dateLabel: string;
+    categoryLabel?: string;
     onPress: () => void;
 }
 
 /** One list row. The whole row is a single accessible element: merchant, amount, date and scope. */
-export function ExpenseRow({ expense, title, dateLabel, onPress }: Props) {
+export function ExpenseRow({ expense, title, dateLabel, categoryLabel, onPress }: Props) {
     const colors = useColors();
     const money = toMoney(expense.amount);
     const personal = expense.sharingType === "PERSONAL";
@@ -36,6 +37,9 @@ export function ExpenseRow({ expense, title, dateLabel, onPress }: Props) {
         >
             <View style={styles.main}>
                 <Text bold>{shownTitle}</Text>
+                <Text variant="caption" tone="secondary">
+                    {categoryLabel ? `${categoryLabel} · ${scope}` : scope}
+                </Text>
                 {personal ? (
                     <View style={[styles.badge, { borderColor: colors.primary }]}>
                         <Text variant="caption" tone="primary" bold>

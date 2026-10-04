@@ -148,6 +148,12 @@ export function ExpenseListScreen() {
                         label={strings.expense.dateFrom}
                         value={from}
                         onChangeText={setFrom}
+                        placeholder="YYYY-MM-DD"
+                        error={
+                            from !== "" && !DATE_RE.test(from)
+                                ? strings.expense.dateFormatError
+                                : undefined
+                        }
                         autoCapitalize="none"
                         keyboardType="numbers-and-punctuation"
                     />
@@ -155,6 +161,12 @@ export function ExpenseListScreen() {
                         label={strings.expense.dateTo}
                         value={to}
                         onChangeText={setTo}
+                        placeholder="YYYY-MM-DD"
+                        error={
+                            to !== "" && !DATE_RE.test(to)
+                                ? strings.expense.dateFormatError
+                                : undefined
+                        }
                         autoCapitalize="none"
                         keyboardType="numbers-and-punctuation"
                     />
@@ -277,6 +289,9 @@ export function ExpenseListScreen() {
                                 strings.expense.untitled
                             }
                             dateLabel={formatDate(item.expense.date)}
+                            categoryLabel={categoryName.get(
+                                item.expense.items[0]?.categoryId ?? "",
+                            )}
                             onPress={() => router.push(`/expense/${item.expense.id}`)}
                         />
                     )

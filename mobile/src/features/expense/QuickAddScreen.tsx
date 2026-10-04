@@ -49,7 +49,7 @@ export function QuickAddScreen({ now }: { now?: () => Date }) {
             keys.current.reset();
             await invalidate();
             toast(strings.expense.saved, "success", {
-                label: strings.expense.undo,
+                label: strings.expense.view,
                 onPress: () => router.push(`/expense/${created.id}`),
             });
             close();
