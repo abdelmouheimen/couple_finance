@@ -288,7 +288,12 @@ describe("expense list", () => {
     });
 
     test("repeat_drill_down_with_a_new_navigation_nonce_reseeds_the_filters", async () => {
-        mockParams = { categoryId: "cat-1", periodStart: "2026-03-01", scope: "HOUSEHOLD", nav: "1" };
+        mockParams = {
+            categoryId: "cat-1",
+            periodStart: "2026-03-01",
+            scope: "HOUSEHOLD",
+            nav: "1",
+        };
         const api = installApi({
             "GET /api/v1/expenses": () => json(200, page([])),
         });
