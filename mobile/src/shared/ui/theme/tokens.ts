@@ -147,6 +147,7 @@ export const icons = {
     expenses: "≡",
     budget: "◔",
     chevron: "›",
+    settings: "⚙",
     empty: "○",
 } as const;
 export type IconName = keyof typeof icons;
