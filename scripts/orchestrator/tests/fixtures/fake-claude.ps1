@@ -7,6 +7,8 @@
 #                   | fix              first FIX MODE call kills the worker (findings already persisted)
 #   The worker is killed with its whole process tree (taskkill /T /F), like a closed terminal.
 #   FAKE_CLAUDE_FAIL = auth            first call fails like an expired Claude session (exit 1, is_error)
+#                   | session-limit    first call leaves uncommitted work, then fails like the real subscription
+#                                      limit (exit 1, is_error, api_error_status 429, "hit your session limit")
 #   FAKE_CLAUDE_REVIEW_CLEAN = 1       reviewers never report findings
 $agent = ''
 for ($i = 0; $i -lt $args.Count; $i++) { if ($args[$i] -eq '--agent') { $agent = $args[$i + 1] } }
@@ -32,6 +34,15 @@ function Stop-Worker {
 if ($env:FAKE_CLAUDE_FAIL -eq 'auth' -and (Test-Once 'fail-auth')) {
     Add-Content -LiteralPath (Join-Path $stateDir 'calls.log') -Value ($agent + ':auth-failed')
     @{ type = 'result'; is_error = $true; result = 'OAuth token has expired. Please run /login'; session_id = 'fake' } | ConvertTo-Json -Compress
+    exit 1
+}
+# Real subscription limit hit mid-implementation (shape of run 20261003T180545Z, issue-69/develop-resume.json).
+if ($env:FAKE_CLAUDE_FAIL -eq 'session-limit' -and (Test-Once 'fail-session-limit')) {
+    New-Item -ItemType Directory -Force -Path docs | Out-Null
+    Set-Content -LiteralPath 'docs/feature.md' -Value 'partial feature'
+    Add-Content -LiteralPath (Join-Path $stateDir 'calls.log') -Value ($agent + ':session-limit')
+    $msg = 'You''ve hit your session limit ' + [char]0x00B7 + ' resets 10:30pm (Europe/Paris)'
+    @{ type = 'result'; subtype = 'success'; is_error = $true; api_error_status = 429; terminal_reason = 'api_error'; result = $msg; total_cost_usd = 0; session_id = 'fake' } | ConvertTo-Json -Compress
     exit 1
 }
 

@@ -81,6 +81,9 @@ public final class OperationRegistry {
         registry.put("register", OperationFixture.publicOperation());
         registry.put("verifyEmail", OperationFixture.publicOperation());
         registry.put("resendVerification", OperationFixture.publicOperation());
+        registry.put("refresh", OperationFixture.publicOperation());
+        registry.put("logout", authenticated(s -> Call.without(HttpMethod.POST, "/api/v1/auth/logout")));
+        registry.put("logoutAll", authenticated(s -> Call.without(HttpMethod.POST, "/api/v1/auth/logout-all")));
         registry.put("getCurrentUser", authenticated(s -> Call.get("/api/v1/me")));
 
         registry.put("createHousehold", authenticated(s -> Call.with(HttpMethod.POST, "/api/v1/households",

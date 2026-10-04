@@ -12,7 +12,9 @@ enum IdentityErrorCode implements ErrorCode {
     INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED),
 
     /** Unknown, expired or already used verification token: one generic code, no distinction. */
-    INVALID_OR_EXPIRED_TOKEN(HttpStatus.BAD_REQUEST);
+    INVALID_OR_EXPIRED_TOKEN(HttpStatus.BAD_REQUEST),
+    /** Unknown, expired, revoked or replayed refresh token: one generic code, reuse is not distinguishable. */
+    INVALID_REFRESH_TOKEN(HttpStatus.UNAUTHORIZED);
 
     private final HttpStatus status;
 

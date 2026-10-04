@@ -1,6 +1,8 @@
 package com.couplefinance.identity.web;
 
 import com.couplefinance.identity.application.LoginService;
+import com.couplefinance.identity.application.LogoutService;
+import com.couplefinance.identity.application.RefreshService;
 import com.couplefinance.identity.application.RegistrationService;
 import com.couplefinance.shared.error.ProblemSchema;
 import io.swagger.v3.oas.annotations.Operation;
@@ -24,10 +26,15 @@ class AuthController {
 
     private final LoginService loginService;
     private final RegistrationService registrationService;
+    private final RefreshService refreshService;
+    private final LogoutService logoutService;
 
-    AuthController(LoginService loginService, RegistrationService registrationService) {
+    AuthController(LoginService loginService, RegistrationService registrationService,
+            RefreshService refreshService, LogoutService logoutService) {
         this.loginService = loginService;
         this.registrationService = registrationService;
+        this.refreshService = refreshService;
+        this.logoutService = logoutService;
     }
 
     @PostMapping("/login")
@@ -75,6 +82,31 @@ class AuthController {
         registrationService.register(request.toCommand());
     }
 
+    @PostMapping("/refresh")
+    @SecurityRequirements
+    @Operation(operationId = "refresh", summary = "Rotate the refresh token",
+            description = "Public: the refresh token is the credential. Returns a new access token for the same "
+                    + "session and a new refresh token (30 days, sliding); the presented token is rotated. A token "
+                    + "rotated less than 30 seconds ago (parallel refresh) rotates the chain forward again so only "
+                    + "the newest token stays valid; a rotated token presented later revokes the session. Unknown, "
+                    + "expired, revoked and replayed tokens are indistinguishable (INVALID_REFRESH_TOKEN).")
+    @ApiResponse(responseCode = "200", description = "Tokens issued")
+    @ApiResponse(responseCode = "400", description = "VALIDATION_FAILED or MALFORMED_REQUEST",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ProblemSchema.class)))
+    @ApiResponse(responseCode = "401", description = "INVALID_REFRESH_TOKEN",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ProblemSchema.class)))
+    @ApiResponse(responseCode = "413", description = "PAYLOAD_TOO_LARGE",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ProblemSchema.class)))
+    @ApiResponse(responseCode = "429", description = "RATE_LIMITED, with a Retry-After header",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ProblemSchema.class)))
+    LoginResponse refresh(@Valid @RequestBody RefreshRequest request) {
+        return LoginResponse.from(refreshService.refresh(request.refreshToken()));
+    }
+
     @PostMapping("/verify-email")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @SecurityRequirements
@@ -112,5 +144,31 @@ class AuthController {
                     schema = @Schema(implementation = ProblemSchema.class)))
     void resendVerification(@Valid @RequestBody ResendVerificationRequest request) {
         registrationService.resendVerification(request.email());
+    }
+
+    @PostMapping("/logout")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Operation(operationId = "logout", summary = "Log out of the current session",
+            description = "Revokes the session of the access token (reason LOGOUT) and its refresh tokens. "
+                    + "Idempotent. The access token itself stays valid until it expires (at most 15 minutes).")
+    @ApiResponse(responseCode = "204", description = "Session revoked")
+    @ApiResponse(responseCode = "401", description = "AUTHENTICATION_REQUIRED",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ProblemSchema.class)))
+    void logout() {
+        logoutService.logout();
+    }
+
+    @PostMapping("/logout-all")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Operation(operationId = "logoutAll", summary = "Log out of every session",
+            description = "Revokes all sessions of the authenticated user (reason LOGOUT_ALL) and their refresh "
+                    + "tokens.")
+    @ApiResponse(responseCode = "204", description = "Sessions revoked")
+    @ApiResponse(responseCode = "401", description = "AUTHENTICATION_REQUIRED",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ProblemSchema.class)))
+    void logoutAll() {
+        logoutService.logoutAll();
     }
 }
