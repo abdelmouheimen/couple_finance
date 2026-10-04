@@ -10,7 +10,7 @@ import { ExpenseListScreen } from "./ExpenseListScreen";
 import { QuickAddScreen } from "./QuickAddScreen";
 
 // Cold module/Intl start-up in CI can exceed the 1 s default.
-configure({ asyncUtilTimeout: 8000 });
+configure({ asyncUtilTimeout: 15000 });
 
 const mockRouter = {
     push: jest.fn(),

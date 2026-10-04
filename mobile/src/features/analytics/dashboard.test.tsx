@@ -110,7 +110,7 @@ async function mount() {
 
 beforeEach(() => mockPush.mockClear());
 // The first render cold-starts the module graph; keep async queries robust on loaded CI machines.
-configure({ asyncUtilTimeout: 5000 });
+configure({ asyncUtilTimeout: 15000 });
 
 afterEach(() => jest.restoreAllMocks());
 

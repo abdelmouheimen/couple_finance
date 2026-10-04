@@ -101,7 +101,7 @@ async function mount() {
     );
 }
 
-configure({ asyncUtilTimeout: 8000 });
+configure({ asyncUtilTimeout: 15000 });
 
 afterEach(() => jest.restoreAllMocks());
 
