@@ -179,7 +179,8 @@ export function canChangeSharing(expense: Expense, me: string): boolean {
 
 export function categoryLabel(category: Category): string {
     if (category.name) return category.name;
-    if (category.systemCode) return strings.categoryNames[category.systemCode] ?? category.systemCode;
+    if (category.systemCode)
+        return strings.categoryNames[category.systemCode] ?? category.systemCode;
     return strings.expense.untitled;
 }
 

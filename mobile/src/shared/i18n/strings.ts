@@ -35,7 +35,7 @@ export const strings = {
         expenseNotFound: "This expense was not found.",
         hasLiveRefunds: "This expense has refunds. Delete the refunds first.",
         requestInProgress: "Still saving. Please wait a moment.",
-                categoryNameTaken: "A category with this name already exists.",
+        categoryNameTaken: "A category with this name already exists.",
         categorySystem: "System categories cannot be changed.",
         categoryLimit: "You reached the maximum number of categories.",
         refundProblem: "This refund is not valid for the original expense.",
