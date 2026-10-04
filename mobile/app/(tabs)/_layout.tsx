@@ -1,6 +1,8 @@
 import { Tabs, useRouter } from "expo-router";
 import { type ColorValue, Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useIsReadOnly } from "@/features/household/HouseholdProvider";
+import { ReadOnlyBanner } from "@/features/household/ReadOnlyBanner";
 import { strings } from "@/shared/i18n/strings";
 import { Icon, useColors } from "@/shared/ui";
 import {
@@ -22,10 +24,12 @@ export default function TabsLayout() {
     const colors = useColors();
     const router = useRouter();
     const insets = useSafeAreaInsets();
+    const readOnly = useIsReadOnly();
     // Explicit, deterministic tab bar height so the FAB offset never relies on a guess.
     const tabBarHeight = minTouchTarget + spacing.lg + insets.bottom;
     return (
         <View style={styles.flex}>
+            <ReadOnlyBanner />
             <Tabs
                 screenOptions={{
                     headerShown: false,
@@ -51,22 +55,28 @@ export default function TabsLayout() {
                     name="budget"
                     options={{ title: strings.tabs.budget, tabBarIcon: tabIcon("budget") }}
                 />
+                <Tabs.Screen
+                    name="settings"
+                    options={{ title: strings.tabs.settings, tabBarIcon: tabIcon("settings") }}
+                />
             </Tabs>
-            <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={strings.addExpense}
-                onPress={() => router.push("/add-expense")}
-                style={[
-                    styles.fab,
-                    elevation.floating,
-                    {
-                        backgroundColor: colors.primary,
-                        bottom: tabBarHeight + spacing.md,
-                    },
-                ]}
-            >
-                <Icon name="add" size="lg" color={colors.onPrimary} />
-            </Pressable>
+            {readOnly ? null : (
+                <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={strings.addExpense}
+                    onPress={() => router.push("/add-expense")}
+                    style={[
+                        styles.fab,
+                        elevation.floating,
+                        {
+                            backgroundColor: colors.primary,
+                            bottom: tabBarHeight + spacing.md,
+                        },
+                    ]}
+                >
+                    <Icon name="add" size="lg" color={colors.onPrimary} />
+                </Pressable>
+            )}
         </View>
     );
 }
