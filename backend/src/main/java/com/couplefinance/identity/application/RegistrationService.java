@@ -33,6 +33,11 @@ import org.springframework.transaction.support.TransactionTemplate;
  * mail to the owner of an existing one). The password is hashed (Argon2id) in every registration case, so the
  * timing does not depend on the email being known. Emails are sent after the database transaction has committed
  * (CLAUDE.md 6.3); a delivery failure is logged without any address and never surfaces to the caller.
+ *
+ * <p>Accepted residual risk: {@link #resendVerification} returns without sending when the address is unknown, so with
+ * a slow real mail provider its latency can differ slightly from a known address. Enumeration through it is bounded
+ * by the per-address limit here and the per-IP {@code auth} rate limit; asynchronous delivery (outbox) is the
+ * follow-up that removes the difference entirely. {@link #register} is equalized (always hashes and sends).
  */
 @Service
 public class RegistrationService {
