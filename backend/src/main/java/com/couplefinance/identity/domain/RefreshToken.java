@@ -30,6 +30,15 @@ public class RefreshToken {
     @Column(name = "expires_at", nullable = false, updatable = false)
     private Instant expiresAt;
 
+    @Column(name = "rotated_at")
+    private Instant rotatedAt;
+
+    @Column(name = "replaced_by_id")
+    private UUID replacedById;
+
+    @Column(name = "revoked_at")
+    private Instant revokedAt;
+
     protected RefreshToken() {
         // for JPA
     }
@@ -54,5 +63,38 @@ public class RefreshToken {
 
     public Instant expiresAt() {
         return expiresAt;
+    }
+
+    public UUID sessionId() {
+        return sessionId;
+    }
+
+    public Instant rotatedAt() {
+        return rotatedAt;
+    }
+
+    public UUID replacedById() {
+        return replacedById;
+    }
+
+    public boolean isRotated() {
+        return rotatedAt != null;
+    }
+
+    public boolean isRevoked() {
+        return revokedAt != null;
+    }
+
+    public boolean isExpired(Instant now) {
+        return !now.isBefore(expiresAt);
+    }
+
+    /** Marks this token as replaced by {@code successorId}; only the newest token of a chain can be rotated. */
+    public void rotateTo(UUID successorId, Instant now) {
+        if (rotatedAt != null) {
+            throw new IllegalStateException("Only the newest token of a chain can be rotated.");
+        }
+        this.rotatedAt = now;
+        this.replacedById = successorId;
     }
 }

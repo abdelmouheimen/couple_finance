@@ -29,11 +29,17 @@ The generated client types are **never hand-edited**: change the backend, run `.
 
 Public, non-secret values only, via Expo public env vars (inlined into the bundle, so **never put secrets there**):
 
-| Variable                   | Default                 | Meaning                                                                                                                                                                         |
-| -------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `EXPO_PUBLIC_API_BASE_URL` | `http://localhost:8080` | Backend origin (no `/api/v1` suffix). Android emulator: `http://10.0.2.2:8080`. `http` is accepted only for localhost, 127.0.0.1 and 10.0.2.2; everything else must be `https`. |
+| Variable                   | Default                 | Meaning                                                                                                                                                                                                                                   |
+| -------------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `EXPO_PUBLIC_API_BASE_URL` | `http://localhost:8080` | Backend origin (no `/api/v1` suffix). Android emulator: `http://10.0.2.2:8080`. `http` is accepted only for localhost, 127.0.0.1, 10.0.2.2 and, in development bundles only, private LAN IPv4 addresses; everything else must be `https`. |
 
 Copy `.env.example` to `.env.local` (git-ignored) per environment.
+
+### Physical phone (Expo Go, same Wi-Fi)
+
+From the repository root: `powershell.exe -ExecutionPolicy Bypass -File .\scripts\start-mobile-local.ps1`
+(add `-Tunnel` when the LAN QR code is unreachable). It starts PostgreSQL and the backend, detects the PC's LAN IP,
+sets `EXPO_PUBLIC_API_BASE_URL=http://<LAN IP>:<port>` for Expo only and shows the QR code to scan with Expo Go.
 
 ## Layout
 

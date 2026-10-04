@@ -1,0 +1,123 @@
+import {
+    createContext,
+    type ReactNode,
+    useCallback,
+    useContext,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+} from "react";
+import { AccessibilityInfo, StyleSheet, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { strings } from "@/shared/i18n/strings";
+import { Button } from "./Button";
+import { Icon } from "./Icon";
+import { IconButton } from "./IconButton";
+import { Text } from "./Text";
+import { useColors } from "./theme/theme";
+import { borderWidth, elevation, errorToastDurationMs, radius, spacing } from "./theme/tokens";
+
+export type ToastKind = "success" | "error";
+export interface ToastAction {
+    label: string;
+    onPress: () => void;
+}
+interface ToastState {
+    message: string;
+    kind: ToastKind;
+    action?: ToastAction | undefined;
+}
+
+type ShowToast = (message: string, kind?: ToastKind, action?: ToastAction) => void;
+
+const ToastContext = createContext<ShowToast>(() => {});
+
+export const TOAST_DURATION_MS = 4000;
+
+export function useToast() {
+    return useContext(ToastContext);
+}
+
+/** Non-blocking feedback, announced to assistive tech; auto-dismisses. */
+export function ToastProvider({ children }: { children: ReactNode }) {
+    const colors = useColors();
+    const insets = useSafeAreaInsets();
+    const [toast, setToast] = useState<ToastState | null>(null);
+    const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const show = useCallback<ShowToast>((message, kind = "success", action) => {
+        if (timer.current) clearTimeout(timer.current);
+        setToast({ message, kind, action });
+        // Single announcement mechanism: announceForAccessibility (no duplicate live region).
+        AccessibilityInfo.announceForAccessibility(message);
+        timer.current = setTimeout(
+            () => setToast(null),
+            kind === "error" || action ? errorToastDurationMs : TOAST_DURATION_MS,
+        );
+    }, []);
+
+    useEffect(
+        () => () => {
+            if (timer.current) clearTimeout(timer.current);
+        },
+        [],
+    );
+
+    const value = useMemo(() => show, [show]);
+    const tone = toast?.kind === "error" ? colors.danger : colors.success;
+
+    return (
+        <ToastContext.Provider value={value}>
+            {children}
+            {toast ? (
+                <View
+                    pointerEvents="box-none"
+                    style={[styles.host, { top: insets.top + spacing.sm }]}
+                >
+                    <View
+                        accessible
+                        accessibilityRole="alert"
+                        style={[
+                            styles.toast,
+                            elevation.floating,
+                            { backgroundColor: colors.surface, borderColor: tone },
+                        ]}
+                    >
+                        <Icon name={toast.kind === "error" ? "error" : "check"} color={tone} />
+                        <Text style={styles.message}>{toast.message}</Text>
+                        {toast.action ? (
+                            <Button
+                                variant="secondary"
+                                label={toast.action.label}
+                                onPress={() => {
+                                    const action = toast.action;
+                                    setToast(null);
+                                    action?.onPress();
+                                }}
+                            />
+                        ) : null}
+                        <IconButton
+                            icon="close"
+                            label={strings.close}
+                            onPress={() => setToast(null)}
+                        />
+                    </View>
+                </View>
+            ) : null}
+        </ToastContext.Provider>
+    );
+}
+
+const styles = StyleSheet.create({
+    host: { position: "absolute", left: spacing.lg, right: spacing.lg },
+    toast: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: spacing.md,
+        borderRadius: radius.md,
+        borderWidth: borderWidth.thick,
+        padding: spacing.lg,
+    },
+    message: { flex: 1 },
+});

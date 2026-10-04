@@ -1,0 +1,31 @@
+databaseChangeLog:
+  - changeSet:
+      id: identity-0005-create-one-time-token
+      author: couplefinance
+      comment: >
+        One-time tokens (database-schema.md section 4.4), stored only as SHA-256 hashes; single use through used_at.
+        uq_one_time_token_hash: lookup of the presented token on consumption (and uniqueness of the secret).
+        ix_ott_expiry: purge job deleting expired, unused tokens.
+      changes:
+        - sql:
+            sql: |
+              CREATE TABLE identity.one_time_token (
+                  id         uuid        NOT NULL,
+                  user_id    uuid        NOT NULL,
+                  purpose    text        NOT NULL,
+                  token_hash bytea       NOT NULL,
+                  created_at timestamptz NOT NULL,
+                  expires_at timestamptz NOT NULL,
+                  used_at    timestamptz,
+                  CONSTRAINT pk_one_time_token PRIMARY KEY (id),
+                  CONSTRAINT fk_one_time_token_user FOREIGN KEY (user_id)
+                      REFERENCES identity.user_account (id) ON DELETE CASCADE,
+                  CONSTRAINT uq_one_time_token_hash UNIQUE (token_hash),
+                  CONSTRAINT ck_one_time_token_purpose CHECK (purpose IN ('EMAIL_VERIFY', 'PASSWORD_RESET')),
+                  CONSTRAINT ck_one_time_token_hash CHECK (octet_length(token_hash) = 32),
+                  CONSTRAINT ck_one_time_token_expiry CHECK (expires_at > created_at)
+              );
+              CREATE INDEX ix_ott_expiry ON identity.one_time_token (expires_at) WHERE used_at IS NULL;
+      rollback:
+        - sql:
+            sql: DROP TABLE identity.one_time_token
