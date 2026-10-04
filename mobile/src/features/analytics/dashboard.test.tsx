@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, screen, waitFor } from "@testing-library/react-native";
+import { configure, fireEvent, screen, waitFor } from "@testing-library/react-native";
 import { HouseholdProvider, useHouseholdState } from "@/features/household/HouseholdProvider";
 import { renderUi } from "@/shared/ui/testing";
 import { ANALYTICS_QUERY_KEY } from "./analyticsApi";
@@ -109,6 +109,9 @@ async function mount() {
 }
 
 beforeEach(() => mockPush.mockClear());
+// The first render cold-starts the module graph; keep async queries robust on loaded CI machines.
+configure({ asyncUtilTimeout: 5000 });
+
 afterEach(() => jest.restoreAllMocks());
 
 describe("dashboard", () => {
