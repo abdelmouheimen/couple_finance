@@ -94,7 +94,7 @@ export const strings = {
     },
     dashboard: {
         periodHeader: (start: string, end: string) => `From ${start} until ${end}`,
-        scopeLabel: "Show",
+        scopeLabel: "Scope",
         spentTitle: "Spent this period",
         vsPrevious: "vs previous period",
         previousChange: (difference: string, percentage?: string) =>

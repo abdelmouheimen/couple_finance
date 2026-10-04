@@ -11,6 +11,8 @@ interface Props {
     onSelect: (categoryId: string) => void;
 }
 
+const MAX_REFUNDS = 3;
+
 /** Bar length is the server percentage clamped for layout only; the figure shown is the server string. */
 function barWidth(percentage: string | undefined): `${number}%` {
     const n = Number(percentage);
@@ -25,19 +27,35 @@ export function CategoryBreakdown({ rows, refunds, onSelect }: Props) {
             <Text variant="title" accessibilityRole="header">
                 {strings.dashboard.whereTitle}
             </Text>
-            {rows.length > 0 ? (
-                <View
-                    testID="category-chart"
-                    accessible
-                    accessibilityRole="image"
-                    accessibilityLabel={`${strings.dashboard.chartSummary(rows.length)}: ${rows
-                        .map((r) => `${r.name} ${formatMoney(r.total)} ${r.percentage ?? ""} %`)
-                        .join(", ")}`}
-                    style={styles.chart}
-                >
-                    {rows.map((r) => (
+            <View
+                testID="category-chart"
+                accessibilityLabel={
+                    rows.length > 0
+                        ? `${strings.dashboard.chartSummary(rows.length)}: ${rows
+                              .map(
+                                  (r) =>
+                                      `${r.name} ${formatMoney(r.total)} ${r.percentage ?? ""} %`,
+                              )
+                              .join(", ")}`
+                        : undefined
+                }
+                style={styles.chart}
+            >
+                {rows.map((r) => (
+                    <View key={r.categoryId}>
+                        <ListRow
+                            testID={`category-row-${r.categoryId}`}
+                            title={r.name}
+                            subtitle={
+                                r.percentage !== undefined
+                                    ? `${formatMoney(r.total)} · ${r.percentage} %`
+                                    : formatMoney(r.total)
+                            }
+                            onPress={() => onSelect(r.categoryId)}
+                        />
                         <View
-                            key={r.categoryId}
+                            importantForAccessibility="no-hide-descendants"
+                            accessibilityElementsHidden
                             style={[styles.track, { backgroundColor: colors.surfaceMuted }]}
                         >
                             <View
@@ -51,28 +69,15 @@ export function CategoryBreakdown({ rows, refunds, onSelect }: Props) {
                                 ]}
                             />
                         </View>
-                    ))}
-                </View>
-            ) : null}
-            {rows.map((r) => (
-                <ListRow
-                    key={r.categoryId}
-                    testID={`category-row-${r.categoryId}`}
-                    title={r.name}
-                    subtitle={
-                        r.percentage !== undefined
-                            ? `${formatMoney(r.total)} · ${r.percentage} %`
-                            : formatMoney(r.total)
-                    }
-                    onPress={() => onSelect(r.categoryId)}
-                />
-            ))}
+                    </View>
+                ))}
+            </View>
             {refunds.length > 0 ? (
                 <View style={[styles.refunds, { borderTopColor: colors.border }]}>
                     <Text variant="caption" tone="secondary" bold>
                         {strings.dashboard.refundsTitle}
                     </Text>
-                    {refunds.map((r) => (
+                    {refunds.slice(0, MAX_REFUNDS).map((r) => (
                         <ListRow
                             key={r.categoryId}
                             testID={`refund-row-${r.categoryId}`}

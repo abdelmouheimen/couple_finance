@@ -18,6 +18,16 @@ import { CategoryBreakdown } from "./CategoryBreakdown";
 import { toCategoryRows, toNegativeRows } from "./dashboardModel";
 import { BudgetRemainingCard, SpendSummaryCard } from "./SummaryCards";
 
+/** Display only (no period math): the ISO business date in the device locale, timezone-neutral. */
+function displayDate(iso: string): string {
+    const [y, m, d] = iso.split("-").map(Number);
+    if (!y || !m || !d) return iso;
+    return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString(undefined, {
+        dateStyle: "medium",
+        timeZone: "UTC",
+    });
+}
+
 const SCOPES: readonly { value: AnalyticsScope; label: string }[] = [
     { value: "HOUSEHOLD", label: strings.scope.HOUSEHOLD },
     { value: "PERSONAL", label: strings.scope.PERSONAL },
@@ -127,7 +137,10 @@ export function Dashboard() {
             }
         >
             <Text variant="caption" tone="secondary" testID="period-header">
-                {strings.dashboard.periodHeader(currentPeriod.start, currentPeriod.end)}
+                {strings.dashboard.periodHeader(
+                    displayDate(currentPeriod.start),
+                    displayDate(currentPeriod.end),
+                )}
             </Text>
             <Selector
                 label={strings.dashboard.scopeLabel}
