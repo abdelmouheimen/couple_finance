@@ -6,6 +6,9 @@ import Expenses from "../app/(tabs)/expenses";
 import Budget from "../app/(tabs)/budget";
 import AddExpense from "../app/add-expense";
 
+// The dashboard needs the household/query providers, covered by its own tests.
+jest.mock("@/features/analytics/Dashboard", () => ({ Dashboard: () => null }));
+
 // Navigation-only test: the budget screen needs the household provider.
 jest.mock("@/features/budget/BudgetScreen", () => ({ BudgetScreen: () => null }));
 
