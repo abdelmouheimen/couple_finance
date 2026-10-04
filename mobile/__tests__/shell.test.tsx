@@ -6,6 +6,9 @@ import Expenses from "../app/(tabs)/expenses";
 import Budget from "../app/(tabs)/budget";
 import AddExpense from "../app/add-expense";
 
+// The dashboard needs the household/query providers, covered by its own tests.
+jest.mock("@/features/analytics/Dashboard", () => ({ Dashboard: () => null }));
+
 const routes = {
     "(tabs)/_layout": TabsLayout,
     "(tabs)/index": Home,
