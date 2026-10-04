@@ -144,6 +144,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Register an account
+         * @description Public. Creates a PENDING_VERIFICATION account and sends a verification email. The response is identical whether or not the email is already registered (the existing owner receives a notice mail instead; no second account is created).
+         */
+        post: operations["register"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/resend-verification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resend the verification email
+         * @description Public. Same 202 response whether or not the email is registered or already verified.
+         */
+        post: operations["resendVerification"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/verify-email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Verify an email address
+         * @description Public. Consumes a single-use, 24-hour token and makes the account ACTIVE. Unknown, expired and already used tokens are indistinguishable (INVALID_OR_EXPIRED_TOKEN).
+         */
+        post: operations["verifyEmail"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/budgets/{periodStart}": {
         parameters: {
             query?: never;
@@ -1033,6 +1093,32 @@ export interface components {
             /** @description The opaque refresh token received at login or at the previous refresh. */
             refreshToken: string;
         };
+        RegisterRequest: {
+            /** @example Alex */
+            displayName: string;
+            /**
+             * Format: email
+             * @example alex@example.com
+             */
+            email: string;
+            /**
+             * @description BCP 47 language tag, the account preference; defaults to fr-FR.
+             * @example fr-FR
+             */
+            locale?: string;
+            /**
+             * Format: password
+             * @description Between 10 and 128 characters.
+             */
+            password: string;
+        };
+        ResendVerificationRequest: {
+            /**
+             * Format: email
+             * @example alex@example.com
+             */
+            email: string;
+        };
         SetBudgetRequest: {
             /** @description The complete set of category limits of the period: it replaces the existing lines (added, changed and omitted lines are applied). Omitted: the existing lines are left untouched; an empty array removes them all. At most one line per category (BR-BUD-01). Their sum may exceed the overall limit: the response then carries categoryLimitsWarning (BR-BUD-04). */
             categoryLimits?: components["schemas"]["CategoryLimitRequest"][];
@@ -1098,6 +1184,10 @@ export interface components {
              * @enum {string}
              */
             sharingType: "SHARED" | "PERSONAL";
+        };
+        VerifyEmailRequest: {
+            /** @description The opaque token received by email. */
+            token: string;
         };
     };
     responses: never;
@@ -1438,6 +1528,153 @@ export interface operations {
             };
             /** @description INVALID_REFRESH_TOKEN */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description PAYLOAD_TOO_LARGE */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description RATE_LIMITED, with a Retry-After header */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    register: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegisterRequest"];
+            };
+        };
+        responses: {
+            /** @description Accepted; a mail is sent in every case */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description VALIDATION_FAILED (including the password policy) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description PAYLOAD_TOO_LARGE */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description RATE_LIMITED, with a Retry-After header */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    resendVerification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResendVerificationRequest"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description VALIDATION_FAILED */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description PAYLOAD_TOO_LARGE */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description RATE_LIMITED, with a Retry-After header */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    verifyEmail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VerifyEmailRequest"];
+            };
+        };
+        responses: {
+            /** @description Email verified, account ACTIVE */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description INVALID_OR_EXPIRED_TOKEN or VALIDATION_FAILED */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };

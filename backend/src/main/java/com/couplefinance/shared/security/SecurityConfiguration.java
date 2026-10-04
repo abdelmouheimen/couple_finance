@@ -37,7 +37,10 @@ public class SecurityConfiguration {
     };
 
     /** Public authentication routes (security.md §3); every other route stays deny-by-default. */
-    private static final String[] PUBLIC_AUTH_ENDPOINTS = {"/api/v1/auth/login", "/api/v1/auth/refresh"};
+    private static final String[] PUBLIC_AUTH_ENDPOINTS = {
+        "/api/v1/auth/login", "/api/v1/auth/refresh", "/api/v1/auth/register", "/api/v1/auth/verify-email",
+        "/api/v1/auth/resend-verification"
+    };
 
     private static final String AUTH_PATH_PREFIX = "/api/v1/auth/";
     private static final long AUTH_MAX_BODY_BYTES = 4096;
