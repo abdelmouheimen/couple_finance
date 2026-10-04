@@ -22,9 +22,37 @@ export function errorMessage(error: unknown): string {
             return strings.errors.invitationNotAllowed;
         case "INVITATION_NOT_REVOCABLE":
             return strings.errors.invitationNotRevocable;
+        case "PREVIOUS_BUDGET_NOT_FOUND":
+            return strings.errors.previousBudgetNotFound;
+        case "BUDGET_ALREADY_EXISTS":
+            return strings.errors.budgetAlreadyExists;
+        case "BUDGET_LIMIT_REQUIRED":
+            return strings.errors.budgetLimitRequired;
+        case "DUPLICATE_CATEGORY_LIMIT":
+        case "TOO_MANY_CATEGORY_LIMITS":
+        case "BUDGET_CATEGORY_ARCHIVED":
+        case "CATEGORY_NOT_FOUND":
+            return strings.errors.budgetCategories;
+        case "INVALID_AMOUNT_FORMAT":
+        case "TOO_MANY_DECIMALS":
+        case "AMOUNT_NOT_POSITIVE":
+        case "AMOUNT_EXCEEDS_MAXIMUM":
+        case "CURRENCY_MISMATCH":
+            return strings.errors.budgetAmount;
+        case "VERSION_CONFLICT":
+        case "IF_MATCH_REQUIRED":
+            return strings.errors.versionConflict;
         default:
             return strings.errorDefault;
     }
+}
+
+/** True for the stale-version answers (412 / 428): the caller must reload, never overwrite. */
+export function isVersionConflict(error: unknown): boolean {
+    return (
+        error instanceof ApiError &&
+        (error.code === "VERSION_CONFLICT" || error.code === "IF_MATCH_REQUIRED")
+    );
 }
 
 /** Server-side field violations keyed by field name, with a generic human message. */
