@@ -5,6 +5,8 @@ import java.util.UUID;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
@@ -34,7 +36,8 @@ public class Session {
     private Instant revokedAt;
 
     @Column(name = "revoke_reason")
-    private String revokeReason;
+    @Enumerated(EnumType.STRING)
+    private SessionRevokeReason revokeReason;
 
     protected Session() {
         // for JPA
@@ -57,5 +60,26 @@ public class Session {
 
     public UUID userId() {
         return userId;
+    }
+
+    public boolean isRevoked() {
+        return revokedAt != null;
+    }
+
+    public SessionRevokeReason revokeReason() {
+        return revokeReason;
+    }
+
+    /** Records a use of the session. */
+    public void touch(Instant now) {
+        this.lastUsedAt = now;
+    }
+
+    /** Revokes the session; a session already revoked keeps its first reason. */
+    public void revoke(SessionRevokeReason reason, Instant now) {
+        if (revokedAt == null) {
+            this.revokedAt = now;
+            this.revokeReason = reason;
+        }
     }
 }

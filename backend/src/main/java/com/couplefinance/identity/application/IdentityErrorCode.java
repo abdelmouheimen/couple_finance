@@ -9,7 +9,10 @@ enum IdentityErrorCode implements ErrorCode {
     EMAIL_NOT_VERIFIED(HttpStatus.FORBIDDEN),
 
     /** Wrong password, unknown email or deleted account: one generic code, no account enumeration. */
-    INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED);
+    INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED),
+
+    /** Unknown, expired, revoked or replayed refresh token: one generic code, reuse is not distinguishable. */
+    INVALID_REFRESH_TOKEN(HttpStatus.UNAUTHORIZED);
 
     private final HttpStatus status;
 
