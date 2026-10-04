@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { AppState, type AppStateStatus, StyleSheet, View } from "react-native";
 import { strings } from "@/shared/i18n/strings";
-import { Icon } from "./Icon";
 import { Text } from "./Text";
 import { useColors } from "./theme/theme";
 import { spacing } from "./theme/tokens";
@@ -10,6 +9,7 @@ import { spacing } from "./theme/tokens";
  * Privacy screen (security.md §9): while the app is not active (app switcher snapshot, incoming
  * call overlay) an opaque cover replaces the content so no financial data is captured in the OS
  * snapshot. Renders nothing while the app is active.
+ * Known limit: Android may snapshot before the cover renders (no FLAG_SECURE; needs a native module).
  */
 export function PrivacyShield() {
     const colors = useColors();
@@ -26,7 +26,6 @@ export function PrivacyShield() {
             importantForAccessibility="no-hide-descendants"
             style={[styles.cover, { backgroundColor: colors.background }]}
         >
-            <Icon name="empty" size="lg" />
             <Text bold>{strings.appName}</Text>
         </View>
     );
@@ -39,6 +38,7 @@ const styles = StyleSheet.create({
         left: 0,
         right: 0,
         bottom: 0,
+        zIndex: 1000,
         alignItems: "center",
         justifyContent: "center",
         gap: spacing.md,
