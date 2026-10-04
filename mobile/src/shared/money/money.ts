@@ -95,3 +95,26 @@ export function formatMoney(money: Money, locale?: string): string {
     }
     return result;
 }
+
+/**
+ * Screen-reader text for an amount: "12 euros 50" (whole units, currency name, minor units), built
+ * from the exact decimal string; no JS number is involved.
+ */
+export function spokenMoney(money: Money, locale = "en"): string {
+    const minor = toMinorUnits(money.amount, money.currency);
+    const negative = minor < 0n;
+    const canonical = fromMinorUnits(negative ? -minor : minor, money.currency);
+    const [whole = "0", fraction = ""] = canonical.split(".");
+    const name =
+        new Intl.NumberFormat(locale, {
+            style: "currency",
+            currency: money.currency,
+            currencyDisplay: "name",
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 0,
+        })
+            .formatToParts(BigInt(whole))
+            .find((p) => p.type === "currency")?.value ?? money.currency;
+    const cents = fraction !== "" && /[1-9]/.test(fraction) ? ` ${fraction.replace(/^0/, "")}` : "";
+    return `${negative ? "minus " : ""}${whole} ${name}${cents}`;
+}

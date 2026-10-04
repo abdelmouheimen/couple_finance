@@ -61,6 +61,9 @@ function Navigator() {
             <Stack.Protected guard={signedIn && state.kind === "ready"}>
                 <Stack.Screen name="(tabs)" />
                 <Stack.Screen name="add-expense" options={{ presentation: "modal" }} />
+                <Stack.Screen name="expense/[id]" />
+                <Stack.Screen name="expense/edit/[id]" />
+                <Stack.Screen name="categories" />
             </Stack.Protected>
         </Stack>
     );

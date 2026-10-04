@@ -11,6 +11,7 @@ import {
 import { AccessibilityInfo, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { strings } from "@/shared/i18n/strings";
+import { Button } from "./Button";
 import { Icon } from "./Icon";
 import { IconButton } from "./IconButton";
 import { Text } from "./Text";
@@ -18,12 +19,19 @@ import { useColors } from "./theme/theme";
 import { borderWidth, elevation, errorToastDurationMs, radius, spacing } from "./theme/tokens";
 
 export type ToastKind = "success" | "error";
+export interface ToastAction {
+    label: string;
+    onPress: () => void;
+}
 interface ToastState {
     message: string;
     kind: ToastKind;
+    action?: ToastAction | undefined;
 }
 
-const ToastContext = createContext<(message: string, kind?: ToastKind) => void>(() => {});
+type ShowToast = (message: string, kind?: ToastKind, action?: ToastAction) => void;
+
+const ToastContext = createContext<ShowToast>(() => {});
 
 export const TOAST_DURATION_MS = 4000;
 
@@ -38,14 +46,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     const [toast, setToast] = useState<ToastState | null>(null);
     const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const show = useCallback((message: string, kind: ToastKind = "success") => {
+    const show = useCallback<ShowToast>((message, kind = "success", action) => {
         if (timer.current) clearTimeout(timer.current);
-        setToast({ message, kind });
+        setToast({ message, kind, action });
         // Single announcement mechanism: announceForAccessibility (no duplicate live region).
         AccessibilityInfo.announceForAccessibility(message);
         timer.current = setTimeout(
             () => setToast(null),
-            kind === "error" ? errorToastDurationMs : TOAST_DURATION_MS,
+            kind === "error" || action ? errorToastDurationMs : TOAST_DURATION_MS,
         );
     }, []);
 
@@ -78,6 +86,17 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                     >
                         <Icon name={toast.kind === "error" ? "error" : "check"} color={tone} />
                         <Text style={styles.message}>{toast.message}</Text>
+                        {toast.action ? (
+                            <Button
+                                variant="secondary"
+                                label={toast.action.label}
+                                onPress={() => {
+                                    const action = toast.action;
+                                    setToast(null);
+                                    action?.onPress();
+                                }}
+                            />
+                        ) : null}
                         <IconButton
                             icon="close"
                             label={strings.close}
