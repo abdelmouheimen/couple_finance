@@ -64,7 +64,7 @@ export function Dashboard() {
     const openCategory = (categoryId: string) =>
         router.push({
             pathname: "/expenses",
-            params: { categoryId, periodStart: currentPeriod.start },
+            params: { categoryId, periodStart: currentPeriod.start, scope },
         });
     const openBudget = () => router.push("/budget");
     const openAdd = () => router.push("/add-expense");

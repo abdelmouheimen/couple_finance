@@ -1,4 +1,4 @@
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, FlatList, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -53,13 +53,39 @@ export function ExpenseListScreen() {
     const router = useRouter();
     const colors = useColors();
     const { currentPeriod, readOnly } = useHouseholdContext();
-    const [scope, setScope] = useState<ExpenseScope>("HOUSEHOLD");
-    const [period, setPeriod] = useState<Period>("current");
+    const params = useLocalSearchParams<{
+        categoryId?: string;
+        periodStart?: string;
+        scope?: string;
+    }>();
+    const [scope, setScope] = useState<ExpenseScope>(
+        params.scope === "PERSONAL" ? "PERSONAL" : "HOUSEHOLD",
+    );
+    const [period, setPeriod] = useState<Period>(
+        params.periodStart && params.periodStart !== currentPeriod.start ? "all" : "current",
+    );
     const [from, setFrom] = useState("");
     const [to, setTo] = useState("");
     const [search, setSearch] = useState("");
-    const [categoryId, setCategoryId] = useState<string | undefined>(undefined);
+    const [categoryId, setCategoryId] = useState<string | undefined>(params.categoryId);
     const q = useDebounced(search.trim(), SEARCH_DEBOUNCE_MS);
+
+    // The tab stays mounted: re-seed the filters whenever a drill-down pushes new params
+    // (adjusting state during render, keyed on the params, instead of an effect).
+    const paramsKey = `${params.categoryId ?? ""}|${params.periodStart ?? ""}|${params.scope ?? ""}`;
+    const [seenParams, setSeenParams] = useState(paramsKey);
+    if (seenParams !== paramsKey) {
+        setSeenParams(paramsKey);
+        if (paramsKey !== "||") {
+            setCategoryId(params.categoryId);
+            setScope(params.scope === "PERSONAL" ? "PERSONAL" : "HOUSEHOLD");
+            setPeriod(
+                params.periodStart && params.periodStart !== currentPeriod.start
+                    ? "all"
+                    : "current",
+            );
+        }
+    }
 
     const filters = useMemo<ExpenseFilters>(() => {
         let dateFrom: string | undefined;

@@ -56,7 +56,7 @@ export function ExpenseDetailScreen({ id }: { id: string }) {
 
     if (expense.isPending) {
         return (
-            <Screen>
+            <Screen onClose={goBack}>
                 <Skeleton variant="card" />
             </Screen>
         );
