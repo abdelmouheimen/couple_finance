@@ -312,7 +312,7 @@ describe("expense list", () => {
         installApi({ "GET /api/v1/expenses": () => json(200, page([expense()])) });
         await mount(<ExpenseListScreen />);
         const row = await screen.findByTestId("expense-row-e-1");
-        expect(row.props.accessibilityLabel).toMatch(/Bakery, 12 euros 50, .*, Shared/);
+        expect(row.props.accessibilityLabel).toMatch(/Bakery, 12 euros 50, .*, Household/);
     });
 
     test("empty state offers to add the first expense", async () => {

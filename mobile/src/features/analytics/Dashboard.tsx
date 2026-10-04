@@ -136,6 +136,9 @@ export function Dashboard() {
                 />
             }
         >
+            <Text variant="headline" accessibilityRole="header">
+                {strings.tabs.home}
+            </Text>
             <Text variant="caption" tone="secondary" testID="period-header">
                 {strings.dashboard.periodHeader(
                     displayDate(currentPeriod.start),

@@ -37,9 +37,11 @@ export function ExpenseRow({ expense, title, dateLabel, categoryLabel, onPress }
         >
             <View style={styles.main}>
                 <Text bold>{shownTitle}</Text>
-                <Text variant="caption" tone="secondary">
-                    {categoryLabel ? `${categoryLabel} · ${scope}` : scope}
-                </Text>
+                {categoryLabel ? (
+                    <Text variant="caption" tone="secondary">
+                        {categoryLabel}
+                    </Text>
+                ) : null}
                 {personal ? (
                     <View style={[styles.badge, { borderColor: colors.primary }]}>
                         <Text variant="caption" tone="primary" bold>

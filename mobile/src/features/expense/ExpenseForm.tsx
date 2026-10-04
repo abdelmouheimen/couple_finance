@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { Keyboard, StyleSheet, View } from "react-native";
 import { errorMessage } from "@/shared/i18n/errorMessage";
 import { strings } from "@/shared/i18n/strings";
 import { formatMoney } from "@/shared/money/money";
@@ -164,6 +164,11 @@ export function ExpenseForm({
                     currency={currency}
                     autoFocus={!editing}
                     returnKeyType="done"
+                    onSubmitEditing={() => {
+                        // Category already chosen: save; otherwise reveal the chips.
+                        if (values.categoryId) submit();
+                        else Keyboard.dismiss();
+                    }}
                     error={fieldError("amount")}
                     testID="expense-amount"
                 />

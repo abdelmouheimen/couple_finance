@@ -132,9 +132,10 @@ describe("dashboard", () => {
     test("BR-ANA-05: chart bars and list show the same server percentages, with a text alternative", async () => {
         mockApi(defaultHandler);
         await mount();
-        const chart = await screen.findByTestId("category-chart");
-        expect(chart.props.accessibilityLabel).toContain("Groceries");
-        expect(chart.props.accessibilityLabel).toContain("72.9 %");
+        // The accessible list rows carry the text alternative (the bars are hidden from assistive tech).
+        const row = await screen.findByTestId(`category-row-${GROCERIES}`);
+        expect(row.props.accessibilityLabel).toContain("Groceries");
+        expect(row.props.accessibilityLabel).toContain("72.9 %");
         const bars = screen.getAllByTestId("category-bar", { hidden: true });
         expect(
             bars.map(

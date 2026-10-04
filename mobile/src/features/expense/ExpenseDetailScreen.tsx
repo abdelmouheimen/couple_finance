@@ -25,12 +25,23 @@ import { EXPENSES_KEY, useCategories, useExpense, useExpenseAudit } from "./expe
 import { categoryLabel, toMoney } from "./expenseRules";
 import { formatDate } from "./ExpenseListScreen";
 
+/** Display only: the instant's calendar day in the household timezone (no date arithmetic). */
+function formatInstant(instant: string, timeZone: string): string {
+    try {
+        return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeZone }).format(
+            new Date(instant),
+        );
+    } catch {
+        return formatDate(instant.slice(0, 10));
+    }
+}
+
 /** Detail: items, merchant, note, audit trail; Edit / Delete (with restore from the toast). */
 export function ExpenseDetailScreen({ id }: { id: string }) {
     const router = useRouter();
     const toast = useToast();
     const client = useQueryClient();
-    const { readOnly } = useHouseholdContext();
+    const { readOnly, household } = useHouseholdContext();
     const expense = useExpense(id);
     const categories = useCategories(true);
     const audit = useExpenseAudit(id, expense.isSuccess);
@@ -108,14 +119,16 @@ export function ExpenseDetailScreen({ id }: { id: string }) {
                 {data.merchant ?? strings.expense.untitled}
             </Text>
             <Card>
-                <MoneyText money={toMoney(data.amount)} />
+                <MoneyText
+                    money={toMoney(data.amount)}
+                    scope={data.sharingType === "PERSONAL" ? "PERSONAL" : "HOUSEHOLD"}
+                />
                 <Text tone="secondary">{formatDate(data.date)}</Text>
-                <Text variant="caption" tone="secondary" bold>
-                    {data.sharingType === "PERSONAL"
-                        ? strings.expense.personalBadge
-                        : strings.expense.shared}
-                    {data.kind === "REFUND" ? ` · ${strings.expense.refund}` : ""}
-                </Text>
+                {data.kind === "REFUND" ? (
+                    <Text variant="caption" tone="secondary" bold>
+                        {strings.expense.refund}
+                    </Text>
+                ) : null}
                 {data.note ? <Text>{data.note}</Text> : null}
             </Card>
             <Text variant="title" accessibilityRole="header">
@@ -164,7 +177,7 @@ export function ExpenseDetailScreen({ id }: { id: string }) {
                                 strings.expense.auditAction[entry.action] ??
                                 strings.expense.auditUnknown
                             }
-                            subtitle={formatDate(entry.occurredAt.slice(0, 10))}
+                            subtitle={formatInstant(entry.occurredAt, household.timezone)}
                         />
                     ))
                 ) : (
