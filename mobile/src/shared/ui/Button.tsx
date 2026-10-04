@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useRef } from "react";
 import { ActivityIndicator, Pressable, StyleSheet } from "react-native";
 import { strings } from "@/shared/i18n/strings";
 import { Text } from "./Text";
@@ -8,7 +9,8 @@ export type ButtonVariant = "primary" | "secondary" | "destructive";
 
 interface Props {
     label: string;
-    onPress: () => void;
+    /** May return a promise: further presses are ignored until it settles (double-submit protection). */
+    onPress: () => void | Promise<unknown>;
     variant?: ButtonVariant;
     loading?: boolean;
     disabled?: boolean;
@@ -23,6 +25,26 @@ export function Button({ label, onPress, variant = "primary", loading, disabled,
         destructive: { bg: colors.danger, fg: colors.onDanger },
     }[variant];
     const inactive = disabled || loading;
+    const inFlight = useRef(false);
+    const mounted = useRef(true);
+    useEffect(
+        () => () => {
+            mounted.current = false;
+        },
+        [],
+    );
+    // Guard synchronously (a ref, not state) so two taps in the same frame cannot both fire.
+    const press = useCallback(() => {
+        if (inFlight.current) return;
+        const result = onPress();
+        if (result && typeof (result as Promise<unknown>).then === "function") {
+            inFlight.current = true;
+            const release = () => {
+                if (mounted.current) inFlight.current = false;
+            };
+            (result as Promise<unknown>).then(release, release);
+        }
+    }, [onPress]);
     return (
         <Pressable
             testID={testID}
@@ -30,7 +52,7 @@ export function Button({ label, onPress, variant = "primary", loading, disabled,
             accessibilityLabel={label}
             accessibilityState={{ disabled: !!inactive, busy: !!loading }}
             disabled={inactive}
-            onPress={onPress}
+            onPress={press}
             style={({ pressed }) => [
                 styles.base,
                 {
