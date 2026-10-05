@@ -528,3 +528,65 @@ describe("category management", () => {
         expect(await screen.findByText("A category with this name already exists.")).toBeTruthy();
     });
 });
+
+describe("expense list compact filters (MOBILE-008)", () => {
+    beforeEach(() => {
+        mockParams = {};
+    });
+
+    test("the category-chip wall is gone: categories are only offered inside the Filters sheet", async () => {
+        installApi({ "GET /api/v1/expenses": () => json(200, page([expense()])) });
+        await mount(<ExpenseListScreen />);
+        await screen.findByText(/Bakery/);
+        expect(screen.queryByRole("radio", { name: "Pets" })).toBeNull();
+        expect(screen.getByRole("button", { name: "Filters" })).toBeTruthy();
+        expect(screen.getByPlaceholderText("Merchant or note")).toBeTruthy();
+        expect(screen.getByRole("radio", { name: "Household" })).toBeTruthy();
+        expect(screen.getByRole("radio", { name: "This period" })).toBeTruthy();
+    });
+
+    test("BR-EXP-07: picking a category in the sheet filters server-side, closes the sheet and stays visible compactly", async () => {
+        const api = installApi({ "GET /api/v1/expenses": () => json(200, page([expense()])) });
+        await mount(<ExpenseListScreen />);
+        await screen.findByText(/Bakery/);
+        await fireEvent.press(screen.getByRole("button", { name: "Filters" }));
+        await fireEvent.press(await screen.findByRole("radio", { name: "Pets" }));
+        await waitFor(() => {
+            const calls = api.of("GET /api/v1/expenses");
+            expect(calls[calls.length - 1]!.url.searchParams.get("categoryId")).toBe(PETS.id);
+        });
+        // active filter chip stays visible and the entry point reflects it
+        expect(await screen.findByRole("button", { name: "Remove filter Pets" })).toBeTruthy();
+        expect(screen.getByRole("button", { name: "Filters, 1 active" })).toBeTruthy();
+        // removing the chip clears the category filter
+        await fireEvent.press(screen.getByRole("button", { name: "Remove filter Pets" }));
+        await waitFor(() => {
+            const calls = api.of("GET /api/v1/expenses");
+            expect(calls[calls.length - 1]!.url.searchParams.get("categoryId")).toBeNull();
+        });
+        expect(screen.queryByRole("button", { name: "Remove filter Pets" })).toBeNull();
+    });
+
+    test("a drill-down from the dashboard shows its category as an active filter", async () => {
+        mockParams = { categoryId: GROCERIES.id, periodStart: "2026-03-01", scope: "HOUSEHOLD" };
+        installApi({ "GET /api/v1/expenses": () => json(200, page([expense()])) });
+        await mount(<ExpenseListScreen />);
+        expect(await screen.findByRole("button", { name: "Remove filter Groceries" })).toBeTruthy();
+    });
+
+    test("BR-SCP-03: switching Household / Personal reloads the list for that scope", async () => {
+        const api = installApi({
+            "GET /api/v1/expenses": ({ url }) =>
+                json(200, page([expense()], {}, url.searchParams.get("scope") ?? "HOUSEHOLD")),
+        });
+        await mount(<ExpenseListScreen />);
+        await screen.findByText(/Bakery/);
+        await fireEvent.press(screen.getByRole("radio", { name: "Personal" }));
+        await waitFor(() =>
+            expect(api.calls.at(-1)!.url.searchParams.get("scope")).toBe("PERSONAL"),
+        );
+        expect(
+            screen.getByRole("radio", { name: "Personal" }).props.accessibilityState.selected,
+        ).toBe(true);
+    });
+});

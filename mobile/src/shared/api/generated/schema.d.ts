@@ -665,6 +665,8 @@ export interface components {
         CategoryLimit: {
             /** Format: uuid */
             categoryId: string;
+            /** @description Consumption of this category limit, computed on read from the household spending of the period restricted to the items of the category (BR-BUD-03). Present on GET; absent in the response of a PUT or a copy. */
+            consumption?: components["schemas"]["LimitConsumption"];
             limit: components["schemas"]["Money"];
         };
         CategoryLimitRequest: {

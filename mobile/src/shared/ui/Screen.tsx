@@ -24,6 +24,8 @@ interface Props {
     refreshControl?: React.ReactElement<RefreshControlProps>;
     /** Extra bottom content inset, e.g. `fabContentInset` on tab screens with a floating button. */
     bottomInset?: number;
+    /** Tighter vertical rhythm for information-dense screens (Home). */
+    compact?: boolean;
     /** When set, a visible close control is rendered (modal screens). */
     onClose?: () => void;
 }
@@ -40,12 +42,17 @@ export function Screen({
     scroll = true,
     refreshControl,
     bottomInset = 0,
+    compact = false,
     onClose,
 }: Props) {
     const colors = useColors();
     const body = scroll ? (
         <ScrollView
-            contentContainerStyle={[styles.content, { paddingBottom: spacing.lg + bottomInset }]}
+            contentContainerStyle={[
+                styles.content,
+                compact && styles.compact,
+                { paddingBottom: spacing.lg + bottomInset },
+            ]}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
             refreshControl={refreshControl}
@@ -53,7 +60,14 @@ export function Screen({
             {children}
         </ScrollView>
     ) : (
-        <View style={[styles.content, styles.flex, { paddingBottom: spacing.lg + bottomInset }]}>
+        <View
+            style={[
+                styles.content,
+                styles.flex,
+                compact && styles.compact,
+                { paddingBottom: spacing.lg + bottomInset },
+            ]}
+        >
             {children}
         </View>
     );
@@ -81,5 +95,6 @@ export function Screen({
 const styles = StyleSheet.create({
     flex: { flex: 1 },
     content: { padding: spacing.lg, gap: spacing.lg, flexGrow: 1 },
+    compact: { gap: spacing.md, paddingTop: spacing.md },
     close: { alignItems: "flex-end", paddingHorizontal: spacing.lg, paddingTop: spacing.sm },
 });

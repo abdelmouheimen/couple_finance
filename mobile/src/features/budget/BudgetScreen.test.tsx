@@ -330,3 +330,99 @@ describe("BudgetScreen", () => {
         expect(put.headers.get("If-Match")).toBe('"3"');
     });
 });
+
+describe("Budget vs spent per category (MOBILE-008)", () => {
+    const HOUSING = "019a0000-0000-7000-8000-000000000002";
+    const consumption = (
+        consumed: string,
+        remaining: string,
+        percentage: string,
+        status: string,
+    ) => ({
+        consumed: eur(consumed),
+        remaining: eur(remaining),
+        percentage,
+        status,
+        scope: "HOUSEHOLD",
+    });
+
+    test("BR-BUD-03/06: each category limit shows spent / limit, server percentage and a written state", async () => {
+        mockApi(
+            withBudget(
+                budget({
+                    categoryLimits: [
+                        {
+                            categoryId: CAT,
+                            limit: eur("200.00"),
+                            consumption: consumption("50.00", "150.00", "25.0", "ON_TRACK"),
+                        },
+                        {
+                            categoryId: HOUSING,
+                            limit: eur("800.00"),
+                            consumption: consumption("900.00", "-100.00", "112.5", "EXCEEDED"),
+                        },
+                    ],
+                }),
+            ),
+        );
+        await mount();
+        expect(await screen.findByText("Budget vs spent")).toBeTruthy();
+        expect(screen.getByText(`${fmt("50.00")} of ${fmt("200.00")}`)).toBeTruthy();
+        expect(screen.getByText("25.0 %")).toBeTruthy();
+        expect(screen.getByText("On track")).toBeTruthy();
+        // the over-budget category: state in words, not only colour
+        expect(screen.getByText(`${fmt("900.00")} of ${fmt("800.00")}`)).toBeTruthy();
+        expect(screen.getByText("112.5 %")).toBeTruthy();
+        expect(screen.getByText("Exceeded")).toBeTruthy();
+        const bars = screen.getAllByRole("progressbar");
+        expect(bars).toHaveLength(3); // overall + 2 categories
+        const exceeded = bars.find((b) => b.props.accessibilityLabel === "Exceeded, 112.5 %");
+        expect(exceeded?.props.accessibilityValue.text).toContain("Housing: spent");
+    });
+
+    test("WARNING category shows its approaching-limit state", async () => {
+        mockApi(
+            withBudget(
+                budget({
+                    categoryLimits: [
+                        {
+                            categoryId: CAT,
+                            limit: eur("100.00"),
+                            consumption: consumption("80.00", "20.00", "80.0", "WARNING"),
+                        },
+                    ],
+                }),
+            ),
+        );
+        await mount();
+        expect(await screen.findByText("80.0 %")).toBeTruthy();
+        expect(screen.getAllByText("Warning").length).toBeGreaterThan(0);
+    });
+
+    test("a limit without consumption (older server) still shows its limit only", async () => {
+        mockApi(withBudget(budget()));
+        await mount();
+        expect(await screen.findByText("Groceries")).toBeTruthy();
+        expect(screen.getByText(fmt("200.00"))).toBeTruthy();
+        expect(screen.queryByTestId("category-limit-row")).toBeNull();
+    });
+
+    test("BR-MON-02: very large spent and limit amounts are shown from exact strings", async () => {
+        const huge = "90071992547409930.01";
+        mockApi(
+            withBudget(
+                budget({
+                    categoryLimits: [
+                        {
+                            categoryId: CAT,
+                            limit: eur(huge),
+                            consumption: consumption(huge, "0.00", "100.0", "WARNING"),
+                        },
+                    ],
+                }),
+            ),
+        );
+        await mount();
+        expect(await screen.findByText(`${fmt(huge)} of ${fmt(huge)}`)).toBeTruthy();
+    });
+});

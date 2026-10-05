@@ -1,23 +1,31 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, FlatList, StyleSheet, View } from "react-native";
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useHouseholdContext } from "@/features/household/HouseholdProvider";
 import { errorMessage } from "@/shared/i18n/errorMessage";
 import { strings } from "@/shared/i18n/strings";
 import {
-    Card,
+    Button,
     Chip,
     EmptyState,
     ErrorState,
+    Icon,
     MoneyText,
     Selector,
+    Sheet,
     Skeleton,
     Text,
     TextInput,
 } from "@/shared/ui";
 import { useColors } from "@/shared/ui/theme/theme";
-import { fabContentInset, spacing } from "@/shared/ui/theme/tokens";
+import {
+    borderWidth,
+    fabContentInset,
+    minTouchTarget,
+    radius,
+    spacing,
+} from "@/shared/ui/theme/tokens";
 import type { Expense, ExpenseFilters, ExpenseScope } from "./expenseApi";
 import { categoryLabel, shiftDate, toMoney } from "./expenseRules";
 import { ExpenseRow } from "./ExpenseRow";
@@ -69,6 +77,7 @@ export function ExpenseListScreen() {
     const [to, setTo] = useState("");
     const [search, setSearch] = useState("");
     const [categoryId, setCategoryId] = useState<string | undefined>(params.categoryId);
+    const [filtersOpen, setFiltersOpen] = useState(false);
     const q = useDebounced(search.trim(), SEARCH_DEBOUNCE_MS);
 
     // The tab stays mounted: re-seed the filters whenever a drill-down pushes new params
@@ -134,20 +143,48 @@ export function ExpenseListScreen() {
 
     const totals = query.data?.pages[0]?.totals;
 
+    const activeCategory =
+        categoryId === undefined
+            ? undefined
+            : (categoryName.get(categoryId) ?? strings.dashboard.unknownCategory);
+    // Category is the only filter hidden behind the sheet; scope, period and search stay on the bar.
+    const activeCount = categoryId === undefined ? 0 : 1;
+
     const header = (
         <View style={styles.header}>
-            <Text variant="headline" accessibilityRole="header">
-                {strings.expense.title}
-            </Text>
-            {totals ? (
-                <Card>
-                    <Text variant="caption" tone="secondary" bold>
-                        {strings.expense.total}
-                    </Text>
-                    {/* Period total comes from the API (ExpenseTotals); never summed on the device. */}
-                    <MoneyText money={toMoney(totals.net)} scope={totals.scope} />
-                </Card>
-            ) : null}
+            <View style={styles.titleRow}>
+                <Text variant="headline" accessibilityRole="header" style={styles.flex}>
+                    {strings.expense.title}
+                </Text>
+                {/* Period total comes from the API (ExpenseTotals); never summed on the device. */}
+                {totals ? (
+                    <MoneyText money={toMoney(totals.net)} scope={totals.scope} variant="title" />
+                ) : null}
+            </View>
+            <View style={styles.searchRow}>
+                <View style={styles.flex}>
+                    <TextInput
+                        label={strings.expense.searchLabel}
+                        placeholder={strings.expense.searchPlaceholder}
+                        value={search}
+                        onChangeText={setSearch}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        returnKeyType="search"
+                        maxLength={100}
+                    />
+                </View>
+                <Button
+                    label={
+                        activeCount > 0
+                            ? strings.expense.filtersActive(activeCount)
+                            : strings.expense.filters
+                    }
+                    variant={activeCount > 0 ? "primary" : "secondary"}
+                    onPress={() => setFiltersOpen(true)}
+                    testID="open-filters"
+                />
+            </View>
             <Selector
                 label={strings.expense.scopeLabel}
                 value={scope}
@@ -156,16 +193,6 @@ export function ExpenseListScreen() {
                     { value: "HOUSEHOLD", label: strings.scope.HOUSEHOLD },
                     { value: "PERSONAL", label: strings.scope.PERSONAL },
                 ]}
-            />
-            <TextInput
-                label={strings.expense.searchLabel}
-                placeholder={strings.expense.searchPlaceholder}
-                value={search}
-                onChangeText={setSearch}
-                autoCapitalize="none"
-                autoCorrect={false}
-                returnKeyType="search"
-                maxLength={100}
             />
             <Selector
                 label={strings.expense.periodLabel}
@@ -178,35 +205,64 @@ export function ExpenseListScreen() {
                 ]}
             />
             {period === "custom" ? (
-                <View style={styles.header}>
-                    <TextInput
-                        label={strings.expense.dateFrom}
-                        value={from}
-                        onChangeText={setFrom}
-                        placeholder="YYYY-MM-DD"
-                        error={
-                            from !== "" && !DATE_RE.test(from)
-                                ? strings.expense.dateFormatError
-                                : undefined
-                        }
-                        autoCapitalize="none"
-                        keyboardType="numbers-and-punctuation"
-                    />
-                    <TextInput
-                        label={strings.expense.dateTo}
-                        value={to}
-                        onChangeText={setTo}
-                        placeholder="YYYY-MM-DD"
-                        error={
-                            to !== "" && !DATE_RE.test(to)
-                                ? strings.expense.dateFormatError
-                                : undefined
-                        }
-                        autoCapitalize="none"
-                        keyboardType="numbers-and-punctuation"
-                    />
+                <View style={styles.dates}>
+                    <View style={styles.flex}>
+                        <TextInput
+                            label={strings.expense.dateFrom}
+                            value={from}
+                            onChangeText={setFrom}
+                            placeholder="YYYY-MM-DD"
+                            error={
+                                from !== "" && !DATE_RE.test(from)
+                                    ? strings.expense.dateFormatError
+                                    : undefined
+                            }
+                            autoCapitalize="none"
+                            keyboardType="numbers-and-punctuation"
+                        />
+                    </View>
+                    <View style={styles.flex}>
+                        <TextInput
+                            label={strings.expense.dateTo}
+                            value={to}
+                            onChangeText={setTo}
+                            placeholder="YYYY-MM-DD"
+                            error={
+                                to !== "" && !DATE_RE.test(to)
+                                    ? strings.expense.dateFormatError
+                                    : undefined
+                            }
+                            autoCapitalize="none"
+                            keyboardType="numbers-and-punctuation"
+                        />
+                    </View>
                 </View>
             ) : null}
+            {activeCategory !== undefined ? (
+                <View accessibilityLabel={strings.expense.activeFilters} style={styles.active}>
+                    <Pressable
+                        testID="active-category-filter"
+                        accessibilityRole="button"
+                        accessibilityLabel={strings.expense.removeFilter(activeCategory)}
+                        onPress={() => setCategoryId(undefined)}
+                        style={[styles.activeChip, { borderColor: colors.primary }]}
+                    >
+                        <Text bold tone="primary">
+                            {activeCategory}
+                        </Text>
+                        <Icon name="close" color={colors.primary} />
+                    </Pressable>
+                </View>
+            ) : null}
+        </View>
+    );
+
+    const filtersSheet = (
+        <Sheet
+            visible={filtersOpen}
+            title={strings.expense.filtersTitle}
+            onClose={() => setFiltersOpen(false)}
+        >
             <View
                 accessibilityRole="radiogroup"
                 accessibilityLabel={strings.expense.categoryFilter}
@@ -215,18 +271,24 @@ export function ExpenseListScreen() {
                 <Chip
                     label={strings.expense.allCategories}
                     selected={categoryId === undefined}
-                    onPress={() => setCategoryId(undefined)}
+                    onPress={() => {
+                        setCategoryId(undefined);
+                        setFiltersOpen(false);
+                    }}
                 />
                 {(categories.data ?? []).map((c) => (
                     <Chip
                         key={c.id}
                         label={categoryLabel(c)}
                         selected={categoryId === c.id}
-                        onPress={() => setCategoryId(c.id)}
+                        onPress={() => {
+                            setCategoryId(c.id);
+                            setFiltersOpen(false);
+                        }}
                     />
                 ))}
             </View>
-        </View>
+        </Sheet>
     );
 
     let empty: React.ReactElement | null = null;
@@ -318,6 +380,7 @@ export function ExpenseListScreen() {
                     )
                 }
             />
+            {filtersSheet}
         </SafeAreaView>
     );
 }
@@ -325,7 +388,20 @@ export function ExpenseListScreen() {
 const styles = StyleSheet.create({
     flex: { flex: 1 },
     content: { padding: spacing.lg, gap: spacing.sm, flexGrow: 1 },
-    header: { gap: spacing.lg, marginBottom: spacing.md },
+    header: { gap: spacing.md, marginBottom: spacing.sm },
+    titleRow: { flexDirection: "row", alignItems: "center", gap: spacing.md },
+    searchRow: { flexDirection: "row", alignItems: "flex-end", gap: spacing.sm },
+    dates: { flexDirection: "row", gap: spacing.sm },
     chips: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+    active: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+    activeChip: {
+        minHeight: minTouchTarget,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: spacing.sm,
+        borderWidth: borderWidth.hairline,
+        borderRadius: radius.pill,
+        paddingHorizontal: spacing.lg,
+    },
     date: { marginTop: spacing.md },
 });

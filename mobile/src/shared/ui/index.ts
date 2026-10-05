@@ -13,5 +13,5 @@ export { EmptyState, ErrorState, Skeleton } from "./States";
 export { Text } from "./Text";
 export { TextInput } from "./TextInput";
 export { ToastProvider, useToast } from "./Toast";
-export { ThemeProvider, useColors } from "./theme/theme";
+export { ThemeProvider, useChartColors, useColors } from "./theme/theme";
 export { Placeholder } from "./Placeholder";

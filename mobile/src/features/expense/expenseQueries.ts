@@ -20,6 +20,15 @@ export function useExpensePages(filters: ExpenseFilters) {
     });
 }
 
+/** First page of a filter, for compact previews (Home "recent expenses"); cached under EXPENSES_KEY. */
+export function useRecentExpenses(filters: ExpenseFilters) {
+    return useQuery({
+        queryKey: [...EXPENSES_KEY, "recent", filters],
+        queryFn: () => listExpenses(filters),
+        retry: false,
+    });
+}
+
 export function useExpense(id: string) {
     return useQuery({
         queryKey: [...EXPENSES_KEY, "detail", id],

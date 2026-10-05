@@ -62,6 +62,23 @@ export const darkPalette: Palette = {
 };
 
 export type ColorScheme = "light" | "dark";
+
+/**
+ * Categorical chart series colours (MOBILE-008). Never the only carrier of meaning: every slice/line is
+ * also named or labelled in text. Each colour keeps >= 3:1 against the card surface (WCAG 1.4.11),
+ * checked by the token contrast test; `other` is the neutral "everything else" slice.
+ */
+export const chartPalettes: Record<ColorScheme, { series: readonly string[]; other: string }> = {
+    light: {
+        series: ["#0B6E4F", "#1D4ED8", "#B45309", "#7E22CE", "#BE185D"],
+        other: "#4B5563",
+    },
+    dark: {
+        series: ["#3DDC97", "#60A5FA", "#F5B84B", "#C084FC", "#F472B6"],
+        other: "#B0B8C4",
+    },
+};
+
 export const palettes: Record<ColorScheme, Palette> = { light: lightPalette, dark: darkPalette };
 
 /** Foreground/background pairs that must satisfy WCAG AA (checked by the token contrast test). */
@@ -155,6 +172,13 @@ export type IconName = keyof typeof icons;
 
 export const iconSize = { md: 20, lg: 28 } as const;
 export const progressBarHeight = 10;
+/** Chart geometry (device-independent units); charts resize to their container width. */
+export const chartHeight = 160;
+export const donutSize = 132;
+export const donutThickness = 20;
+export const chartStrokeWidth = 2;
+export const chartPointRadius = 4;
+export const swatchSize = 12;
 export const fabSize = 56;
 /** Opacity tokens (disabled controls are exempt from WCAG contrast; the intent is explicit here). */
 export const opacity = { disabled: 0.5, pressed: 0.85, opaque: 1 } as const;

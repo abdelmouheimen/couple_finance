@@ -1,10 +1,11 @@
-import { Tabs, useRouter } from "expo-router";
+import { Tabs, usePathname, useRouter } from "expo-router";
 import { type ColorValue, Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useIsReadOnly } from "@/features/household/HouseholdProvider";
 import { ReadOnlyBanner } from "@/features/household/ReadOnlyBanner";
 import { strings } from "@/shared/i18n/strings";
-import { Icon, useColors } from "@/shared/ui";
+import { showAddExpenseAction } from "@/shared/navigation/addExpenseAction";
+import { Icon, Text, useColors } from "@/shared/ui";
 import {
     type IconName,
     elevation,
@@ -25,6 +26,7 @@ export default function TabsLayout() {
     const router = useRouter();
     const insets = useSafeAreaInsets();
     const readOnly = useIsReadOnly();
+    const pathname = usePathname();
     // Explicit, deterministic tab bar height so the FAB offset never relies on a guess.
     const tabBarHeight = minTouchTarget + spacing.lg + insets.bottom;
     return (
@@ -60,7 +62,7 @@ export default function TabsLayout() {
                     options={{ title: strings.tabs.settings, tabBarIcon: tabIcon("settings") }}
                 />
             </Tabs>
-            {readOnly ? null : (
+            {readOnly || !showAddExpenseAction(pathname) ? null : (
                 <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={strings.addExpense}
@@ -75,6 +77,9 @@ export default function TabsLayout() {
                     ]}
                 >
                     <Icon name="add" size="lg" color={colors.onPrimary} />
+                    <Text bold style={{ color: colors.onPrimary }}>
+                        {strings.addExpense}
+                    </Text>
                 </Pressable>
             )}
         </View>
@@ -86,8 +91,11 @@ const styles = StyleSheet.create({
     fab: {
         position: "absolute",
         right: spacing.lg,
-        width: fabSize,
+        minWidth: fabSize,
         height: fabSize,
+        paddingHorizontal: spacing.lg,
+        gap: spacing.sm,
+        flexDirection: "row",
         borderRadius: radius.pill,
         alignItems: "center",
         justifyContent: "center",

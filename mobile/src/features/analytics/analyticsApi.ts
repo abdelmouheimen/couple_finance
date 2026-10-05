@@ -25,6 +25,23 @@ export function fetchPeriodAnalytics(
     );
 }
 
+export type DailyCumulativeSeries = components["schemas"]["DailyCumulativeSeries"];
+
+export const dailyCumulativeKey = (periodStart: string, scope: AnalyticsScope) =>
+    [...ANALYTICS_QUERY_KEY, "daily-cumulative", periodStart, scope] as const;
+
+/** Server series of the cumulative net spending, one point per day (BR-ANA-01: no device math). */
+export function fetchDailyCumulative(
+    periodStart: string,
+    scope: AnalyticsScope,
+): Promise<DailyCumulativeSeries> {
+    return unwrap(
+        api.GET("/api/v1/analytics/periods/{periodStart}/daily-cumulative", {
+            params: { path: { periodStart }, query: { scope } },
+        }),
+    );
+}
+
 /** All categories (archived included: past spending may reference them), following the cursor. */
 export async function fetchAllCategories(): Promise<Category[]> {
     const all: Category[] = [];

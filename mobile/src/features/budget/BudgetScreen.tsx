@@ -22,7 +22,7 @@ import {
     useColors,
     useToast,
 } from "@/shared/ui";
-import { fabContentInset, minTouchTarget, radius, spacing } from "@/shared/ui/theme/tokens";
+import { minTouchTarget, radius, spacing } from "@/shared/ui/theme/tokens";
 import { BudgetEditSheet } from "./BudgetEditSheet";
 import {
     type Budget,
@@ -241,7 +241,7 @@ export function BudgetScreen() {
                 <OverallCard budget={budget} />
                 <Card>
                     <Text variant="title" accessibilityRole="header">
-                        {strings.budget.categories}
+                        {strings.budget.categoryProgressTitle}
                     </Text>
                     {budget.categoryLimits.length === 0 ? (
                         <Text tone="secondary">{strings.budget.noCategories}</Text>
@@ -251,6 +251,7 @@ export function BudgetScreen() {
                                 key={l.categoryId}
                                 name={categoryName(categories.find((c) => c.id === l.categoryId))}
                                 limit={l.limit}
+                                consumption={l.consumption}
                             />
                         ))
                     )}
@@ -264,7 +265,6 @@ export function BudgetScreen() {
 
     return (
         <Screen
-            bottomInset={fabContentInset}
             refreshControl={
                 <RefreshControl
                     refreshing={refreshing}
