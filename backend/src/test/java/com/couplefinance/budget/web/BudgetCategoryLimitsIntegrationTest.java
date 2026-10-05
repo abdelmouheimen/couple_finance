@@ -369,6 +369,123 @@ class BudgetCategoryLimitsIntegrationTest {
         }
     }
 
+
+    // ------------------------------------------------------------------ per-category consumption - Issue #86
+
+    @Test
+    void BR_BUD_03_05_06_category_consumption_counts_only_household_items_of_that_category() {
+        UUID user = users.active();
+        UUID partner = users.active();
+        UUID household = createHousehold(user);
+        jdbc.sql("INSERT INTO household.household_member (household_id, user_id, seat, joined_at) "
+                + "VALUES (:h, :u, 2, now())").param("h", household).param("u", partner).update();
+        LocalDate start = firstPeriod(household);
+        String pets = createCategory(user, "Pets");
+        String untouched = createCategory(user, "Hobbies");
+        put(user, start, body("1000.00", line(GROCERIES, "100.00"), line(pets, "50.00"), line(untouched, "30.00")),
+                null);
+        spend(user, "EXPENSE", "SHARED", GROCERIES, "85.00", start);
+        spend(partner, "EXPENSE", "SHARED", GROCERIES, "30.00", start);
+        spend(user, "REFUND", "SHARED", GROCERIES, "5.00", start);
+        spend(user, "EXPENSE", "PERSONAL", GROCERIES, "999.00", start); // personal: never in a household figure
+        spend(partner, "EXPENSE", "PERSONAL", pets, "999.00", start);
+        spend(user, "EXPENSE", "SHARED", pets, "20.00", start);
+        spend(user, "EXPENSE", "SHARED", pets, "400.00", start.minusDays(1)); // outside the period
+
+        for (UUID caller : List.of(user, partner)) {
+            JsonNode limits = json(get(caller, start)).get("categoryLimits");
+            JsonNode groceries = consumptionOf(limits, GROCERIES);
+            assertThat(groceries.get("scope").asString()).isEqualTo("HOUSEHOLD");
+            assertThat(groceries.get("consumed").get("amount").asString()).isEqualTo("110.00");
+            assertThat(groceries.get("remaining").get("amount").asString()).isEqualTo("-10.00");
+            assertThat(groceries.get("percentage").asString()).isEqualTo("110.0");
+            assertThat(groceries.get("status").asString()).isEqualTo("EXCEEDED"); // over-budget category
+            JsonNode petsConsumption = consumptionOf(limits, pets);
+            assertThat(petsConsumption.get("consumed").get("amount").asString()).isEqualTo("20.00");
+            assertThat(petsConsumption.get("percentage").asString()).isEqualTo("40.0");
+            assertThat(petsConsumption.get("status").asString()).isEqualTo("ON_TRACK");
+            JsonNode none = consumptionOf(limits, untouched); // no expense: zero, not absent
+            assertThat(none.get("consumed").get("amount").asString()).isEqualTo("0.00");
+            assertThat(none.get("percentage").asString()).isEqualTo("0.0");
+            assertThat(none.get("status").asString()).isEqualTo("ON_TRACK");
+        }
+    }
+
+    @Test
+    void BR_BUD_06_category_status_is_warning_from_80_percent_inclusive() {
+        UUID user = users.active();
+        UUID household = createHousehold(user);
+        LocalDate start = firstPeriod(household);
+        put(user, start, body(null, line(GROCERIES, "100.00")), null);
+        spend(user, "EXPENSE", "SHARED", GROCERIES, "80.00", start);
+
+        JsonNode consumption = consumptionOf(json(get(user, start)).get("categoryLimits"), GROCERIES);
+
+        assertThat(consumption.get("percentage").asString()).isEqualTo("80.0");
+        assertThat(consumption.get("status").asString()).isEqualTo("WARNING");
+    }
+
+    @Test
+    void BR_MON_09_category_consumption_is_exact_for_large_amounts() {
+        UUID user = users.active();
+        UUID household = createHousehold(user);
+        LocalDate start = firstPeriod(household);
+        put(user, start, body(null, line(GROCERIES, "9000000.00")), null);
+        for (int i = 0; i < 3; i++) {
+            spend(user, "EXPENSE", "SHARED", GROCERIES, "999999.99", start); // near the per-expense maximum
+        }
+
+        JsonNode consumption = consumptionOf(json(get(user, start)).get("categoryLimits"), GROCERIES);
+
+        assertThat(consumption.get("consumed").get("amount").asString()).isEqualTo("2999999.97");
+        assertThat(consumption.get("remaining").get("amount").asString()).isEqualTo("6000000.03");
+        assertThat(consumption.get("percentage").asString()).isEqualTo("33.3");
+    }
+
+    @Test
+    void BR_EXP_07_BR_HH_03_another_households_category_spending_never_leaks() {
+        UUID user = users.active();
+        UUID other = users.active();
+        UUID household = createHousehold(user);
+        UUID otherHousehold = createHousehold(other);
+        LocalDate start = firstPeriod(household);
+        put(user, start, body(null, line(GROCERIES, "100.00")), null);
+        spend(other, "EXPENSE", "SHARED", GROCERIES, "77.00", firstPeriod(otherHousehold));
+
+        JsonNode consumption = consumptionOf(json(get(user, start)).get("categoryLimits"), GROCERIES);
+
+        assertThat(consumption.get("consumed").get("amount").asString()).isEqualTo("0.00");
+    }
+
+    @Test
+    void the_response_of_a_put_carries_no_category_consumption() {
+        UUID user = users.active();
+        UUID household = createHousehold(user);
+        LocalDate start = firstPeriod(household);
+
+        JsonNode created = json(put(user, start, body(null, line(GROCERIES, "100.00")), null));
+
+        assertThat(isAbsent(created.get("categoryLimits").get(0).get("consumption"))).isTrue();
+    }
+
+    private static JsonNode consumptionOf(JsonNode limits, String categoryId) {
+        for (JsonNode limit : limits) {
+            if (categoryId.equals(limit.get("categoryId").asString())) {
+                return limit.get("consumption");
+            }
+        }
+        throw new AssertionError("no limit for category " + categoryId);
+    }
+
+    private void spend(UUID payer, String kind, String sharing, String category, String amount, LocalDate date) {
+        String money = "{\"amount\":\"" + amount + "\",\"currency\":\"EUR\"}";
+        String request = "{\"kind\":\"" + kind + "\",\"amount\":" + money + ",\"date\":\"" + date
+                + "\",\"paidByUserId\":\"" + payer + "\",\"sharingType\":\"" + sharing
+                + "\",\"items\":[{\"categoryId\":\"" + category + "\",\"amount\":" + money + "}]}";
+        assertThat(mvc.post().uri("/api/v1/expenses").header(HttpHeaders.AUTHORIZATION, tokens.bearer(payer))
+                .contentType(MediaType.APPLICATION_JSON).content(request).exchange()).hasStatus(HttpStatus.CREATED);
+    }
+
     // ------------------------------------------------------------------ helpers
 
     private static String line(String categoryId, String amount) {

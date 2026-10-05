@@ -3,6 +3,7 @@ package com.couplefinance.budget.application;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -24,6 +25,7 @@ import com.couplefinance.budget.domain.CategoryLimit;
 import com.couplefinance.budget.domain.CategoryLimits;
 import com.couplefinance.budget.domain.LimitConsumption;
 import com.couplefinance.categorization.api.CategoryCatalogue;
+import com.couplefinance.expense.api.SpendingGrouping;
 import com.couplefinance.expense.api.SpendingQuery;
 import com.couplefinance.expense.api.SpendingScope;
 import com.couplefinance.household.api.BudgetPeriod;
@@ -88,8 +90,9 @@ public class BudgetService {
                 () -> new ApplicationException(BudgetErrorCode.BUDGET_NOT_FOUND,
                         "There is no budget for this period."));
         int decimals = ledgerRules.profile(context.householdId()).decimals();
+        List<Line> stored = lines.findByBudget(household, budget.id());
         return view(budget, decimals, overallConsumption(context, budget, decimals),
-                lines.findByBudget(household, budget.id()));
+                categoryConsumption(context, budget, decimals, stored), stored);
     }
 
     /**
@@ -104,6 +107,29 @@ public class BudgetService {
         Money consumed = spending.spending(context, SpendingScope.HOUSEHOLD, budget.periodStart(),
                 budget.periodEnd(), Set.of()).total();
         return LimitConsumption.of(Money.ofMinor(limit, budget.currency(), decimals), consumed);
+    }
+
+    /**
+     * BR-BUD-03/05/06 per category limit: household spending of the period restricted to the items of that
+     * category, read through the same spending query API in ONE grouped query; computed on read, never stored.
+     * A category without any spending in the period consumes zero.
+     */
+    private Map<UUID, LimitConsumption> categoryConsumption(HouseholdContext context, Budget budget, int decimals,
+            List<Line> stored) {
+        if (stored.isEmpty()) {
+            return Map.of();
+        }
+        Map<UUID, Money> spent = new HashMap<>();
+        spending.spending(context, SpendingScope.HOUSEHOLD, budget.periodStart(), budget.periodEnd(),
+                Set.of(SpendingGrouping.CATEGORY)).byCategory()
+                .forEach(category -> spent.put(category.categoryId(), category.total()));
+        Map<UUID, LimitConsumption> consumption = new LinkedHashMap<>();
+        for (Line line : stored) {
+            Money limit = Money.ofMinor(line.limitMinor(), budget.currency(), decimals);
+            Money consumed = spent.getOrDefault(line.categoryId(), Money.ofMinor(0, budget.currency(), decimals));
+            consumption.put(line.categoryId(), LimitConsumption.of(limit, consumed));
+        }
+        return consumption;
     }
 
     /**
@@ -146,7 +172,7 @@ public class BudgetService {
                 clock, context.userId());
         boolean linesChanged = requested != null && applyLines(existing, current, requested, context);
         if (!overallChanged && !linesChanged) {
-            return new SetBudgetResult(view(existing, ledger.decimals(), null, current), false);
+            return new SetBudgetResult(view(existing, ledger.decimals(), null, Map.of(), current), false);
         }
         if (linesChanged && !overallChanged) {
             existing.touch(clock, context.userId());
@@ -161,7 +187,7 @@ public class BudgetService {
         }
         events.publishEvent(new BudgetUpdated(saved.id(), saved.householdId(), saved.periodStart(),
                 saved.updatedAt()));
-        return new SetBudgetResult(view(saved, ledger.decimals(), null, now), false);
+        return new SetBudgetResult(view(saved, ledger.decimals(), null, Map.of(), now), false);
     }
 
     /**
@@ -207,7 +233,7 @@ public class BudgetService {
         audit.created(saved, minorByCategory(stored), context.userId());
         events.publishEvent(new BudgetCreated(saved.id(), saved.householdId(), saved.periodStart(),
                 saved.createdAt()));
-        return view(saved, ledger.decimals(), null, stored);
+        return view(saved, ledger.decimals(), null, Map.of(), stored);
     }
 
     private SetBudgetResult create(HouseholdContext context, BudgetPeriod period, LedgerProfile ledger,
@@ -233,7 +259,7 @@ public class BudgetService {
         audit.created(saved, minorByCategory(stored), context.userId());
         events.publishEvent(new BudgetCreated(saved.id(), saved.householdId(), saved.periodStart(),
                 saved.createdAt()));
-        return new SetBudgetResult(view(saved, ledger.decimals(), null, stored), true);
+        return new SetBudgetResult(view(saved, ledger.decimals(), null, Map.of(), stored), true);
     }
 
     /**
@@ -295,14 +321,14 @@ public class BudgetService {
     }
 
     private static BudgetView view(Budget budget, int decimals, @Nullable LimitConsumption consumption,
-            List<Line> stored) {
+            Map<UUID, LimitConsumption> categoryConsumption, List<Line> stored) {
         CurrencyCode currency = budget.currency();
         List<CategoryLimit> limits = new ArrayList<>();
         stored.forEach(line -> limits.add(new CategoryLimit(line.categoryId(),
                 Money.ofMinor(line.limitMinor(), currency, decimals))));
         Long overall = budget.overallLimitMinor();
         Money overallLimit = overall == null ? null : Money.ofMinor(overall, currency, decimals);
-        return BudgetView.of(budget, decimals, consumption, List.copyOf(limits),
+        return BudgetView.of(budget, decimals, consumption, List.copyOf(limits), categoryConsumption,
                 CategoryLimits.warningFor(overallLimit, limits, currency, decimals));
     }
 
