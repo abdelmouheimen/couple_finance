@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { RefreshControl } from "react-native";
+import { shiftDate } from "@/features/expense/expenseRules";
 import { useHouseholdContext } from "@/features/household/HouseholdProvider";
 import { errorMessage } from "@/shared/i18n/errorMessage";
 import { strings } from "@/shared/i18n/strings";
@@ -16,24 +17,20 @@ import {
 } from "./analyticsApi";
 import { CategoryBreakdown } from "./CategoryBreakdown";
 import { toCategoryRows, toNegativeRows } from "./dashboardModel";
-import { BudgetRemainingCard, SpendSummaryCard } from "./SummaryCards";
-
-/** Display only (no period math): the ISO business date in the device locale, timezone-neutral. */
-function displayDate(iso: string): string {
-    const [y, m, d] = iso.split("-").map(Number);
-    if (!y || !m || !d) return iso;
-    return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString(undefined, {
-        dateStyle: "medium",
-        timeZone: "UTC",
-    });
-}
+import { displayDate } from "./displayDate";
+import { RecentExpenses } from "./RecentExpenses";
+import { SpendingOverTime } from "./SpendingOverTime";
+import { SpendBudgetCard } from "./SummaryCards";
 
 const SCOPES: readonly { value: AnalyticsScope; label: string }[] = [
     { value: "HOUSEHOLD", label: strings.scope.HOUSEHOLD },
     { value: "PERSONAL", label: strings.scope.PERSONAL },
 ];
 
-/** Home tab: spent / budget remaining / where it goes, for one scope at a time. */
+/**
+ * Home tab, for one scope at a time (BR-SCP-03). Order: period, scope, spending + budget status,
+ * category breakdown, spending over time, recent expenses. Every figure comes from the backend.
+ */
 export function Dashboard() {
     const { currentPeriod } = useHouseholdContext();
     const router = useRouter();
@@ -98,7 +95,7 @@ export function Dashboard() {
         if (isEmpty) {
             return (
                 <>
-                    <SpendSummaryCard data={data} />
+                    <SpendBudgetCard data={data} scope={scope} onSetBudget={openBudget} />
                     <EmptyState
                         title={strings.dashboard.emptyTitle}
                         message={strings.dashboard.emptyMessage}
@@ -110,8 +107,7 @@ export function Dashboard() {
         }
         return (
             <>
-                <SpendSummaryCard data={data} />
-                <BudgetRemainingCard data={data} scope={scope} onSetBudget={openBudget} />
+                <SpendBudgetCard data={data} scope={scope} onSetBudget={openBudget} />
                 {categories.isError ? (
                     <ErrorState
                         message={errorMessage(categories.error)}
@@ -121,17 +117,26 @@ export function Dashboard() {
                     <CategoryBreakdown
                         rows={toCategoryRows(data.categories, categories.data)}
                         refunds={toNegativeRows(data.negativeCategories, categories.data)}
+                        scopeLabel={strings.scope[scope]}
                         onSelect={openCategory}
                     />
                 ) : (
                     <Skeleton variant="card" />
                 )}
+                <SpendingOverTime periodStart={currentPeriod.start} scope={scope} />
+                <RecentExpenses
+                    scope={scope}
+                    periodStart={currentPeriod.start}
+                    periodEnd={shiftDate(currentPeriod.end, -1, 0)}
+                    categories={categories.data ?? []}
+                />
             </>
         );
     }
 
     return (
         <Screen
+            compact
             bottomInset={fabContentInset}
             refreshControl={
                 <RefreshControl

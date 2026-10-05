@@ -29,13 +29,13 @@ describe("dashboard chart data mapping", () => {
         ]);
     });
 
-    test("only the top N rows are kept, without recomputing anything", () => {
-        const items = ["a", "b", "c", "d"].map((id) => ({
+    test("every category is kept in the detailed rows, without recomputing anything", () => {
+        const items = ["a", "b", "c", "d", "e", "f", "g"].map((id) => ({
             categoryId: id,
             total: eur("1.00"),
-            percentage: "25.0",
+            percentage: "14.3",
         }));
-        expect(toCategoryRows(items, [])).toHaveLength(3);
+        expect(toCategoryRows(items, [])).toHaveLength(7);
     });
 
     test("BR-ANA-06: negative categories keep their negative amount and carry no percentage", () => {

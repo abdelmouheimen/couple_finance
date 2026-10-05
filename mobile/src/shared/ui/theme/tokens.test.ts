@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync, statSync } from "fs";
 import { join, relative, sep } from "path";
 import { contrastRatio } from "./contrast";
-import { contrastPairs, palettes, type ColorScheme } from "./tokens";
+import { chartPalettes, contrastPairs, palettes, type ColorScheme } from "./tokens";
 
 describe("token contrast (WCAG AA)", () => {
     const schemes: ColorScheme[] = ["light", "dark"];
@@ -12,6 +12,17 @@ describe("token contrast (WCAG AA)", () => {
                 expect(ratio).toBeGreaterThanOrEqual(pair.min);
             });
         }
+    }
+});
+
+describe("chart colours (graphical objects, WCAG 1.4.11)", () => {
+    for (const scheme of ["light", "dark"] as const) {
+        test(`${scheme}: every chart series colour has >= 3:1 against the card surface`, () => {
+            const { series, other } = chartPalettes[scheme];
+            for (const color of [...series, other]) {
+                expect(contrastRatio(color, palettes[scheme].surface)).toBeGreaterThanOrEqual(3);
+            }
+        });
     }
 });
 

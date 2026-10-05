@@ -9,15 +9,26 @@ interface Props {
     title: string;
     subtitle?: string;
     trailing?: ReactNode;
+    /** Small decorative element before the text (e.g. a legend swatch). */
+    leading?: ReactNode;
     onPress?: () => void;
     testID?: string;
     accessibilityHint?: string;
 }
 
-export function ListRow({ title, subtitle, trailing, onPress, testID, accessibilityHint }: Props) {
+export function ListRow({
+    title,
+    subtitle,
+    trailing,
+    leading,
+    onPress,
+    testID,
+    accessibilityHint,
+}: Props) {
     const colors = useColors();
     const content = (
         <>
+            {leading}
             <View style={styles.main}>
                 <Text bold>{title}</Text>
                 {subtitle ? (

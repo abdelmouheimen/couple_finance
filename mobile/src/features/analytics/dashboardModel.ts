@@ -10,9 +10,6 @@ export interface CategoryRow {
     percentage?: string;
 }
 
-/** Number of top categories shown on the dashboard (the API already sorts largest first). */
-export const TOP_CATEGORY_COUNT = 3;
-
 export function categoryName(category: Category | undefined): string {
     if (!category) return strings.dashboard.unknownCategory;
     if (category.name) return category.name;
@@ -28,12 +25,12 @@ function toMoney(m: { amount?: string; currency?: string } | undefined): Money |
 
 /**
  * Maps API categories to display rows. Values are passed through verbatim (BR-ANA-01, BR-MON-08):
- * no summation, no percentage computation, no re-sorting; only a name lookup and a top-N slice.
+ * no summation, no percentage computation, no re-sorting (the API already ranks largest first); only a name
+ * lookup. Every category is kept: grouping into "Other" is a visual concern of the chart only.
  */
 export function toCategoryRows(
     items: PeriodAnalytics["categories"],
     categories: readonly Category[],
-    limit = TOP_CATEGORY_COUNT,
 ): CategoryRow[] {
     const byId = new Map(categories.map((c) => [c.id, c]));
     const rows: CategoryRow[] = [];
@@ -47,7 +44,7 @@ export function toCategoryRows(
             percentage: item.percentage,
         });
     }
-    return rows.slice(0, limit);
+    return rows;
 }
 
 /** Refund-dominated categories, as provided (BR-ANA-06): listed apart, never charted. */
@@ -55,7 +52,7 @@ export function toNegativeRows(
     items: PeriodAnalytics["negativeCategories"],
     categories: readonly Category[],
 ): CategoryRow[] {
-    return toCategoryRows(items, categories, Number.MAX_SAFE_INTEGER);
+    return toCategoryRows(items, categories);
 }
 
 export { toMoney };

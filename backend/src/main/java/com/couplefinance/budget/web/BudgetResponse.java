@@ -40,7 +40,10 @@ record BudgetResponse(
         LimitConsumptionResponse consumption = budget.overallConsumption() == null ? null
                 : LimitConsumptionResponse.from(budget.overallConsumption());
         return new BudgetResponse(budget.id(), budget.periodStart(), budget.periodEnd(), budget.overallLimit(),
-                consumption, budget.categoryLimits().stream().map(CategoryLimitResponse::from).toList(),
+                consumption, budget.categoryLimits().stream()
+                        .map(line -> CategoryLimitResponse.from(line,
+                                budget.categoryConsumption().get(line.categoryId())))
+                        .toList(),
                 budget.categoryLimitsWarning() == null ? null
                         : CategoryLimitsWarningResponse.from(budget.categoryLimitsWarning()),
                 budget.createdBy(), budget.createdAt(), budget.updatedBy(), budget.updatedAt(),

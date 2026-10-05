@@ -1,6 +1,6 @@
 import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
 import { AccessibilityInfo, useColorScheme } from "react-native";
-import { type ColorScheme, type Palette, palettes } from "./tokens";
+import { chartPalettes, type ColorScheme, type Palette, palettes } from "./tokens";
 
 const SchemeOverride = createContext<ColorScheme | null>(null);
 
@@ -14,6 +14,11 @@ export function useColors(): Palette & { scheme: ColorScheme } {
     const system = useColorScheme();
     const scheme: ColorScheme = override ?? (system === "dark" ? "dark" : "light");
     return { ...palettes[scheme], scheme };
+}
+
+/** Categorical chart colours for the active scheme (light/dark). */
+export function useChartColors() {
+    return chartPalettes[useColors().scheme];
 }
 
 /** True when the OS asks for reduced motion; animations must then be skipped. */
