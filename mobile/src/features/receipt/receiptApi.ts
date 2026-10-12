@@ -3,6 +3,7 @@ import { api, authedFetch } from "@/shared/api/instance";
 import { ApiError, parseProblem } from "@/shared/api/problem";
 import { NETWORK_ERROR_CODE, unwrap } from "@/shared/api/unwrap";
 import { appConfig } from "@/shared/config/env";
+import { uploadPart } from "./receiptDevice";
 
 export type Receipt = components["schemas"]["Receipt"];
 export type ReceiptList = components["schemas"]["ReceiptList"];
@@ -146,17 +147,10 @@ export async function deleteReceipt(id: string): Promise<void> {
     await unwrap(api.DELETE("/api/v1/receipts/{id}", { params: { path: { id } } }));
 }
 
-/** The multipart body: React Native streams `{uri, name, type}` parts from the local file system. */
+/** The multipart body: one `files` part per page, read from the local file system by the fetch implementation. */
 export function receiptFormData(files: readonly LocalReceiptFile[]): FormData {
     const body = new FormData();
-    for (const file of files) {
-        // React Native's FormData accepts a file descriptor object in place of a Blob.
-        body.append("files", {
-            uri: file.uri,
-            name: file.name,
-            type: file.mimeType,
-        } as unknown as Blob);
-    }
+    for (const file of files) body.append("files", uploadPart(file), file.name);
     return body;
 }
 
