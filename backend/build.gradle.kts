@@ -39,6 +39,8 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.springframework.boot:spring-boot-starter-liquibase")
+    // SMTP adapter of the identity EmailDelivery port (production relay: infra/prod Postfix).
+    implementation("org.springframework.boot:spring-boot-starter-mail")
     implementation("org.springframework.modulith:spring-modulith-starter-core")
     // Transactional event publication registry / outbox (architecture.md section 5, ADR-001).
     implementation("org.springframework.modulith:spring-modulith-starter-jdbc")
@@ -47,7 +49,7 @@ dependencies {
     implementation("com.bucket4j:bucket4j_jdk17-core:8.20.0")
     // Argon2id password hashing: Spring Security's Argon2PasswordEncoder needs the Bouncy Castle primitives.
     implementation("org.bouncycastle:bcprov-jdk18on:1.82")
-    // Receipt documents (DOC-001, security.md §6): S3-compatible private object storage with server-side
+    // Receipt documents (DOC-001, security.md Â§6): S3-compatible private object storage with server-side
     // encryption, through the receipt module's DocumentStorage port only. URL-connection HTTP client: no Netty.
     implementation("software.amazon.awssdk:s3") {
         exclude(group = "software.amazon.awssdk", module = "netty-nio-client")
@@ -66,11 +68,11 @@ dependencies {
     testImplementation("org.springframework.modulith:spring-modulith-starter-test")
     testImplementation("org.testcontainers:testcontainers-junit-jupiter")
     testImplementation("org.testcontainers:testcontainers-postgresql")
-    // Property-based tests for Money (architecture.md §8: "jqwik ... for Money, expense items, parsers").
+    // Property-based tests for Money (architecture.md Â§8: "jqwik ... for Money, expense items, parsers").
     testImplementation("net.jqwik:jqwik:1.9.3")
     // Architecture rules (architecture.md section 8); same version Spring Modulith already resolves transitively.
     testImplementation("com.tngtech.archunit:archunit:1.4.2")
-    // Recorded provider responses for AI adapter tests (CLAUDE.md §13); shaded standalone build.
+    // Recorded provider responses for AI adapter tests (CLAUDE.md Â§13); shaded standalone build.
     testImplementation("org.wiremock:wiremock-standalone:3.13.1")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
@@ -80,7 +82,7 @@ tasks.withType<JavaCompile>().configureEach {
     options.compilerArgs.addAll(listOf("-parameters", "-Xlint:all,-processing,-serial", "-Werror"))
 }
 
-// Committed OpenAPI contract, shared with the mobile app (architecture.md §7).
+// Committed OpenAPI contract, shared with the mobile app (architecture.md Â§7).
 val openApiSpec = layout.projectDirectory.file("../api/openapi.yaml").asFile
 
 tasks.test {

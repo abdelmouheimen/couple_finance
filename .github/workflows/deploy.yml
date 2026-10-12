@@ -1,0 +1,57 @@
+name: Deploy production
+
+# Every push to develop is verified by the full CI, then deployed to the production server (infra/prod/README.md).
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One deployment at a time, never cancelled half-way.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    name: Deploy to production
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    env:
+      TAG: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build backend image
+        run: |
+          docker build -t "couplefinance-backend:$TAG" backend
+          docker save "couplefinance-backend:$TAG" | gzip > "couplefinance-backend-$TAG.tar.gz"
+
+      - name: Configure SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          printf 'Host prod\n  HostName %s\n  User %s\n  IdentityFile ~/.ssh/deploy_key\n  IdentitiesOnly yes\n' \
+            "${{ secrets.DEPLOY_HOST }}" "${{ secrets.DEPLOY_USER }}" > ~/.ssh/config
+
+      - name: Upload stack and image
+        run: |
+          ssh prod 'mkdir -p /opt/couplefinance/postfix'
+          scp infra/prod/docker-compose.yml infra/prod/.env.example infra/prod/init-env.sh infra/prod/deploy.sh \
+            "couplefinance-backend-$TAG.tar.gz" prod:/opt/couplefinance/
+          scp infra/prod/postfix/Dockerfile infra/prod/postfix/entrypoint.sh prod:/opt/couplefinance/postfix/
+
+      - name: Deploy
+        run: ssh prod "chmod +x /opt/couplefinance/*.sh && /opt/couplefinance/deploy.sh $TAG"
