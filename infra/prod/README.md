@@ -42,6 +42,15 @@ Reverse proxy (TLS): attach the proxy container to the `couplefinance-edge` netw
 `api.<domain>` → `backend:8080` and `files.<domain>` → `minio:9000` (the latter must preserve the `Host` header:
 presigned URLs are signed for `RECEIPT_PUBLIC_ENDPOINT`).
 
+### Test phase without a domain
+
+Until a domain is bought, use the wildcard DNS service sslip.io (`<anything>.169-58-23-91.sslip.io` resolves to
+`169.58.23.91`), so the proxy still obtains real HTTPS certificates and the app keeps its https-only rule:
+`RECEIPT_PUBLIC_ENDPOINT=https://files.169-58-23-91.sslip.io`, API at `https://api.169-58-23-91.sslip.io`
+(the URL baked into the `preview` APK by `mobile/eas.json`). Mail is sent from the provider's host name
+(`MAIL_DOMAIN=<PTR name>`) without SPF/DKIM DNS records, so most mailboxes will reject or spam it: during the test
+phase accounts may have to be activated manually (see Operations).
+
 ## Email (DNS)
 
 Mail is sent as `MAIL_FROM` through the `postfix` relay. For it to be delivered rather than marked as spam:
@@ -58,6 +67,10 @@ Mail is sent as `MAIL_FROM` through the `postfix` relay. For it to be delivered 
 cd /opt/couplefinance
 docker compose --env-file .env ps
 docker compose --env-file .env logs -f backend
+# test phase only, when the verification email is not delivered: activate one account by address
+docker compose --env-file .env exec postgres psql -U couplefinance -d couplefinance -c \
+  "UPDATE identity.user_account SET status='ACTIVE', email_verified_at=now(), updated_at=now(), version=version+1
+   WHERE lower(email)=lower('someone@example.org') AND status='PENDING_VERIFICATION';"
 # manual rollback: set IMAGE_TAG in .env to the previous tag (docker images couplefinance-backend), then
 docker compose --env-file .env up -d
 ```
