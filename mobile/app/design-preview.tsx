@@ -37,7 +37,7 @@ export default function DesignPreview() {
                         { value: "IMPORT", label: strings.expense.modes.IMPORT },
                     ]}
                 />
-                <ReceiptCapturePanel mode="SCAN" onUseManual={nothing} />
+                <ReceiptCapturePanel mode="SCAN" onUseManual={nothing} onUploaded={nothing} />
             </Screen>
         );
     }

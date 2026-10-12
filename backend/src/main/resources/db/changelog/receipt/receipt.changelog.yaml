@@ -8,3 +8,5 @@ databaseChangeLog:
       file: db/changelog/receipt/changes/0003-create-receipt-page.yaml
   - include:
       file: db/changelog/receipt/changes/0004-create-audit-event.yaml
+  - include:
+      file: db/changelog/receipt/changes/0005-create-analysis-tables.yaml

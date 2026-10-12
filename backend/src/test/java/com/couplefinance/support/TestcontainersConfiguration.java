@@ -1,5 +1,7 @@
 package com.couplefinance.support;
 
+import com.couplefinance.ai.api.DocumentIntelligencePort;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Bean;
@@ -63,5 +65,13 @@ public class TestcontainersConfiguration {
     @Primary
     TestMalwareScanner testMalwareScanner() {
         return new TestMalwareScanner();
+    }
+
+    /** Wraps the configured (fake) provider port so tests can script provider failures. */
+    @Bean
+    @Primary
+    TestDocumentIntelligence testDocumentIntelligence(
+            @Qualifier("documentIntelligencePort") DocumentIntelligencePort configured) {
+        return new TestDocumentIntelligence(configured);
     }
 }

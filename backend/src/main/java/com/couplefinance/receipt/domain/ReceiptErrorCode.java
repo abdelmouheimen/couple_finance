@@ -28,6 +28,12 @@ public enum ReceiptErrorCode implements ErrorCode {
     RECEIPT_NOT_FOUND(HttpStatus.NOT_FOUND),
     /** The receipt has no page at this position. */
     RECEIPT_PAGE_NOT_FOUND(HttpStatus.NOT_FOUND),
+    /** BR-AI-05: analysis needs the uploader's receipt-analysis consent. */
+    AI_CONSENT_REQUIRED(HttpStatus.CONFLICT),
+    /** BR-RCP-17: the receipt is linked, queued, running or already analysed. */
+    RECEIPT_ANALYSIS_NOT_ALLOWED(HttpStatus.CONFLICT),
+    /** BR-RCP-17: a failed analysis can be re-run at most three times. */
+    RECEIPT_ANALYSIS_RETRY_LIMIT(HttpStatus.CONFLICT),
     /** Only an open receipt can be deleted from the vault; a linked one is removed from its expense. */
     RECEIPT_NOT_DELETABLE(HttpStatus.CONFLICT);
 

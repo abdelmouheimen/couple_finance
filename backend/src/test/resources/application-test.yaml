@@ -11,6 +11,10 @@ spring:
 # exhausted by the suite on fast machines, so the default profile is effectively unlimited here; dedicated tight
 # profiles serve the rate-limit tests on test-support routes only.
 couplefinance:
+  receipt:
+    analysis:
+      poll-interval: 1h
+      retry-backoff: 0s
   rate-limit:
     profiles:
       default:

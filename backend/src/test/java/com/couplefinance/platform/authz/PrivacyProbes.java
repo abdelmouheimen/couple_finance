@@ -217,6 +217,13 @@ final class PrivacyProbes {
         assertThat(world.get(s.owner(), uri)).as("the partner delete had no effect").hasStatus(HttpStatus.OK);
     }
 
+    static void receiptAnalysis(AuthzWorld world, SeededHousehold s) {
+        String uri = "/api/v1/receipts/" + s.ownerReceipt() + "/analysis";
+        MvcTestResult result = world.send(s.partner(), Call.without(HttpMethod.POST, uri));
+        assertThat(result).hasStatus(HttpStatus.NOT_FOUND);
+        assertNoPrivateData(s, AuthzWorld.text(result), uri);
+    }
+
     static void assertNoPrivateData(SeededHousehold s, String responseText, String requestUri) {
         String text = responseText.replace(requestUri, "");
         for (String marker : s.privateMarkers()) {

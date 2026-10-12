@@ -10,6 +10,7 @@ import java.util.UUID;
 import com.couplefinance.shared.error.ApplicationException;
 import com.couplefinance.shared.id.HouseholdId;
 import com.couplefinance.shared.id.UserId;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Receipt evidence (domain-model.md, database-schema.md section 8.2): the stored pages of what a member uploaded.
@@ -17,8 +18,11 @@ import com.couplefinance.shared.id.UserId;
  * through the {@link ReceiptRepository} port.
  */
 public record Receipt(UUID id, HouseholdId householdId, UserId uploadedBy, SourceKind sourceKind, int totalSizeBytes,
-        ReceiptStatus status, AnalysisStatus analysisStatus, Instant createdAt, Instant updatedAt, long version,
-        List<ReceiptPage> pages) {
+        ReceiptStatus status, AnalysisStatus analysisStatus, @Nullable String analysisFailureReason,
+        int manualRetryCount, Instant createdAt, Instant updatedAt, long version, List<ReceiptPage> pages) {
+
+    /** BR-RCP-17: a failed analysis can be re-run manually at most three times per receipt. */
+    public static final int MAX_MANUAL_RETRIES = 3;
 
     public Receipt {
         Objects.requireNonNull(id, "id");
@@ -44,14 +48,40 @@ public record Receipt(UUID id, HouseholdId householdId, UserId uploadedBy, Sourc
     }
 
     /**
-     * A freshly uploaded receipt: open and never sent to an AI provider. Until receipt analysis and its consent
-     * exist (DOC-003) every upload is {@link AnalysisStatus#SKIPPED_NO_CONSENT}, so no content can reach a provider
-     * retroactively (BR-RCP-17).
+     * A freshly uploaded, open receipt. It is queued for analysis only when the uploader consented to receipt
+     * analysis at upload time; otherwise it is {@link AnalysisStatus#SKIPPED_NO_CONSENT} and is never processed
+     * retroactively (BR-AI-05, BR-RCP-17).
      */
     public static Receipt uploaded(UUID id, HouseholdId household, UserId uploader, SourceKind kind,
-            long totalSizeBytes, List<ReceiptPage> pages, Instant now) {
+            long totalSizeBytes, List<ReceiptPage> pages, boolean uploaderConsented, Instant now) {
         return new Receipt(id, household, uploader, kind, Math.toIntExact(totalSizeBytes), ReceiptStatus.OPEN,
-                AnalysisStatus.SKIPPED_NO_CONSENT, now, now, 0, pages);
+                uploaderConsented ? AnalysisStatus.PENDING : AnalysisStatus.SKIPPED_NO_CONSENT, null, 0, now, now, 0,
+                pages);
+    }
+
+    /**
+     * Guard of an explicit analysis request (BR-RCP-17): only an open receipt whose analysis failed (at most three
+     * manual retries) or never ran for lack of consent / was cancelled can be (re-)analysed.
+     *
+     * @return whether the request is a manual retry of a failure (it then counts against the limit)
+     */
+    public boolean requireAnalysable() {
+        if (status != ReceiptStatus.OPEN) {
+            throw new ApplicationException(ReceiptErrorCode.RECEIPT_ANALYSIS_NOT_ALLOWED,
+                    "Only an open receipt can be analysed.");
+        }
+        return switch (analysisStatus) {
+            case FAILED -> {
+                if (manualRetryCount >= MAX_MANUAL_RETRIES) {
+                    throw new ApplicationException(ReceiptErrorCode.RECEIPT_ANALYSIS_RETRY_LIMIT,
+                            "This receipt was already re-analysed three times.");
+                }
+                yield true;
+            }
+            case SKIPPED_NO_CONSENT, CANCELLED -> false;
+            case PENDING, RUNNING, SUCCEEDED -> throw new ApplicationException(
+                    ReceiptErrorCode.RECEIPT_ANALYSIS_NOT_ALLOWED, "This receipt is already analysed or queued.");
+        };
     }
 
     public int pageCount() {

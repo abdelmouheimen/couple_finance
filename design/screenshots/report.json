@@ -108,7 +108,7 @@
     {
       "id": "AC-05 06-settings block order",
       "ok": true,
-      "detail": "0.017 < 0.098 < 0.214 < 0.743"
+      "detail": "0.017 < 0.098 < 0.214 < 0.797"
     },
     {
       "id": "AC-06 01-home title on the 20 dp gutter",
@@ -154,7 +154,7 @@
   "results": [
     {
       "name": "01-home",
-      "file": "C:\\Abdel\\sources\\financecouple\\design\\screenshots\\01-home.png",
+      "file": "C:\\Abdel\\sources\\financecouple-doc\\design\\screenshots\\01-home.png",
       "anchors": {
         "title": {
           "top": 0.022,
@@ -196,7 +196,7 @@
     },
     {
       "name": "02-expenses",
-      "file": "C:\\Abdel\\sources\\financecouple\\design\\screenshots\\02-expenses.png",
+      "file": "C:\\Abdel\\sources\\financecouple-doc\\design\\screenshots\\02-expenses.png",
       "anchors": {
         "title": {
           "top": 0.017,
@@ -232,7 +232,7 @@
     },
     {
       "name": "03-add-expense-scan",
-      "file": "C:\\Abdel\\sources\\financecouple\\design\\screenshots\\03-add-expense-scan.png",
+      "file": "C:\\Abdel\\sources\\financecouple-doc\\design\\screenshots\\03-add-expense-scan.png",
       "anchors": {
         "title": {
           "top": 0.02,
@@ -256,7 +256,7 @@
     },
     {
       "name": "03b-add-expense-manual",
-      "file": "C:\\Abdel\\sources\\financecouple\\design\\screenshots\\03b-add-expense-manual.png",
+      "file": "C:\\Abdel\\sources\\financecouple-doc\\design\\screenshots\\03b-add-expense-manual.png",
       "anchors": {
         "title": {
           "top": 0.02,
@@ -268,7 +268,7 @@
     },
     {
       "name": "05-budget",
-      "file": "C:\\Abdel\\sources\\financecouple\\design\\screenshots\\05-budget.png",
+      "file": "C:\\Abdel\\sources\\financecouple-doc\\design\\screenshots\\05-budget.png",
       "anchors": {
         "title": {
           "top": 0.017,
@@ -304,7 +304,7 @@
     },
     {
       "name": "06-settings",
-      "file": "C:\\Abdel\\sources\\financecouple\\design\\screenshots\\06-settings.png",
+      "file": "C:\\Abdel\\sources\\financecouple-doc\\design\\screenshots\\06-settings.png",
       "anchors": {
         "title": {
           "top": 0.017,
@@ -325,7 +325,7 @@
           "width": 276
         },
         "about": {
-          "top": 0.743,
+          "top": 0.797,
           "height": 24,
           "left": 68,
           "width": 276
@@ -339,8 +339,50 @@
       }
     },
     {
+      "name": "07-receipt-vault",
+      "file": "C:\\Abdel\\sources\\financecouple-doc\\design\\screenshots\\07-receipt-vault.png",
+      "anchors": {
+        "title": {
+          "top": 0.013,
+          "height": 40,
+          "left": 76,
+          "width": 260
+        },
+        "filter": {
+          "top": 0.074,
+          "height": 50,
+          "left": 20,
+          "width": 372
+        },
+        "firstRow": {
+          "top": 0.146,
+          "height": 72,
+          "left": 20,
+          "width": 372
+        }
+      }
+    },
+    {
+      "name": "08-receipt-detail",
+      "file": "C:\\Abdel\\sources\\financecouple-doc\\design\\screenshots\\08-receipt-detail.png",
+      "anchors": {
+        "title": {
+          "top": 0.02,
+          "height": 28,
+          "left": 64,
+          "width": 284
+        },
+        "image": {
+          "top": 0.258,
+          "height": 641,
+          "left": 20,
+          "width": 372
+        }
+      }
+    },
+    {
       "name": "04-receipt-review",
-      "file": "C:\\Abdel\\sources\\financecouple\\design\\screenshots\\04-receipt-review.png",
+      "file": "C:\\Abdel\\sources\\financecouple-doc\\design\\screenshots\\04-receipt-review.png",
       "anchors": {
         "title": {
           "top": 0.02,

@@ -80,6 +80,9 @@ function Navigator() {
                 <Stack.Screen name="expense/edit/[id]" />
                 <Stack.Screen name="categories" />
                 <Stack.Screen name="household" />
+                <Stack.Screen name="receipts/index" />
+                <Stack.Screen name="receipts/[id]" />
+                <Stack.Screen name="privacy" />
             </Stack.Protected>
         </Stack>
     );

@@ -89,6 +89,15 @@ public final class OperationRegistry {
         registry.put("deleteReceipt", household(s -> Call.without(HttpMethod.DELETE,
                 "/api/v1/receipts/" + s.target().ownerReceipt()), true, PrivacyProbes::receiptDelete));
 
+        registry.put("requestReceiptAnalysis", household(s -> Call.without(HttpMethod.POST,
+                "/api/v1/receipts/" + s.target().ownerReceipt() + "/analysis"), true, PrivacyProbes::receiptAnalysis));
+
+        // AI consents (DOC-003, BR-AI-05): the caller's own decisions only, never another user's.
+        registry.put("listAiConsents", authenticated(s -> Call.get("/api/v1/me/ai-consents")));
+        registry.put("decideAiConsent", authenticated(s -> Call.with(HttpMethod.PUT,
+                "/api/v1/me/ai-consents/INSIGHTS_ASSISTANT",
+                "{\"granted\":false,\"consentTextVersion\":\"insights-v1\"}")));
+
         registry.put("login", OperationFixture.publicOperation());
         registry.put("register", OperationFixture.publicOperation());
         registry.put("verifyEmail", OperationFixture.publicOperation());
