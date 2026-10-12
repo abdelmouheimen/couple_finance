@@ -5,8 +5,11 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
+import com.couplefinance.expense.api.ReceiptExpenses;
 import com.couplefinance.household.api.CurrentHousehold;
 import com.couplefinance.household.api.HouseholdContext;
 import com.couplefinance.receipt.domain.Receipt;
@@ -27,7 +30,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 /**
  * The receipt vault (DOC-001): listing, reading, page access through short-lived presigned URLs and deletion.
  * Visibility is enforced here, server-side, through the scoped {@link ReceiptRepository}: a member sees their own
- * drafts (BR-RCP-16); anything else is a 404.
+ * drafts and the receipts linked to an expense they can see (BR-RCP-16); anything else is a 404.
  */
 @Service
 public class ReceiptVaultService {
@@ -41,12 +44,15 @@ public class ReceiptVaultService {
     private final ReceiptRepository receipts;
     private final ReceiptAuditLog audit;
     private final DocumentStorage storage;
+    private final ReceiptExpenses expenses;
     private final CursorCodec cursors;
     private final TransactionTemplate transaction;
     private final Clock clock;
 
     ReceiptVaultService(CurrentHousehold currentHousehold, ReceiptRepository receipts, ReceiptAuditLog audit,
-            DocumentStorage storage, CursorCodec cursors, TransactionTemplate transaction, Clock clock) {
+            DocumentStorage storage, ReceiptExpenses expenses, CursorCodec cursors, TransactionTemplate transaction,
+            Clock clock) {
+        this.expenses = expenses;
         this.currentHousehold = currentHousehold;
         this.receipts = receipts;
         this.audit = audit;
@@ -75,15 +81,26 @@ public class ReceiptVaultService {
                         "The cursor is invalid.", e);
             }
         }
-        List<ReceiptView> fetched = receipts.listVisible(context.householdId(), context.userId(), afterCreatedAt,
-                afterId, query.fetchSize()).stream().map(ReceiptView::from).toList();
+        // A linked receipt follows the visibility of its expense (BR-RCP-16), resolved by the expense module.
+        Map<UUID, UUID> links = expenses.visibleLinks(context.householdId(), context.userId());
+        List<ReceiptView> fetched = receipts.listVisible(context.householdId(), context.userId(), links.keySet(),
+                afterCreatedAt, afterId, query.fetchSize()).stream()
+                .map(receipt -> ReceiptView.from(receipt, receipt.isDraft() ? null : links.get(receipt.id())))
+                .toList();
         return CursorPage.of(fetched, query, r -> List.of(r.createdAt().toString(), r.id().toString()), cursors,
                 scope);
     }
 
     public ReceiptView get(UUID id) {
         HouseholdContext context = currentHousehold.currentHousehold();
-        return ReceiptView.from(visible(context, id));
+        Optional<Receipt> draft = receipts.findVisible(id, context.householdId(), context.userId());
+        if (draft.isPresent()) {
+            return ReceiptView.from(draft.get());
+        }
+        UUID expense = expenses.visibleExpenseOf(context.householdId(), context.userId(), id)
+                .orElseThrow(ReceiptVaultService::notFound);
+        return ReceiptView.from(receipts.findLinked(id, context.householdId())
+                .orElseThrow(ReceiptVaultService::notFound), expense);
     }
 
     public PageUrl pageUrl(UUID id, int position) {
@@ -105,8 +122,9 @@ public class ReceiptVaultService {
         context.requireWritable();
         Receipt deleted = transaction.execute(status -> {
             Receipt receipt = receipts.lockVisible(id, context.householdId(), context.userId())
+                    .or(() -> linked(context, id))
                     .orElseThrow(ReceiptVaultService::notFound);
-            receipt.requireDeletable();
+            receipt.requireDeletable(); // BR-RCP-20: a linked receipt is removed from its expense, not here
             receipts.delete(receipt.id(), context.householdId());
             audit.deleted(receipt, context.userId());
             return receipt;
@@ -122,9 +140,16 @@ public class ReceiptVaultService {
         log.info("Receipt deleted: receipt={}", deleted.id());
     }
 
+    /** The caller's own draft, or a linked receipt whose expense the caller may see (BR-RCP-16). */
     private Receipt visible(HouseholdContext context, UUID id) {
         return receipts.findVisible(id, context.householdId(), context.userId())
+                .or(() -> linked(context, id))
                 .orElseThrow(ReceiptVaultService::notFound);
+    }
+
+    private Optional<Receipt> linked(HouseholdContext context, UUID id) {
+        return expenses.visibleExpenseOf(context.householdId(), context.userId(), id)
+                .flatMap(expense -> receipts.findLinked(id, context.householdId()));
     }
 
     private static ApplicationException notFound() {

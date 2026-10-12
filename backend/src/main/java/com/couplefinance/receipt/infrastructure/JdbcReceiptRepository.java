@@ -6,6 +6,7 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -97,15 +98,50 @@ class JdbcReceiptRepository implements ReceiptRepository {
     }
 
     @Override
-    public List<Receipt> listVisible(HouseholdId household, UserId viewer, @Nullable Instant afterCreatedAt,
-            @Nullable UUID afterId, int limit) {
+    public Optional<Receipt> lockUploaded(UUID id, HouseholdId household, UserId uploader) {
+        List<Row> rows = jdbc.sql("""
+                        SELECT r.* FROM receipt.receipt r
+                        WHERE r.id = :id AND r.household_id = :householdId AND r.uploaded_by = :uploader
+                        FOR UPDATE
+                        """)
+                .param("id", id)
+                .param("householdId", household.value())
+                .param("uploader", uploader.value())
+                .query(JdbcReceiptRepository::row).list();
+        return withPages(household, rows).stream().findFirst();
+    }
+
+    @Override
+    public Optional<Receipt> findLinked(UUID id, HouseholdId household) {
+        List<Row> rows = jdbc.sql("""
+                        SELECT r.* FROM receipt.receipt r
+                        WHERE r.id = :id AND r.household_id = :householdId
+                          AND r.status IN ('CONFIRMED', 'ATTACHED')
+                        """)
+                .param("id", id)
+                .param("householdId", household.value())
+                .query(JdbcReceiptRepository::row).list();
+        return withPages(household, rows).stream().findFirst();
+    }
+
+    @Override
+    public List<Receipt> listVisible(HouseholdId household, UserId viewer, Collection<UUID> visibleLinked,
+            @Nullable Instant afterCreatedAt, @Nullable UUID afterId, int limit) {
         String after = afterCreatedAt == null ? ""
                 : " AND (r.created_at, r.id) < (:afterCreatedAt, :afterId)";
-        var statement = jdbc.sql("SELECT r.* FROM receipt.receipt r WHERE " + VISIBLE + after
+        // Own drafts (BR-RCP-16), plus linked receipts whose expense the viewer may see.
+        String visible = visibleLinked.isEmpty() ? VISIBLE : """
+                r.household_id = :householdId AND ((r.status = 'OPEN' AND r.uploaded_by = :viewer)
+                    OR (r.status IN ('CONFIRMED', 'ATTACHED') AND r.id IN (:linked)))
+                """;
+        var statement = jdbc.sql("SELECT r.* FROM receipt.receipt r WHERE " + visible + after
                         + " ORDER BY r.created_at DESC, r.id DESC LIMIT :limit")
                 .param("householdId", household.value())
                 .param("viewer", viewer.value())
                 .param("limit", limit);
+        if (!visibleLinked.isEmpty()) {
+            statement = statement.param("linked", List.copyOf(visibleLinked));
+        }
         if (afterCreatedAt != null) {
             statement = statement.param("afterCreatedAt", utc(afterCreatedAt)).param("afterId", afterId);
         }

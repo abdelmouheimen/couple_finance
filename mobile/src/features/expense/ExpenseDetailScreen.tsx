@@ -149,6 +149,14 @@ export function ExpenseDetailScreen({ id }: { id: string }) {
                     {deleteError}
                 </Text>
             ) : null}
+            {data.receiptId ? (
+                <Button
+                    variant="secondary"
+                    icon="receipt"
+                    label={strings.expense.viewReceipt}
+                    onPress={() => router.push(`/receipts/${data.receiptId}`)}
+                />
+            ) : null}
             {readOnly ? null : (
                 <View style={styles.actions}>
                     <Button

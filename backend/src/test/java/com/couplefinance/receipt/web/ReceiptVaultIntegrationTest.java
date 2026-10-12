@@ -246,11 +246,11 @@ class ReceiptVaultIntegrationTest {
         UUID user = users.active();
         createHousehold(user);
         UUID id = id(upload(user, null, file(ReceiptFiles.jpeg(60, 90))));
-        // Linking arrives with confirmation (DOC-004); the vault must already refuse to delete linked evidence.
+        // A receipt marked linked without any visible expense (e.g. its expense was deleted): not reachable.
         jdbc.sql("UPDATE receipt.receipt SET status = 'ATTACHED', linked_at = now() WHERE id = :id").param("id", id)
                 .update();
 
-        // Until DOC-004 a linked receipt follows the visibility of its expense, which the vault cannot resolve yet.
+        // A linked receipt follows the visibility of its expense (BR-RCP-16): no visible expense, no receipt.
         assertThat(get(user, id)).hasStatus(HttpStatus.NOT_FOUND);
         assertThat(delete(user, id)).hasStatus(HttpStatus.NOT_FOUND);
         assertThat(jdbc.sql("SELECT count(*) FROM receipt.receipt WHERE id = :id").param("id", id).query(Long.class)

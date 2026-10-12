@@ -76,6 +76,17 @@ export function errorMessage(error: unknown): string {
             return strings.errors.receiptNotFound;
         case "RECEIPT_NOT_DELETABLE":
             return strings.errors.receiptNotDeletable;
+        case "RECEIPT_ALREADY_CONFIRMED":
+            return strings.errors.receiptAlreadyConfirmed;
+        case "RECEIPT_VERSION_CONFLICT":
+            return strings.errors.receiptVersionConflict;
+        case "RECEIPT_ACKNOWLEDGEMENT_MISMATCH":
+            return strings.errors.receiptAcknowledgement;
+        case "RECEIPT_FIELD_UNRESOLVED":
+        case "RECEIPT_RESOLUTION_INVALID":
+            return strings.errors.receiptFieldUnresolved;
+        case "EXPENSE_RECEIPT_ALREADY_LINKED":
+            return strings.errors.expenseReceiptAlreadyLinked;
         case "AI_CONSENT_REQUIRED":
             return strings.errors.aiConsentRequired;
         case "RECEIPT_ANALYSIS_NOT_ALLOWED":

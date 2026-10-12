@@ -7,6 +7,11 @@ import { appConfig } from "@/shared/config/env";
 export type Receipt = components["schemas"]["Receipt"];
 export type ReceiptList = components["schemas"]["ReceiptList"];
 export type ReceiptPageUrl = components["schemas"]["ReceiptPageUrl"];
+export type ReceiptReview = components["schemas"]["ReceiptReview"];
+export type ReceiptDuplicate = components["schemas"]["ReceiptDuplicate"];
+export type ReceiptLink = components["schemas"]["ReceiptLink"];
+export type ConfirmReceiptRequest = components["schemas"]["ConfirmReceiptRequest"];
+export type AttachReceiptRequest = components["schemas"]["AttachReceiptRequest"];
 
 /** A file prepared on the device for upload: a local URI the multipart body can stream. */
 export interface LocalReceiptFile {
@@ -54,6 +59,87 @@ export function isOpenReceipt(receipt: Receipt): boolean {
 /** The analysis is queued or running: the screen polls until it settles. */
 export function isAnalysisPending(receipt: Receipt): boolean {
     return receipt.state === "QUEUED" || receipt.state === "ANALYSING";
+}
+
+/** The draft of an open receipt as proposals, with duplicate warnings (BR-RCP-10, BR-RCP-14). */
+export function getReceiptReview(id: string): Promise<ReceiptReview> {
+    return unwrap(api.GET("/api/v1/receipts/{id}/review", { params: { path: { id } } }));
+}
+
+/** The form values as entered: the amount is the string the member typed, never recomputed. */
+interface ReviewedValues {
+    amount: string;
+    categoryId: string | null;
+    date: string;
+    merchant: string;
+    note: string;
+    sharingType: "SHARED" | "PERSONAL";
+}
+
+/**
+ * The confirmation of a reviewed receipt (BR-RCP-10): the acknowledged total and date ARE the submitted values (the
+ * member confirms them on the acknowledgement sheet), and every field the review flagged carries the value the
+ * member kept or typed.
+ */
+export function buildConfirmRequest(
+    values: ReviewedValues,
+    review: ReceiptReview,
+    ctx: { currency: string; paidByUserId: string },
+): ConfirmReceiptRequest {
+    if (!values.categoryId) throw new Error("categoryId is required");
+    const money = { amount: values.amount, currency: ctx.currency };
+    const merchant = values.merchant.trim();
+    const note = values.note.trim();
+    const chosen: Record<string, string> = {
+        total: values.amount,
+        date: values.date,
+        merchant,
+        currency: ctx.currency,
+    };
+    const resolutions: Record<string, string> = {};
+    for (const field of review.unresolvedFields) resolutions[field] = chosen[field] ?? "";
+    return {
+        version: review.version,
+        kind: review.refundProposed ? "REFUND" : "EXPENSE",
+        amount: money,
+        date: values.date,
+        categoryId: values.categoryId,
+        paidByUserId: ctx.paidByUserId,
+        sharingType: values.sharingType,
+        ...(merchant ? { merchant } : {}),
+        ...(note ? { note } : {}),
+        acknowledgedTotal: money,
+        acknowledgedDate: values.date,
+        ...(review.unresolvedFields.length > 0 ? { resolutions } : {}),
+    } as ConfirmReceiptRequest;
+}
+
+/** Creates the expense from the acknowledged values and links the receipt, exactly once (BR-RCP-15). */
+export function confirmReceipt(
+    id: string,
+    body: ConfirmReceiptRequest,
+    idempotencyKey: string,
+): Promise<ReceiptLink> {
+    return unwrap(
+        api.POST("/api/v1/receipts/{id}/confirm", {
+            params: { path: { id }, header: { "Idempotency-Key": idempotencyKey } },
+            body,
+        }),
+    );
+}
+
+/** Keeps the receipt as evidence of an existing expense instead of creating a duplicate (BR-RCP-14). */
+export function attachReceipt(
+    id: string,
+    body: AttachReceiptRequest,
+    idempotencyKey: string,
+): Promise<ReceiptLink> {
+    return unwrap(
+        api.POST("/api/v1/receipts/{id}/attach", {
+            params: { path: { id }, header: { "Idempotency-Key": idempotencyKey } },
+            body,
+        }),
+    );
 }
 
 export async function deleteReceipt(id: string): Promise<void> {

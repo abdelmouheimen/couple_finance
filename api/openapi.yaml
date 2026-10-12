@@ -1930,6 +1930,154 @@ paths:
       summary: Analyse or re-analyse a receipt
       tags:
       - Receipts
+  /api/v1/receipts/{id}/attach:
+    post:
+      description: "Keeps the receipt as evidence of an expense that already exists,\
+        \ instead of creating a duplicate (BR-RCP-14). Nothing of the expense changes.\
+        \ The caller must be able to edit the expense: the partner's PERSONAL expense\
+        \ is not found."
+      operationId: attachReceipt
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - description: Client-generated key (1-100 printable ASCII characters).
+        in: header
+        name: Idempotency-Key
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AttachReceiptRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReceiptLink"
+          description: Receipt attached
+        "400":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: VALIDATION_FAILED or IDEMPOTENCY_KEY_INVALID
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: AUTHENTICATION_REQUIRED
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: EMAIL_NOT_VERIFIED or HOUSEHOLD_READ_ONLY
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: "HOUSEHOLD_NOT_FOUND, RECEIPT_NOT_FOUND or EXPENSE_NOT_FOUND"
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: "RECEIPT_ALREADY_CONFIRMED, RECEIPT_VERSION_CONFLICT, EXPENSE_RECEIPT_ALREADY_LINKED\
+            \ or REQUEST_IN_PROGRESS"
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: IDEMPOTENCY_KEY_REUSED
+      summary: Attach a receipt to an existing expense
+      tags:
+      - Receipts
+  /api/v1/receipts/{id}/confirm:
+    post:
+      description: "Creates ONE expense from the values the member submitted and explicitly\
+        \ acknowledged, and links the receipt to it, exactly once (BR-RCP-10, BR-RCP-15).\
+        \ Every rule of a manual expense applies; if the expense is refused nothing\
+        \ changes and the receipt stays open. Allowed from any open receipt of the\
+        \ caller, analysed or not. Send an Idempotency-Key to retry safely."
+      operationId: confirmReceipt
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - description: Client-generated key (1-100 printable ASCII characters).
+        in: header
+        name: Idempotency-Key
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfirmReceiptRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReceiptLink"
+          description: Expense created and linked
+        "400":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: "VALIDATION_FAILED, RECEIPT_ACKNOWLEDGEMENT_MISMATCH, RECEIPT_FIELD_UNRESOLVED,\
+            \ RECEIPT_RESOLUTION_INVALID, IDEMPOTENCY_KEY_INVALID or any validation\
+            \ error of a manual expense"
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: AUTHENTICATION_REQUIRED
+        "403":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: EMAIL_NOT_VERIFIED or HOUSEHOLD_READ_ONLY
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: "HOUSEHOLD_NOT_FOUND, RECEIPT_NOT_FOUND or CATEGORY_NOT_FOUND"
+        "409":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: "RECEIPT_ALREADY_CONFIRMED, RECEIPT_VERSION_CONFLICT or REQUEST_IN_PROGRESS"
+        "422":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: IDEMPOTENCY_KEY_REUSED
+      summary: Confirm a receipt into a new expense
+      tags:
+      - Receipts
   /api/v1/receipts/{id}/pages/{position}/url:
     get:
       description: "A presigned GET URL of one stored page (re-encoded JPEG), valid\
@@ -1969,6 +2117,45 @@ paths:
                 $ref: "#/components/schemas/Problem"
           description: "HOUSEHOLD_NOT_FOUND, RECEIPT_NOT_FOUND or RECEIPT_PAGE_NOT_FOUND"
       summary: Get a page preview/download URL
+      tags:
+      - Receipts
+  /api/v1/receipts/{id}/review:
+    get:
+      description: "The draft of one of the caller's open receipts as proposals: printed\
+        \ values, candidate readings, statuses, a rule-based category suggestion (from\
+        \ the merchant name only, always a usable category of the household) and potential\
+        \ duplicates the caller may see (BR-RCP-14). Nothing here is an expense (BR-RCP-02).\
+        \ A receipt never analysed is reviewable too: the member then enters every\
+        \ value."
+      operationId: getReceiptReview
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReceiptReview"
+          description: The review
+        "401":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: AUTHENTICATION_REQUIRED
+        "404":
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+          description: "HOUSEHOLD_NOT_FOUND or RECEIPT_NOT_FOUND (unknown, other household,\
+            \ partner's draft, or no longer open)"
+      summary: Review an open receipt
       tags:
       - Receipts
 components:
@@ -2097,6 +2284,21 @@ components:
           type: integer
           format: int32
           description: "Number of periods averaged, 1 to 3."
+    AttachReceiptRequest:
+      type: object
+      properties:
+        expenseId:
+          type: string
+          format: uuid
+          description: "A live expense of the household the caller can edit, without\
+            \ a receipt."
+        version:
+          type: integer
+          format: int64
+          description: The receipt version the member reviewed.
+      required:
+      - expenseId
+      - version
     Budget:
       type: object
       properties:
@@ -2278,6 +2480,74 @@ components:
       required:
       - categoryId
       - source
+    ConfirmReceiptRequest:
+      type: object
+      properties:
+        acknowledgedDate:
+          type: string
+          format: date
+          description: "The date the member explicitly acknowledged: must equal date\
+            \ (BR-RCP-10)."
+        acknowledgedTotal:
+          $ref: "#/components/schemas/Money"
+          description: "The total the member explicitly acknowledged: must equal amount\
+            \ (BR-RCP-10)."
+        amount:
+          $ref: "#/components/schemas/Money"
+          description: "Amount of the expense, in the household currency, strictly\
+            \ positive."
+        categoryId:
+          type: string
+          format: uuid
+          description: "A usable category of the household: one category for the whole\
+            \ amount."
+        date:
+          type: string
+          format: date
+          description: Date of the expense (YYYY-MM-DD).
+          example: 2026-10-04
+        kind:
+          type: string
+          description: EXPENSE (default) or REFUND.
+          enum:
+          - EXPENSE
+          - REFUND
+        merchant:
+          type: string
+          maxLength: 120
+          minLength: 0
+        note:
+          type: string
+          maxLength: 500
+          minLength: 0
+        paidByUserId:
+          type: string
+          format: uuid
+          description: A current member of the household.
+        resolutions:
+          type: object
+          additionalProperties:
+            type: string
+          description: "Field (merchant, date, total, currency) → the value chosen,\
+            \ for every field listed in unresolvedFields."
+        sharingType:
+          type: string
+          description: SHARED (default) or PERSONAL.
+          enum:
+          - SHARED
+          - PERSONAL
+        version:
+          type: integer
+          format: int64
+          description: The receipt version the member reviewed.
+      required:
+      - acknowledgedDate
+      - acknowledgedTotal
+      - amount
+      - categoryId
+      - date
+      - paidByUserId
+      - version
     CreateCategoryRequest:
       type: object
       properties:
@@ -2508,6 +2778,11 @@ components:
         paidByUserId:
           type: string
           format: uuid
+        receiptId:
+          type: string
+          format: uuid
+          description: The receipt kept as evidence of this expense (confirmed from
+            it or attached).
         refundOf:
           type: string
           format: uuid
@@ -2521,6 +2796,7 @@ components:
           type: string
           enum:
           - MANUAL
+          - RECEIPT
         updatedAt:
           type: string
           format: date-time
@@ -2933,6 +3209,10 @@ components:
         createdAt:
           type: string
           format: date-time
+        expenseId:
+          type: string
+          format: uuid
+          description: The expense this receipt is evidence of (CONFIRMED or ATTACHED).
         id:
           type: string
           format: uuid
@@ -2978,6 +3258,51 @@ components:
       - state
       - totalSizeBytes
       - version
+    ReceiptDuplicate:
+      type: object
+      properties:
+        attachable:
+          type: boolean
+          description: Whether this receipt can be attached to that expense instead.
+        expenseId:
+          type: string
+          format: uuid
+        reason:
+          type: string
+          enum:
+          - SAME_FILE
+          - SIMILAR_IMAGE
+          - MATCHING_EXPENSE
+        receiptId:
+          type: string
+          format: uuid
+      required:
+      - attachable
+      - reason
+    ReceiptLink:
+      type: object
+      properties:
+        expenseId:
+          type: string
+          format: uuid
+        receiptId:
+          type: string
+          format: uuid
+        state:
+          type: string
+          enum:
+          - UPLOADED
+          - QUEUED
+          - ANALYSING
+          - READY_FOR_REVIEW
+          - FAILED
+          - CONFIRMED
+          - ATTACHED
+          - ABANDONED
+      required:
+      - expenseId
+      - receiptId
+      - state
     ReceiptList:
       type: object
       properties:
@@ -3029,6 +3354,141 @@ components:
       - contentType
       - expiresAt
       - url
+    ReceiptReview:
+      type: object
+      properties:
+        analysed:
+          type: boolean
+          description: "false: no draft, the member enters every value."
+        detectedCurrency:
+          type: string
+          description: "ISO 4217 code printed on the receipt, when recognised."
+        documentType:
+          type: string
+        duplicates:
+          type: array
+          description: "Potential duplicates (BR-RCP-14): warnings, never a block."
+          items:
+            $ref: "#/components/schemas/ReceiptDuplicate"
+        fields:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/ReceiptReviewField"
+          description: "merchant, date, total and currency."
+        findings:
+          type: array
+          description: "Consistency findings and warnings, advisory."
+          items:
+            type: string
+        householdCurrency:
+          type: string
+        lines:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReceiptReviewLine"
+        proposedDate:
+          type: string
+          format: date
+        proposedMerchant:
+          type: string
+        proposedTotal:
+          $ref: "#/components/schemas/Money"
+          description: Present only when the printed total has exactly one reading.
+        receiptId:
+          type: string
+          format: uuid
+        refundProposed:
+          type: boolean
+        state:
+          type: string
+          enum:
+          - UPLOADED
+          - QUEUED
+          - ANALYSING
+          - READY_FOR_REVIEW
+          - FAILED
+          - CONFIRMED
+          - ATTACHED
+          - ABANDONED
+        suggestedCategory:
+          $ref: "#/components/schemas/ReceiptSuggestedCategory"
+        unresolvedFields:
+          type: array
+          description: Fields to resolve individually before confirming (BR-RCP-10).
+          items:
+            type: string
+        version:
+          type: integer
+          format: int64
+          description: Send it back with the confirmation.
+      required:
+      - analysed
+      - duplicates
+      - fields
+      - findings
+      - householdCurrency
+      - lines
+      - receiptId
+      - refundProposed
+      - state
+      - unresolvedFields
+      - version
+    ReceiptReviewField:
+      type: object
+      properties:
+        candidates:
+          type: array
+          description: The possible readings when the printed value is ambiguous (never
+            guessed).
+          items:
+            type: string
+        confidence:
+          type: number
+          description: "Model-reported, uncalibrated: display only."
+        raw:
+          type: string
+          description: The value as printed on the receipt.
+        status:
+          type: string
+          description: "OK, AMBIGUOUS, INVALID, INCONSISTENT, NOT_CORROBORATED, STALE\
+            \ or MISSING."
+      required:
+      - candidates
+      - status
+    ReceiptReviewLine:
+      type: object
+      properties:
+        amount:
+          $ref: "#/components/schemas/Money"
+        amountRaw:
+          type: string
+        amountStatus:
+          type: string
+        description:
+          type: string
+        position:
+          type: integer
+          format: int32
+        type:
+          type: string
+      required:
+      - amountRaw
+      - amountStatus
+      - description
+      - position
+      - type
+    ReceiptSuggestedCategory:
+      type: object
+      properties:
+        categoryId:
+          type: string
+          format: uuid
+        source:
+          type: string
+          description: "USER_RULE, HOUSEHOLD_RULE or DEFAULT_OTHER."
+      required:
+      - categoryId
+      - source
     RefreshRequest:
       type: object
       properties:

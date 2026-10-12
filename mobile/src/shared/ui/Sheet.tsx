@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { strings } from "@/shared/i18n/strings";
-import { Button } from "./Button";
+import { Button, type ButtonVariant } from "./Button";
 import { IconButton } from "./IconButton";
 import { PrivacyShield } from "./PrivacyShield";
 import { Text } from "./Text";
@@ -109,16 +109,19 @@ interface ConfirmProps {
     title: string;
     message: string;
     confirmLabel: string;
+    /** Defaults to destructive; "primary" for an explicit acknowledgement that destroys nothing. */
+    confirmVariant?: ButtonVariant;
     onConfirm: () => void;
     onCancel: () => void;
 }
 
-/** Destructive confirmation: nothing happens until the explicit second action (the confirm button). */
+/** Explicit confirmation: nothing happens until the second action (the confirm button). Destructive by default. */
 export function ConfirmSheet({
     visible,
     title,
     message,
     confirmLabel,
+    confirmVariant = "destructive",
     onConfirm,
     onCancel,
 }: ConfirmProps) {
@@ -126,7 +129,7 @@ export function ConfirmSheet({
         <Sheet visible={visible} title={title} onClose={onCancel}>
             <Text tone="secondary">{message}</Text>
             <View style={styles.actions}>
-                <Button label={confirmLabel} variant="destructive" onPress={onConfirm} />
+                <Button label={confirmLabel} variant={confirmVariant} onPress={onConfirm} />
                 <Button label={strings.cancel} variant="secondary" onPress={onCancel} />
             </View>
         </Sheet>

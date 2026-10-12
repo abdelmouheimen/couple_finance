@@ -636,6 +636,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/receipts/{id}/attach": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Attach a receipt to an existing expense
+         * @description Keeps the receipt as evidence of an expense that already exists, instead of creating a duplicate (BR-RCP-14). Nothing of the expense changes. The caller must be able to edit the expense: the partner's PERSONAL expense is not found.
+         */
+        post: operations["attachReceipt"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/receipts/{id}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm a receipt into a new expense
+         * @description Creates ONE expense from the values the member submitted and explicitly acknowledged, and links the receipt to it, exactly once (BR-RCP-10, BR-RCP-15). Every rule of a manual expense applies; if the expense is refused nothing changes and the receipt stays open. Allowed from any open receipt of the caller, analysed or not. Send an Idempotency-Key to retry safely.
+         */
+        post: operations["confirmReceipt"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/receipts/{id}/pages/{position}/url": {
         parameters: {
             query?: never;
@@ -648,6 +688,26 @@ export interface paths {
          * @description A presigned GET URL of one stored page (re-encoded JPEG), valid 5 minutes, issued after the household and visibility checks. The response is never cached.
          */
         get: operations["getReceiptPageUrl"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/receipts/{id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Review an open receipt
+         * @description The draft of one of the caller's open receipts as proposals: printed values, candidate readings, statuses, a rule-based category suggestion (from the merchant name only, always a usable category of the household) and potential duplicates the caller may see (BR-RCP-14). Nothing here is an expense (BR-RCP-02). A receipt never analysed is reviewable too: the member then enters every value.
+         */
+        get: operations["getReceiptReview"];
         put?: never;
         post?: never;
         delete?: never;
@@ -736,6 +796,18 @@ export interface components {
              * @description Number of periods averaged, 1 to 3.
              */
             periodsUsed?: number;
+        };
+        AttachReceiptRequest: {
+            /**
+             * Format: uuid
+             * @description A live expense of the household the caller can edit, without a receipt.
+             */
+            expenseId: string;
+            /**
+             * Format: int64
+             * @description The receipt version the member reviewed.
+             */
+            version: number;
         };
         Budget: {
             /** @description Category limits of the period; empty when there are none. */
@@ -844,6 +916,54 @@ export interface components {
              * @enum {string}
              */
             source: "USER_RULE" | "HOUSEHOLD_RULE" | "DEFAULT_OTHER";
+        };
+        ConfirmReceiptRequest: {
+            /**
+             * Format: date
+             * @description The date the member explicitly acknowledged: must equal date (BR-RCP-10).
+             */
+            acknowledgedDate: string;
+            /** @description The total the member explicitly acknowledged: must equal amount (BR-RCP-10). */
+            acknowledgedTotal: components["schemas"]["Money"];
+            /** @description Amount of the expense, in the household currency, strictly positive. */
+            amount: components["schemas"]["Money"];
+            /**
+             * Format: uuid
+             * @description A usable category of the household: one category for the whole amount.
+             */
+            categoryId: string;
+            /**
+             * Format: date
+             * @description Date of the expense (YYYY-MM-DD).
+             * @example 2026-10-04
+             */
+            date: string;
+            /**
+             * @description EXPENSE (default) or REFUND.
+             * @enum {string}
+             */
+            kind?: "EXPENSE" | "REFUND";
+            merchant?: string;
+            note?: string;
+            /**
+             * Format: uuid
+             * @description A current member of the household.
+             */
+            paidByUserId: string;
+            /** @description Field (merchant, date, total, currency) → the value chosen, for every field listed in unresolvedFields. */
+            resolutions?: {
+                [key: string]: string;
+            };
+            /**
+             * @description SHARED (default) or PERSONAL.
+             * @enum {string}
+             */
+            sharingType?: "SHARED" | "PERSONAL";
+            /**
+             * Format: int64
+             * @description The receipt version the member reviewed.
+             */
+            version: number;
         };
         CreateCategoryRequest: {
             /**
@@ -991,13 +1111,18 @@ export interface components {
             paidByUserId: string;
             /**
              * Format: uuid
+             * @description The receipt kept as evidence of this expense (confirmed from it or attached).
+             */
+            receiptId?: string;
+            /**
+             * Format: uuid
              * @description The original expense of a linked REFUND.
              */
             refundOf?: string;
             /** @enum {string} */
             sharingType: "SHARED" | "PERSONAL";
             /** @enum {string} */
-            source: "MANUAL";
+            source: "MANUAL" | "RECEIPT";
             /** Format: date-time */
             updatedAt?: string;
             /** Format: uuid */
@@ -1243,6 +1368,11 @@ export interface components {
             analysisFailureReason?: string;
             /** Format: date-time */
             createdAt: string;
+            /**
+             * Format: uuid
+             * @description The expense this receipt is evidence of (CONFIRMED or ATTACHED).
+             */
+            expenseId?: string;
             /** Format: uuid */
             id: string;
             /**
@@ -1277,6 +1407,32 @@ export interface components {
             /** Format: int64 */
             version: number;
         };
+        ReceiptDuplicate: {
+            /** @description Whether this receipt can be attached to that expense instead. */
+            attachable: boolean;
+            /** Format: uuid */
+            expenseId?: string;
+            /** @enum {string} */
+            reason: "SAME_FILE" | "SIMILAR_IMAGE" | "MATCHING_EXPENSE";
+            /** Format: uuid */
+            receiptId?: string;
+        };
+        ReceiptLink: {
+            /** Format: uuid */
+            expenseId: string;
+            /** Format: uuid */
+            receiptId: string;
+            /** @enum {string} */
+            state:
+                | "UPLOADED"
+                | "QUEUED"
+                | "ANALYSING"
+                | "READY_FOR_REVIEW"
+                | "FAILED"
+                | "CONFIRMED"
+                | "ATTACHED"
+                | "ABANDONED";
+        };
         ReceiptList: {
             items: components["schemas"]["Receipt"][];
             /** @description Opaque cursor of the next page, absent on the last page. */
@@ -1302,6 +1458,74 @@ export interface components {
              * @description Presigned GET URL, valid 5 minutes.
              */
             url: string;
+        };
+        ReceiptReview: {
+            /** @description false: no draft, the member enters every value. */
+            analysed: boolean;
+            /** @description ISO 4217 code printed on the receipt, when recognised. */
+            detectedCurrency?: string;
+            documentType?: string;
+            /** @description Potential duplicates (BR-RCP-14): warnings, never a block. */
+            duplicates: components["schemas"]["ReceiptDuplicate"][];
+            /** @description merchant, date, total and currency. */
+            fields: {
+                [key: string]: components["schemas"]["ReceiptReviewField"];
+            };
+            /** @description Consistency findings and warnings, advisory. */
+            findings: string[];
+            householdCurrency: string;
+            lines: components["schemas"]["ReceiptReviewLine"][];
+            /** Format: date */
+            proposedDate?: string;
+            proposedMerchant?: string;
+            /** @description Present only when the printed total has exactly one reading. */
+            proposedTotal?: components["schemas"]["Money"];
+            /** Format: uuid */
+            receiptId: string;
+            refundProposed: boolean;
+            /** @enum {string} */
+            state:
+                | "UPLOADED"
+                | "QUEUED"
+                | "ANALYSING"
+                | "READY_FOR_REVIEW"
+                | "FAILED"
+                | "CONFIRMED"
+                | "ATTACHED"
+                | "ABANDONED";
+            suggestedCategory?: components["schemas"]["ReceiptSuggestedCategory"];
+            /** @description Fields to resolve individually before confirming (BR-RCP-10). */
+            unresolvedFields: string[];
+            /**
+             * Format: int64
+             * @description Send it back with the confirmation.
+             */
+            version: number;
+        };
+        ReceiptReviewField: {
+            /** @description The possible readings when the printed value is ambiguous (never guessed). */
+            candidates: string[];
+            /** @description Model-reported, uncalibrated: display only. */
+            confidence?: number;
+            /** @description The value as printed on the receipt. */
+            raw?: string;
+            /** @description OK, AMBIGUOUS, INVALID, INCONSISTENT, NOT_CORROBORATED, STALE or MISSING. */
+            status: string;
+        };
+        ReceiptReviewLine: {
+            amount?: components["schemas"]["Money"];
+            amountRaw: string;
+            amountStatus: string;
+            description: string;
+            /** Format: int32 */
+            position: number;
+            type: string;
+        };
+        ReceiptSuggestedCategory: {
+            /** Format: uuid */
+            categoryId: string;
+            /** @description USER_RULE, HOUSEHOLD_RULE or DEFAULT_OTHER. */
+            source: string;
         };
         RefreshRequest: {
             /** @description The opaque refresh token received at login or at the previous refresh. */
@@ -3617,6 +3841,172 @@ export interface operations {
             };
         };
     };
+    attachReceipt: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client-generated key (1-100 printable ASCII characters). */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AttachReceiptRequest"];
+            };
+        };
+        responses: {
+            /** @description Receipt attached */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReceiptLink"];
+                };
+            };
+            /** @description VALIDATION_FAILED or IDEMPOTENCY_KEY_INVALID */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description AUTHENTICATION_REQUIRED */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description EMAIL_NOT_VERIFIED or HOUSEHOLD_READ_ONLY */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description HOUSEHOLD_NOT_FOUND, RECEIPT_NOT_FOUND or EXPENSE_NOT_FOUND */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description RECEIPT_ALREADY_CONFIRMED, RECEIPT_VERSION_CONFLICT, EXPENSE_RECEIPT_ALREADY_LINKED or REQUEST_IN_PROGRESS */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description IDEMPOTENCY_KEY_REUSED */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    confirmReceipt: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client-generated key (1-100 printable ASCII characters). */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfirmReceiptRequest"];
+            };
+        };
+        responses: {
+            /** @description Expense created and linked */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReceiptLink"];
+                };
+            };
+            /** @description VALIDATION_FAILED, RECEIPT_ACKNOWLEDGEMENT_MISMATCH, RECEIPT_FIELD_UNRESOLVED, RECEIPT_RESOLUTION_INVALID, IDEMPOTENCY_KEY_INVALID or any validation error of a manual expense */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description AUTHENTICATION_REQUIRED */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description EMAIL_NOT_VERIFIED or HOUSEHOLD_READ_ONLY */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description HOUSEHOLD_NOT_FOUND, RECEIPT_NOT_FOUND or CATEGORY_NOT_FOUND */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description RECEIPT_ALREADY_CONFIRMED, RECEIPT_VERSION_CONFLICT or REQUEST_IN_PROGRESS */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description IDEMPOTENCY_KEY_REUSED */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     getReceiptPageUrl: {
         parameters: {
             query?: never;
@@ -3648,6 +4038,46 @@ export interface operations {
                 };
             };
             /** @description HOUSEHOLD_NOT_FOUND, RECEIPT_NOT_FOUND or RECEIPT_PAGE_NOT_FOUND */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getReceiptReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The review */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReceiptReview"];
+                };
+            };
+            /** @description AUTHENTICATION_REQUIRED */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description HOUSEHOLD_NOT_FOUND or RECEIPT_NOT_FOUND (unknown, other household, partner's draft, or no longer open) */
             404: {
                 headers: {
                     [name: string]: unknown;

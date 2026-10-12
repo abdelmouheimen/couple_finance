@@ -19,7 +19,7 @@ import org.jspecify.annotations.Nullable;
  */
 public record ExpenseView(UUID id, ExpenseKind kind, Money amount, LocalDate date, UUID paidByUserId,
         SharingType sharingType, @Nullable String merchant, @Nullable String note, @Nullable UUID refundOf,
-        List<ItemView> items,
+        @Nullable UUID receiptId, List<ItemView> items,
         ExpenseSource source, UUID createdBy, Instant createdAt, @Nullable Instant updatedAt, @Nullable UUID updatedBy,
         long version) {
 
@@ -32,7 +32,7 @@ public record ExpenseView(UUID id, ExpenseKind kind, Money amount, LocalDate dat
         return new ExpenseView(expense.id(), expense.kind(),
                 Money.ofMinor(expense.amountMinor(), expense.currency(), decimals), expense.expenseDate(),
                 expense.paidByUserId(), expense.sharingType(), expense.merchantDisplay(), expense.note(),
-                expense.refundOfExpenseId(), items,
+                expense.refundOfExpenseId(), expense.receiptId(), items,
                 expense.source(), expense.createdBy(), expense.createdAt(), expense.updatedAt(),
                 expense.updatedBy(), expense.version());
     }

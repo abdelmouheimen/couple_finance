@@ -63,6 +63,8 @@ class LiquibaseMigrationIntegrationTest {
                 "receipt-0005-create-analysis-job",
                 "receipt-0006-create-extraction",
                 "receipt-0007-create-draft",
+                "receipt-0008-create-confirmation",
+                "receipt-0009-create-page-sha-index",
                 "budget-0001-create-budget-schema",
                 "budget-0002-create-budget",
                 "budget-0003-create-audit-event",

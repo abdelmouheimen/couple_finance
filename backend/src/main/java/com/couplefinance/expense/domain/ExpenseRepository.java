@@ -20,6 +20,48 @@ public interface ExpenseRepository extends Repository<Expense, UUID> {
 
     Expense saveAndFlush(Expense expense);
 
+    /** A receipt linked to a live expense that a viewer may see. */
+    record ReceiptLink(UUID receiptId, UUID expenseId) {
+    }
+
+    /**
+     * The live expense linked to a receipt, when {@code userId} may see it (BR-RCP-16 after confirmation,
+     * BR-EXP-07). Unlinked, deleted, foreign-household and partner-personal are indistinguishable: empty.
+     */
+    @Query("""
+            select e.id from Expense e
+            where e.receiptId = :receiptId and e.householdId = :householdId and e.deletedAt is null
+              and (e.ownerUserId is null or e.ownerUserId = :userId)
+            """)
+    Optional<UUID> findVisibleLiveIdByReceiptId(@Param("receiptId") UUID receiptId,
+            @Param("householdId") UUID householdId, @Param("userId") UUID userId);
+
+    /** Every receipt link of the household's live expenses that {@code userId} may see (BR-EXP-07). */
+    @Query("""
+            select new com.couplefinance.expense.domain.ExpenseRepository$ReceiptLink(e.receiptId, e.id)
+            from Expense e
+            where e.householdId = :householdId and e.receiptId is not null and e.deletedAt is null
+              and (e.ownerUserId is null or e.ownerUserId = :userId)
+            """)
+    List<ReceiptLink> findVisibleReceiptLinks(@Param("householdId") UUID householdId, @Param("userId") UUID userId);
+
+    /**
+     * Live expenses of the household that {@code userId} may see with exactly this amount in this date range
+     * (BR-RCP-14 c, served by ix_expense_history). The partner's PERSONAL expenses are never candidates.
+     */
+    @Query("""
+            select e from Expense e
+            where e.householdId = :householdId and e.deletedAt is null
+              and (e.ownerUserId is null or e.ownerUserId = :userId)
+              and e.amountMinor = :amountMinor and e.currency = :currency
+              and e.expenseDate between :from and :to
+            order by e.expenseDate desc, e.id desc
+            """)
+    List<Expense> findVisibleLiveByAmountAndDate(@Param("householdId") UUID householdId,
+            @Param("userId") UUID userId, @Param("amountMinor") long amountMinor,
+            @Param("currency") String currency, @Param("from") LocalDate from, @Param("to") LocalDate to,
+            org.springframework.data.domain.Limit limit);
+
     /**
      * Loads a live expense of the household that {@code userId} may see (SHARED, or PERSONAL and owned by them) and
      * locks its row {@code FOR UPDATE} until the end of the transaction (domain-model.md section 7.3). Unknown,

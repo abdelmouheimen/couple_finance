@@ -21,6 +21,7 @@ import com.couplefinance.household.api.LedgerProfile;
 import com.couplefinance.shared.error.ApplicationException;
 import com.couplefinance.shared.id.UserId;
 import com.couplefinance.shared.money.Money;
+import org.jspecify.annotations.Nullable;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -54,6 +55,15 @@ class ExpenseCreator {
 
     @Transactional
     ExpenseView create(CreateExpenseCommand command) {
+        return create(command, null);
+    }
+
+    /**
+     * @param receiptId the receipt the member confirmed this expense from (BR-RCP-02), {@code null} for a manual
+     *                  entry; every rule of a manual expense applies either way
+     */
+    @Transactional
+    ExpenseView create(CreateExpenseCommand command, @Nullable UUID receiptId) {
         HouseholdContext context = currentHousehold.currentHousehold();
         context.requireWritable(); // BR-HH-10
         LedgerProfile ledger = ledgerRules.profile(context.householdId());
@@ -94,6 +104,10 @@ class ExpenseCreator {
                         alreadyRefunded)
                 : Expense.create(context.householdId(), ledger, clock, command.amount(), command.date(),
                         items, paidBy, sharing, context.userId(), command.merchant(), command.note());
+
+        if (receiptId != null) {
+            expense.confirmedFrom(receiptId);
+        }
 
         if (!ledgerRules.isActiveMember(context.householdId(), paidBy)) {
             throw new ApplicationException(ExpenseErrorCode.EXPENSE_PAID_BY_INVALID,

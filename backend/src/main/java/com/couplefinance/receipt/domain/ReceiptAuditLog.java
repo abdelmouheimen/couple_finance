@@ -11,4 +11,11 @@ public interface ReceiptAuditLog {
     void uploaded(Receipt receipt, UserId actor);
 
     void deleted(Receipt receipt, UserId actor);
+
+    /**
+     * Records that the receipt became evidence of an expense.
+     *
+     * @param action {@code CONFIRM} (new expense) or {@code ATTACH} (existing expense)
+     */
+    void linked(Receipt receipt, UserId actor, String action);
 }

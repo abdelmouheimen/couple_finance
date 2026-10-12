@@ -68,6 +68,11 @@ export const strings = {
         receiptNotFound: "Ce ticket est introuvable.",
         receiptNotDeletable:
             "Ce ticket est rattaché à une dépense et ne peut pas être supprimé ici.",
+        receiptAlreadyConfirmed: "Ce ticket est déjà rattaché à une dépense.",
+        receiptVersionConflict: "Ce ticket a changé depuis son affichage. Vérifiez-le à nouveau.",
+        receiptAcknowledgement: "Le montant et la date confirmés doivent être ceux de la dépense.",
+        receiptFieldUnresolved: "Vérifiez chaque champ signalé avant de créer la dépense.",
+        expenseReceiptAlreadyLinked: "Cette dépense a déjà un ticket.",
         aiConsentRequired:
             "Autorisez d'abord l'analyse des tickets dans Réglages › Données & confidentialité.",
         receiptAnalysisNotAllowed: "Ce ticket est déjà analysé ou en cours d'analyse.",
@@ -382,6 +387,7 @@ export const strings = {
         dateFormatError: "Utilisez le format AAAA-MM-JJ",
         restore: "Restaurer",
         view: "Voir",
+        viewReceipt: "Voir le ticket",
         edit: "Modifier",
         editTitle: "Modifier la dépense",
         delete: "Supprimer",
@@ -491,6 +497,65 @@ export const strings = {
         flashHint: "Le flash se règle dans l'appareil photo",
         maxPages: "5 pages maximum par ticket.",
         previewUnavailable: "Aperçu indisponible. Réessayez.",
+        reviewAction: "Vérifier et créer la dépense",
+        viewExpense: "Voir la dépense",
+        review: {
+            proposalNotice:
+                "Ces valeurs sont lues sur le ticket : ce sont des propositions. Vérifiez-les, rien n'est enregistré tant que vous n'avez pas confirmé.",
+            manualNotice:
+                "Ce ticket n'a pas été analysé. Saisissez le montant, la date et la catégorie : le ticket sera joint à la dépense.",
+            refundNotice:
+                "Ce ticket est un remboursement : il sera enregistré comme remboursement.",
+            foreignCurrency: (printed: string, household: string) =>
+                `Le ticket est en ${printed}. Saisissez le montant payé en ${household}.`,
+            unresolvedTitle: "À vérifier",
+            check: "à vérifier",
+            printed: (raw: string) => `Lu sur le ticket : « ${raw} ».`,
+            candidates: (values: string) => `Lectures possibles : ${values}.`,
+            fields: {
+                merchant: "Commerçant",
+                date: "Date",
+                total: "Montant",
+                currency: "Devise",
+            } as Readonly<Record<string, string>>,
+            status: {
+                AMBIGUOUS: "plusieurs lectures possibles",
+                INVALID: "illisible",
+                INCONSISTENT: "ne correspond pas au détail du ticket",
+                NOT_CORROBORATED: "non recoupé par le détail du ticket",
+                STALE: "date ancienne",
+                MISSING: "non trouvé",
+                LOW_CONFIDENCE: "lecture incertaine",
+            } as Readonly<Record<string, string>>,
+            findingsTitle: "Points d'attention",
+            findings: {
+                NOT_A_PROOF_OF_PAYMENT: "Ce document ne semble pas être une preuve de paiement.",
+                CURRENCY_DIFFERS_FROM_HOUSEHOLD: "La devise du ticket n'est pas celle du foyer.",
+            } as Readonly<Record<string, string>>,
+            findingDefault:
+                "Le détail du ticket ne recoupe pas entièrement le total : vérifiez le montant.",
+            duplicateTitle: "Doublon possible",
+            duplicate: {
+                SAME_FILE: "Ce fichier a déjà été envoyé.",
+                SIMILAR_IMAGE: "Un ticket très ressemblant existe déjà.",
+                MATCHING_EXPENSE:
+                    "Une dépense du même montant, à la même date et chez le même commerçant existe déjà.",
+            } as Readonly<Record<string, string>>,
+            viewReceipt: "Voir le ticket",
+            viewExpense: "Voir la dépense",
+            attach: "Rattacher à cette dépense",
+            attachTitle: "Rattacher ce ticket ?",
+            attachMessage:
+                "Le ticket sera joint à la dépense existante. Aucune nouvelle dépense n'est créée et la dépense n'est pas modifiée.",
+            attached: "Ticket rattaché à la dépense",
+            acknowledgeTitle: "Confirmer le montant et la date",
+            acknowledgeMessage: (amount: string, date: string, checked: readonly string[]) =>
+                `Vous confirmez une dépense de ${amount} le ${date}.` +
+                (checked.length > 0 ? ` Champs vérifiés : ${checked.join(", ")}.` : ""),
+            acknowledge: "Je confirme",
+            created: "Dépense créée à partir du ticket",
+            notReviewable: "Ce ticket n'est plus à vérifier.",
+        },
         analyse: "Analyser ce ticket",
         retryAnalysis: "Relancer l'analyse",
         retriesLeft: (count: number) =>
@@ -499,6 +564,7 @@ export const strings = {
         analysisPending: "L'analyse est en cours. Cet écran se met à jour automatiquement.",
         analysisReady:
             "Analyse terminée. Rien n'est enregistré comme dépense tant que vous ne l'avez pas vérifié et confirmé.",
+        linkedNotice: "Ce ticket est le justificatif d'une dépense.",
         analysisNeedsConsent:
             "Ce ticket n'a pas été analysé. L'analyse automatique nécessite votre accord (Réglages › Données & confidentialité).",
         failure: {

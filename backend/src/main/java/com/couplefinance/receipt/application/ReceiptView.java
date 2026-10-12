@@ -12,7 +12,8 @@ import org.jspecify.annotations.Nullable;
 
 /** Read model of a receipt for the web layer: metadata only, never storage keys or URLs. */
 public record ReceiptView(UUID id, SourceKind sourceKind, ReceiptState state, @Nullable String analysisFailureReason,
-        int manualRetriesLeft, int totalSizeBytes, List<PageView> pages, Instant createdAt, long version) {
+        int manualRetriesLeft, int totalSizeBytes, List<PageView> pages, Instant createdAt, long version,
+        @Nullable UUID expenseId) {
 
     public record PageView(int position, String contentType, int sizeBytes, int widthPx, int heightPx) {
         static PageView from(ReceiptPage page) {
@@ -22,9 +23,14 @@ public record ReceiptView(UUID id, SourceKind sourceKind, ReceiptState state, @N
     }
 
     public static ReceiptView from(Receipt receipt) {
+        return from(receipt, null);
+    }
+
+    /** @param expenseId the expense this receipt is evidence of, when linked and visible to the viewer */
+    public static ReceiptView from(Receipt receipt, @Nullable UUID expenseId) {
         return new ReceiptView(receipt.id(), receipt.sourceKind(),
                 ReceiptState.of(receipt.status(), receipt.analysisStatus()), receipt.analysisFailureReason(),
                 Math.max(0, Receipt.MAX_MANUAL_RETRIES - receipt.manualRetryCount()), receipt.totalSizeBytes(),
-                receipt.pages().stream().map(PageView::from).toList(), receipt.createdAt(), receipt.version());
+                receipt.pages().stream().map(PageView::from).toList(), receipt.createdAt(), receipt.version(), expenseId);
     }
 }

@@ -1,0 +1,49 @@
+databaseChangeLog:
+  - changeSet:
+      id: receipt-0008-create-confirmation
+      author: couplefinance
+      comment: >
+        Immutable snapshot of what the member confirmed from a receipt (database-schema.md section 8.8, decision S10,
+        BR-RCP-18, DOC-004). The primary key on receipt_id is the second line of defence of "confirmed exactly once"
+        (BR-RCP-15) after the conditional status update and expense.uq_expense_receipt. No expense id is stored: the
+        single link lives on expense.receipt_id (ADR-006).
+      changes:
+        - sql:
+            sql: |
+              CREATE TABLE receipt.receipt_confirmation (
+                  receipt_id               uuid        NOT NULL,
+                  household_id             uuid        NOT NULL,
+                  mode                     text        NOT NULL,
+                  confirmed_by             uuid        NOT NULL,
+                  confirmed_at             timestamptz NOT NULL,
+                  acknowledged_total_minor bigint,
+                  acknowledged_date        date,
+                  resolutions              jsonb       NOT NULL,
+                  idempotency_key          text        NOT NULL,
+                  CONSTRAINT pk_receipt_confirmation PRIMARY KEY (receipt_id),
+                  CONSTRAINT fk_receipt_confirmation_receipt FOREIGN KEY (household_id, receipt_id)
+                      REFERENCES receipt.receipt (household_id, id) ON DELETE CASCADE,
+                  CONSTRAINT fk_receipt_confirmation_member FOREIGN KEY (household_id, confirmed_by)
+                      REFERENCES household.household_member (household_id, user_id),
+                  CONSTRAINT ck_receipt_confirmation_mode CHECK (mode IN ('NEW_EXPENSE', 'ATTACH')),
+                  CONSTRAINT ck_receipt_confirmation_acknowledged CHECK (mode = 'ATTACH'
+                      OR (acknowledged_total_minor > 0 AND acknowledged_date IS NOT NULL)),
+                  CONSTRAINT ck_receipt_confirmation_resolutions CHECK (jsonb_typeof(resolutions) = 'object'),
+                  CONSTRAINT ck_receipt_confirmation_key CHECK (char_length(idempotency_key) BETWEEN 1 AND 100)
+              );
+      rollback:
+        - sql:
+            sql: DROP TABLE receipt.receipt_confirmation
+  - changeSet:
+      id: receipt-0009-create-page-sha-index
+      author: couplefinance
+      comment: >
+        ix_receipt_page_sha serves the byte-identical duplicate lookup of BR-RCP-14 (a): pages of the household with
+        the same original_sha256 (database-schema.md section 8.9). It starts with household_id. The perceptual-hash
+        lookup (b) is a bounded scan of the household's pages and needs no index.
+      changes:
+        - sql:
+            sql: CREATE INDEX ix_receipt_page_sha ON receipt.receipt_page (household_id, original_sha256)
+      rollback:
+        - sql:
+            sql: DROP INDEX receipt.ix_receipt_page_sha
