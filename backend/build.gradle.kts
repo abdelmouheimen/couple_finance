@@ -56,6 +56,8 @@ dependencies {
     implementation("software.amazon.awssdk:url-connection-client")
     // Safe PDF handling (DOC-001): receipt PDFs are rasterised to images, never stored or served as PDF.
     implementation("org.apache.pdfbox:pdfbox:3.0.5")
+    // Vertex AI access tokens for the Gemini adapter (ADR-008), used in ai.infrastructure only; no Gemini SDK.
+    implementation("com.google.auth:google-auth-library-oauth2-http:1.30.0")
     runtimeOnly("org.postgresql:postgresql")
 
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
@@ -68,6 +70,8 @@ dependencies {
     testImplementation("net.jqwik:jqwik:1.9.3")
     // Architecture rules (architecture.md section 8); same version Spring Modulith already resolves transitively.
     testImplementation("com.tngtech.archunit:archunit:1.4.2")
+    // Recorded provider responses for AI adapter tests (CLAUDE.md §13); shaded standalone build.
+    testImplementation("org.wiremock:wiremock-standalone:3.13.1")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 

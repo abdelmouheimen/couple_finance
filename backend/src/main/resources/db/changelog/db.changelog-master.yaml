@@ -17,3 +17,5 @@ databaseChangeLog:
       file: db/changelog/receipt/receipt.changelog.yaml
   - include:
       file: db/changelog/budget/budget.changelog.yaml
+  - include:
+      file: db/changelog/ai/ai.changelog.yaml

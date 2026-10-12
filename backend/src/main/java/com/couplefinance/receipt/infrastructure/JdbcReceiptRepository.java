@@ -151,18 +151,21 @@ class JdbcReceiptRepository implements ReceiptRepository {
     }
 
     private record Row(UUID id, UUID householdId, UUID uploadedBy, String sourceKind, int totalSize, String status,
-            String analysisStatus, Instant createdAt, Instant updatedAt, long version) {
+            String analysisStatus, @Nullable String failureReason, int manualRetries, Instant createdAt,
+            Instant updatedAt, long version) {
         Receipt toReceipt(List<ReceiptPage> pages) {
             return new Receipt(id, new HouseholdId(householdId), new UserId(uploadedBy),
                     SourceKind.valueOf(sourceKind), totalSize, ReceiptStatus.valueOf(status),
-                    AnalysisStatus.valueOf(analysisStatus), createdAt, updatedAt, version, pages);
+                    AnalysisStatus.valueOf(analysisStatus), failureReason, manualRetries, createdAt, updatedAt, version,
+                    pages);
         }
     }
 
     private static Row row(ResultSet rs, int rowNum) throws SQLException {
         return new Row(rs.getObject("id", UUID.class), rs.getObject("household_id", UUID.class),
                 rs.getObject("uploaded_by", UUID.class), rs.getString("source_kind"), rs.getInt("total_size_bytes"),
-                rs.getString("status"), rs.getString("analysis_status"),
+                rs.getString("status"), rs.getString("analysis_status"), rs.getString("analysis_failure_reason"),
+                rs.getInt("manual_retry_count"),
                 rs.getObject("created_at", OffsetDateTime.class).toInstant(),
                 rs.getObject("updated_at", OffsetDateTime.class).toInstant(), rs.getLong("version"));
     }

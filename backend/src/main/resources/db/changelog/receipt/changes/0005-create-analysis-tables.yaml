@@ -1,0 +1,158 @@
+databaseChangeLog:
+  - changeSet:
+      id: receipt-0005-create-analysis-job
+      author: couplefinance
+      comment: >
+        Asynchronous analysis jobs (database-schema.md section 8.4, DOC-003). uq_job_active_per_receipt: never two
+        concurrent analyses of one receipt. ix_job_ready: worker polling (FOR UPDATE SKIP LOCKED). ix_job_lease:
+        recovery of jobs whose worker lease expired.
+      changes:
+        - sql:
+            sql: |
+              CREATE TABLE receipt.receipt_analysis_job (
+                  id              uuid        NOT NULL,
+                  receipt_id      uuid        NOT NULL,
+                  household_id    uuid        NOT NULL,
+                  status          text        NOT NULL,
+                  trigger         text        NOT NULL,
+                  attempt_count   smallint    NOT NULL DEFAULT 0,
+                  next_attempt_at timestamptz NOT NULL,
+                  locked_by       text,
+                  locked_until    timestamptz,
+                  last_error_code text,
+                  created_at      timestamptz NOT NULL,
+                  updated_at      timestamptz NOT NULL,
+                  CONSTRAINT pk_receipt_analysis_job PRIMARY KEY (id),
+                  CONSTRAINT fk_receipt_analysis_job_receipt FOREIGN KEY (household_id, receipt_id)
+                      REFERENCES receipt.receipt (household_id, id) ON DELETE CASCADE,
+                  CONSTRAINT ck_receipt_analysis_job_status
+                      CHECK (status IN ('PENDING', 'RUNNING', 'SUCCEEDED', 'FAILED', 'CANCELLED')),
+                  CONSTRAINT ck_receipt_analysis_job_trigger
+                      CHECK (trigger IN ('UPLOAD', 'MANUAL_RETRY', 'CONSENT_GRANTED')),
+                  CONSTRAINT ck_receipt_analysis_job_attempts CHECK (attempt_count BETWEEN 0 AND 3),
+                  CONSTRAINT ck_receipt_analysis_job_lease
+                      CHECK ((status = 'RUNNING') = (locked_until IS NOT NULL AND locked_by IS NOT NULL))
+              );
+              CREATE UNIQUE INDEX uq_job_active_per_receipt ON receipt.receipt_analysis_job (receipt_id)
+                  WHERE status IN ('PENDING', 'RUNNING');
+              CREATE INDEX ix_job_ready ON receipt.receipt_analysis_job (next_attempt_at) WHERE status = 'PENDING';
+              CREATE INDEX ix_job_lease ON receipt.receipt_analysis_job (locked_until) WHERE status = 'RUNNING';
+      rollback:
+        - sql:
+            sql: DROP TABLE receipt.receipt_analysis_job
+  - changeSet:
+      id: receipt-0006-create-extraction
+      author: couplefinance
+      comment: >
+        Raw, untrusted AI output per attempt (database-schema.md section 8.5, BR-RCP-18: kept 90 days). Append-only.
+        ix_extraction_raw_purge serves the 90-day purge of raw outputs.
+      changes:
+        - sql:
+            sql: |
+              CREATE TABLE receipt.receipt_extraction (
+                  id             uuid        NOT NULL,
+                  receipt_id     uuid        NOT NULL,
+                  household_id   uuid        NOT NULL,
+                  job_id         uuid        NOT NULL,
+                  attempt_no     smallint    NOT NULL,
+                  provider       text        NOT NULL,
+                  model          text        NOT NULL,
+                  prompt_version text        NOT NULL,
+                  outcome        text        NOT NULL,
+                  raw_output     jsonb,
+                  raw_purge_at   timestamptz NOT NULL,
+                  latency_ms     integer     NOT NULL,
+                  created_at     timestamptz NOT NULL,
+                  CONSTRAINT pk_receipt_extraction PRIMARY KEY (id),
+                  CONSTRAINT fk_receipt_extraction_receipt FOREIGN KEY (household_id, receipt_id)
+                      REFERENCES receipt.receipt (household_id, id) ON DELETE CASCADE,
+                  CONSTRAINT fk_receipt_extraction_job FOREIGN KEY (job_id)
+                      REFERENCES receipt.receipt_analysis_job (id) ON DELETE CASCADE,
+                  CONSTRAINT uq_receipt_extraction_attempt UNIQUE (receipt_id, attempt_no),
+                  CONSTRAINT ck_receipt_extraction_outcome CHECK (outcome IN
+                      ('SUCCEEDED', 'SCHEMA_INVALID', 'TIMEOUT', 'PROVIDER_ERROR', 'REFUSED', 'NOT_A_RECEIPT')),
+                  CONSTRAINT ck_receipt_extraction_latency CHECK (latency_ms >= 0),
+                  CONSTRAINT ck_receipt_extraction_purge CHECK (raw_purge_at > created_at)
+              );
+              CREATE INDEX ix_extraction_raw_purge ON receipt.receipt_extraction (raw_purge_at)
+                  WHERE raw_output IS NOT NULL;
+      rollback:
+        - sql:
+            sql: DROP TABLE receipt.receipt_extraction
+  - changeSet:
+      id: receipt-0007-create-draft
+      author: couplefinance
+      comment: >
+        Review draft of a receipt (database-schema.md sections 8.6, 8.7, DOC-003). Resolved values only when
+        unambiguous; per-field raw strings, candidates and statuses in fields (jsonb, displayed and re-validated, never
+        aggregated). total_minor is evidence, never money: it joins no spending query. Line items are signed (sign
+        checked by type). Accessed by receipt id only (primary key / unique position): no extra index.
+      changes:
+        - sql:
+            sql: |
+              CREATE TABLE receipt.receipt_draft (
+                  receipt_id           uuid        NOT NULL,
+                  household_id         uuid        NOT NULL,
+                  extraction_id        uuid,
+                  document_type        text,
+                  tax_mode             text        NOT NULL,
+                  proposed_kind        text        NOT NULL,
+                  merchant_key         text,
+                  total_minor          bigint,
+                  purchase_date        date,
+                  detected_currency    char(3),
+                  fields               jsonb       NOT NULL,
+                  proposed_items       jsonb       NOT NULL,
+                  duplicate_candidates jsonb       NOT NULL,
+                  frozen_at            timestamptz,
+                  created_at           timestamptz NOT NULL,
+                  updated_at           timestamptz NOT NULL,
+                  version              bigint      NOT NULL DEFAULT 0,
+                  CONSTRAINT pk_receipt_draft PRIMARY KEY (receipt_id),
+                  CONSTRAINT fk_receipt_draft_receipt FOREIGN KEY (household_id, receipt_id)
+                      REFERENCES receipt.receipt (household_id, id) ON DELETE CASCADE,
+                  CONSTRAINT fk_receipt_draft_extraction FOREIGN KEY (extraction_id)
+                      REFERENCES receipt.receipt_extraction (id),
+                  CONSTRAINT ck_receipt_draft_document_type CHECK (document_type IN
+                      ('RECEIPT', 'CARD_SLIP', 'INVOICE', 'QUOTE', 'REFUND_RECEIPT', 'OTHER')),
+                  CONSTRAINT ck_receipt_draft_tax_mode CHECK (tax_mode IN ('INCLUSIVE', 'EXCLUSIVE', 'UNKNOWN')),
+                  CONSTRAINT ck_receipt_draft_kind CHECK (proposed_kind IN ('EXPENSE', 'REFUND')),
+                  CONSTRAINT ck_receipt_draft_fields CHECK (jsonb_typeof(fields) = 'object'),
+                  CONSTRAINT ck_receipt_draft_items CHECK (jsonb_typeof(proposed_items) = 'array'),
+                  CONSTRAINT ck_receipt_draft_duplicates CHECK (jsonb_typeof(duplicate_candidates) = 'array'),
+                  CONSTRAINT ck_receipt_draft_total CHECK (total_minor IS NULL OR total_minor <> 0),
+                  CONSTRAINT ck_receipt_draft_currency
+                      CHECK (detected_currency IS NULL OR detected_currency ~ '^[A-Z]{3}$')
+              );
+              CREATE TABLE receipt.receipt_line_item (
+                  id                   uuid     NOT NULL,
+                  receipt_id           uuid     NOT NULL,
+                  household_id         uuid     NOT NULL,
+                  position             smallint NOT NULL,
+                  type                 text     NOT NULL,
+                  description          text     NOT NULL,
+                  quantity_raw         text,
+                  amount_raw           text     NOT NULL,
+                  amount_minor         bigint,
+                  amount_status        text     NOT NULL,
+                  proposed_category_id uuid,
+                  CONSTRAINT pk_receipt_line_item PRIMARY KEY (id),
+                  CONSTRAINT fk_receipt_line_item_draft FOREIGN KEY (receipt_id)
+                      REFERENCES receipt.receipt_draft (receipt_id) ON DELETE CASCADE,
+                  CONSTRAINT fk_receipt_line_item_receipt FOREIGN KEY (household_id, receipt_id)
+                      REFERENCES receipt.receipt (household_id, id),
+                  CONSTRAINT uq_receipt_line_item_position UNIQUE (receipt_id, position),
+                  CONSTRAINT ck_receipt_line_item_position CHECK (position BETWEEN 1 AND 300),
+                  CONSTRAINT ck_receipt_line_item_type CHECK (type IN
+                      ('ITEM', 'DISCOUNT', 'DEPOSIT', 'DEPOSIT_RETURN', 'TIP', 'FEE', 'OTHER')),
+                  CONSTRAINT ck_receipt_line_item_description CHECK (char_length(description) <= 200),
+                  CONSTRAINT ck_receipt_line_item_status CHECK (amount_status IN ('OK', 'AMBIGUOUS', 'INVALID')),
+                  CONSTRAINT ck_receipt_line_item_status_amount
+                      CHECK ((amount_minor IS NULL) = (amount_status <> 'OK')),
+                  CONSTRAINT ck_receipt_line_item_sign CHECK (amount_minor IS NULL
+                      OR (type IN ('DISCOUNT', 'DEPOSIT_RETURN') AND amount_minor <= 0)
+                      OR (type NOT IN ('DISCOUNT', 'DEPOSIT_RETURN') AND amount_minor >= 0))
+              );
+      rollback:
+        - sql:
+            sql: DROP TABLE receipt.receipt_line_item; DROP TABLE receipt.receipt_draft

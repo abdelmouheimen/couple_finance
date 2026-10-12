@@ -1,0 +1,42 @@
+databaseChangeLog:
+  - changeSet:
+      id: ai-0002-create-ai-call
+      author: couplefinance
+      comment: >
+        Metadata-only log of AI calls (database-schema.md section 12.2, BR-AI-07, DOC-003): no content column. Range
+        partitioned by created_at as documented; a DEFAULT partition receives rows until the monthly partition
+        maintenance job (13-month retention) exists. ix_ai_call_quota and ix_ai_call_user_quota serve the per-household
+        and per-user quota checks of ai.md section 8.
+      changes:
+        - sql:
+            sql: |
+              CREATE TABLE ai.ai_call (
+                  id             uuid        NOT NULL,
+                  created_at     timestamptz NOT NULL,
+                  use_case       text        NOT NULL,
+                  provider       text        NOT NULL,
+                  model          text        NOT NULL,
+                  prompt_version text        NOT NULL,
+                  household_id   uuid,
+                  user_id        uuid,
+                  correlation_id text,
+                  latency_ms     integer,
+                  tokens_in      integer,
+                  tokens_out     integer,
+                  cost_micros    bigint,
+                  outcome        text        NOT NULL,
+                  CONSTRAINT pk_ai_call PRIMARY KEY (id, created_at),
+                  CONSTRAINT ck_ai_call_use_case CHECK (use_case IN
+                      ('RECEIPT_EXTRACTION', 'CATEGORY_SUGGESTION', 'INSIGHT_WORDING', 'ASSISTANT')),
+                  CONSTRAINT ck_ai_call_outcome CHECK (outcome IN
+                      ('OK', 'SCHEMA_INVALID', 'TIMEOUT', 'ERROR', 'REFUSED', 'CONSENT_MISSING')),
+                  CONSTRAINT ck_ai_call_metrics CHECK ((latency_ms IS NULL OR latency_ms >= 0)
+                      AND (tokens_in IS NULL OR tokens_in >= 0) AND (tokens_out IS NULL OR tokens_out >= 0)
+                      AND (cost_micros IS NULL OR cost_micros >= 0))
+              ) PARTITION BY RANGE (created_at);
+              CREATE TABLE ai.ai_call_default PARTITION OF ai.ai_call DEFAULT;
+              CREATE INDEX ix_ai_call_quota ON ai.ai_call (household_id, use_case, created_at);
+              CREATE INDEX ix_ai_call_user_quota ON ai.ai_call (user_id, use_case, created_at);
+      rollback:
+        - sql:
+            sql: DROP TABLE ai.ai_call

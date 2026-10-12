@@ -1,0 +1,72 @@
+{
+  "type": "OBJECT",
+  "properties": {
+    "documentType": {"type": "STRING", "enum": ["RECEIPT", "CARD_SLIP", "INVOICE", "QUOTE", "REFUND_RECEIPT", "OTHER"]},
+    "merchantName": {"type": "STRING", "nullable": true},
+    "merchantCountry": {"type": "STRING", "nullable": true},
+    "language": {"type": "STRING", "nullable": true},
+    "purchaseDate": {"type": "STRING", "nullable": true},
+    "observedFormats": {
+      "type": "OBJECT",
+      "properties": {
+        "decimalSeparator": {"type": "STRING", "enum": [".", ",", "unknown"]},
+        "groupingSeparator": {"type": "STRING", "enum": [".", ",", "space", "'", "none", "unknown"]},
+        "dateOrder": {"type": "STRING", "enum": ["DMY", "MDY", "YMD", "unknown"]}
+      },
+      "required": ["decimalSeparator", "groupingSeparator", "dateOrder"]
+    },
+    "currencySymbolOrCode": {"type": "STRING", "nullable": true},
+    "taxMode": {"type": "STRING", "enum": ["INCLUSIVE", "EXCLUSIVE", "UNKNOWN"]},
+    "total": {"type": "STRING", "nullable": true},
+    "handwrittenTotal": {"type": "STRING", "nullable": true},
+    "subtotal": {"type": "STRING", "nullable": true},
+    "taxLines": {
+      "type": "ARRAY",
+      "items": {
+        "type": "OBJECT",
+        "properties": {
+          "label": {"type": "STRING"},
+          "rate": {"type": "STRING", "nullable": true},
+          "amount": {"type": "STRING"}
+        },
+        "required": ["label", "amount"]
+      }
+    },
+    "lineItems": {
+      "type": "ARRAY",
+      "maxItems": 300,
+      "items": {
+        "type": "OBJECT",
+        "properties": {
+          "type": {"type": "STRING", "enum": ["ITEM", "DISCOUNT", "DEPOSIT", "DEPOSIT_RETURN", "TIP", "FEE", "OTHER"]},
+          "description": {"type": "STRING"},
+          "quantity": {"type": "STRING", "nullable": true},
+          "amount": {"type": "STRING"}
+        },
+        "required": ["type", "description", "amount"]
+      }
+    },
+    "payments": {
+      "type": "ARRAY",
+      "items": {
+        "type": "OBJECT",
+        "properties": {
+          "method": {"type": "STRING", "enum": ["CARD", "CASH", "OTHER"]},
+          "amount": {"type": "STRING"}
+        },
+        "required": ["method", "amount"]
+      }
+    },
+    "change": {"type": "STRING", "nullable": true},
+    "confidence": {
+      "type": "OBJECT",
+      "properties": {
+        "merchantName": {"type": "NUMBER", "nullable": true},
+        "purchaseDate": {"type": "NUMBER", "nullable": true},
+        "total": {"type": "NUMBER", "nullable": true},
+        "currency": {"type": "NUMBER", "nullable": true}
+      }
+    }
+  },
+  "required": ["documentType", "observedFormats", "taxMode", "lineItems", "confidence"]
+}

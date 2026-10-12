@@ -100,7 +100,26 @@ couplefinance:
   #   COUPLEFINANCE_RECEIPT_STORAGE_ACCESS_KEY / _SECRET_KEY   secrets, never committed (unset = AWS default chain)
   #   COUPLEFINANCE_RECEIPT_STORAGE_ENCRYPTION (AES256 | aws:kms) and _KMS_KEY_ID
   #   COUPLEFINANCE_RECEIPT_SCANNER_HOST / _PORT   ClamAV daemon (clamd); uploads are refused when it is unreachable
+  # AI (ADR-008). provider: fake (default, sends nothing) | gemini. The Gemini adapter refuses to start unless
+  # privacy-approved=true and, for api-key mode, api-key-tier=paid; vertex mode needs an EU location. Secrets:
+  #   COUPLEFINANCE_AI_GEMINI_API_KEY (api-key mode)  GOOGLE_APPLICATION_CREDENTIALS (vertex mode)
+  ai:
+    document-intelligence:
+      provider: fake
+      max-concurrency: 4
+      timeout: 30s
+    gemini:
+      endpoint-mode: vertex
+      model: gemini-2.5-flash
+      location: europe-west1
+      privacy-approved: false
   receipt:
+    analysis:
+      # Receipt analysis jobs (DOC-003, database-schema.md section 8.4).
+      poll-interval: 2s
+      batch-size: 4
+      lease: 2m
+      retry-backoff: 30s
     storage:
       region: eu-west-3
       bucket: couplefinance-receipts

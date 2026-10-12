@@ -7,6 +7,8 @@ enum IdentityErrorCode implements ErrorCode {
 
     /** The account exists but its email is not verified yet (domain-model.md §3). */
     EMAIL_NOT_VERIFIED(HttpStatus.FORBIDDEN),
+    /** The consent wording version is missing or longer than 40 characters (ADR-005). */
+    AI_CONSENT_TEXT_VERSION_INVALID(HttpStatus.BAD_REQUEST),
 
     /** Wrong password, unknown email or deleted account: one generic code, no account enumeration. */
     INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED),

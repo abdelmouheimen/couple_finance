@@ -6,7 +6,8 @@
  *
  * <p>Current scope (DOC-001): secure upload, storage and the receipt vault. Analysis and confirmation follow.
  */
-@ApplicationModule(displayName = "Receipt", allowedDependencies = {"shared", "household :: api"})
+@ApplicationModule(displayName = "Receipt", allowedDependencies = {"shared", "household :: api", "identity :: api",
+        "ai :: api", "categorization :: api"})
 package com.couplefinance.receipt;
 
 import org.springframework.modulith.ApplicationModule;

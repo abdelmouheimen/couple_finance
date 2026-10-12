@@ -5,6 +5,7 @@ import java.io.UncheckedIOException;
 import java.util.List;
 import java.util.UUID;
 
+import com.couplefinance.receipt.application.ReceiptAnalysisRequests;
 import com.couplefinance.receipt.application.ReceiptVaultService;
 import com.couplefinance.receipt.application.UploadReceiptService;
 import com.couplefinance.receipt.domain.UploadPolicy;
@@ -42,10 +43,22 @@ class ReceiptController {
 
     private final UploadReceiptService upload;
     private final ReceiptVaultService vault;
+    private final ReceiptAnalysisRequests analysis;
 
-    ReceiptController(UploadReceiptService upload, ReceiptVaultService vault) {
+    ReceiptController(UploadReceiptService upload, ReceiptVaultService vault, ReceiptAnalysisRequests analysis) {
         this.upload = upload;
         this.vault = vault;
+        this.analysis = analysis;
+    }
+
+    @PostMapping("/{id}/analysis")
+    @Operation(operationId = "requestReceiptAnalysis", summary = "Analyse or re-analyse a receipt",
+            description = "Queues the analysis of an open receipt of the caller (BR-RCP-17, BR-AI-05).")
+    @ApiResponse(responseCode = "202", description = "Analysis queued")
+    @ApiResponse(responseCode = "409", description = "AI_CONSENT_REQUIRED, RECEIPT_ANALYSIS_NOT_ALLOWED or RECEIPT_ANALYSIS_RETRY_LIMIT",
+            content = @Content(mediaType = PROBLEM, schema = @Schema(implementation = ProblemSchema.class)))
+    ResponseEntity<ReceiptResponse> requestAnalysis(@PathVariable UUID id) {
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(ReceiptResponse.from(analysis.request(id)));
     }
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
