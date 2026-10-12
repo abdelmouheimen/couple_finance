@@ -14,6 +14,8 @@ const config: ExpoConfig = {
     experiments: { typedRoutes: true },
     ios: { bundleIdentifier: "com.couplefinance.app", supportsTablet: false },
     android: { package: "com.couplefinance.app" },
+    // Expo project used by EAS Build (eas.json); public identifier, not a secret.
+    extra: { eas: { projectId: "2d709c30-c656-48d5-8d3b-db473ab40d9c" } },
 };
 
 export default config;
