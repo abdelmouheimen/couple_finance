@@ -12,6 +12,9 @@ public interface DocumentStorage {
 
     void put(String key, byte[] content, String contentType);
 
+    /** Reads a stored object (analysis of the re-encoded pages). */
+    byte[] get(String key);
+
     /** A short-lived read URL. Never log it or send it to crash reporting. */
     URI presignedGet(String key, Duration validity);
 

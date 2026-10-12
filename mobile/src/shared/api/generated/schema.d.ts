@@ -508,6 +508,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/ai-consents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the caller's AI consents
+         * @description One entry per purpose (RECEIPT_ANALYSIS, INSIGHTS_ASSISTANT, QUALITY_DATASET). A purpose never decided is not granted.
+         */
+        get: operations["listAiConsents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/ai-consents/{purpose}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Grant or withdraw an AI consent
+         * @description Records the caller's decision with the wording version shown (BR-AI-05). Withdrawing is effective immediately, including for queued receipt analyses.
+         */
+        put: operations["decideAiConsent"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/merchant-rules": {
         parameters: {
             query?: never;
@@ -576,6 +616,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/receipts/{id}/analysis": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Analyse or re-analyse a receipt
+         * @description Queues the analysis of an open receipt of the caller (BR-RCP-17, BR-AI-05).
+         */
+        post: operations["requestReceiptAnalysis"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/receipts/{id}/pages/{position}/url": {
         parameters: {
             query?: never;
@@ -600,6 +660,25 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AiConsent: {
+            /** @description Wording version of the last decision. */
+            consentTextVersion?: string;
+            /** Format: date-time */
+            decidedAt?: string;
+            /** @description Whether the caller currently consents to this purpose (never inferred). */
+            granted: boolean;
+            /** @enum {string} */
+            purpose: "RECEIPT_ANALYSIS" | "INSIGHTS_ASSISTANT" | "QUALITY_DATASET";
+        };
+        AiConsentDecision: {
+            /** @description Version of the consent wording the user was shown, e.g. receipt-analysis-v1. */
+            consentTextVersion: string;
+            /** @description true to grant, false to withdraw. */
+            granted: boolean;
+        };
+        AiConsentList: {
+            items: components["schemas"]["AiConsent"][];
+        };
         AnalyticsBudgetSummary: {
             consumed?: components["schemas"]["Money"];
             limit?: components["schemas"]["Money"];
@@ -1160,10 +1239,17 @@ export interface components {
             type?: string;
         };
         Receipt: {
+            /** @description Why the analysis failed (FAILED only). */
+            analysisFailureReason?: string;
             /** Format: date-time */
             createdAt: string;
             /** Format: uuid */
             id: string;
+            /**
+             * Format: int32
+             * @description Manual re-analyses still allowed (BR-RCP-17).
+             */
+            manualRetriesLeft: number;
             pages: components["schemas"]["ReceiptPage"][];
             /**
              * @description IMAGES (1-5 photos) or PDF (rasterised into page images).
@@ -1171,7 +1257,7 @@ export interface components {
              */
             sourceKind: "IMAGES" | "PDF";
             /**
-             * @description Combined lifecycle state. UPLOADED: stored, not analysed.
+             * @description Combined lifecycle state.
              * @enum {string}
              */
             state:
@@ -3090,6 +3176,97 @@ export interface operations {
             };
         };
     };
+    listAiConsents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The caller's consents */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiConsentList"];
+                };
+            };
+            /** @description AUTHENTICATION_REQUIRED */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description EMAIL_NOT_VERIFIED */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    decideAiConsent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                purpose: "RECEIPT_ANALYSIS" | "INSIGHTS_ASSISTANT" | "QUALITY_DATASET";
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AiConsentDecision"];
+            };
+        };
+        responses: {
+            /** @description Decision recorded */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiConsent"];
+                };
+            };
+            /** @description VALIDATION_FAILED or AI_CONSENT_TEXT_VERSION_INVALID */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description AUTHENTICATION_REQUIRED */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description EMAIL_NOT_VERIFIED */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     setMerchantRule: {
         parameters: {
             query?: never;
@@ -3399,6 +3576,37 @@ export interface operations {
                 };
             };
             /** @description RECEIPT_NOT_DELETABLE */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    requestReceiptAnalysis: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Analysis queued */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Receipt"];
+                };
+            };
+            /** @description AI_CONSENT_REQUIRED, RECEIPT_ANALYSIS_NOT_ALLOWED or RECEIPT_ANALYSIS_RETRY_LIMIT */
             409: {
                 headers: {
                     [name: string]: unknown;

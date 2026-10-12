@@ -31,6 +31,7 @@ class LiquibaseMigrationIntegrationTest {
                 "identity-0003-create-session",
                 "identity-0004-create-refresh-token",
                 "identity-0005-create-one-time-token",
+                "identity-0006-create-ai-consent-event",
                 "household-0001-create-household-schema",
                 "household-0002-create-currency",
                 "household-0002-seed-currencies",
@@ -59,10 +60,15 @@ class LiquibaseMigrationIntegrationTest {
                 "receipt-0002-create-receipt",
                 "receipt-0003-create-receipt-page",
                 "receipt-0004-create-audit-event",
+                "receipt-0005-create-analysis-job",
+                "receipt-0006-create-extraction",
+                "receipt-0007-create-draft",
                 "budget-0001-create-budget-schema",
                 "budget-0002-create-budget",
                 "budget-0003-create-audit-event",
-                "budget-0004-create-budget-category");
+                "budget-0004-create-budget-category",
+                "ai-0001-create-ai-schema",
+                "ai-0002-create-ai-call");
     }
 
     @Test

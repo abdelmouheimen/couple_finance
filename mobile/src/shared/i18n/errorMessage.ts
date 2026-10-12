@@ -76,6 +76,12 @@ export function errorMessage(error: unknown): string {
             return strings.errors.receiptNotFound;
         case "RECEIPT_NOT_DELETABLE":
             return strings.errors.receiptNotDeletable;
+        case "AI_CONSENT_REQUIRED":
+            return strings.errors.aiConsentRequired;
+        case "RECEIPT_ANALYSIS_NOT_ALLOWED":
+            return strings.errors.receiptAnalysisNotAllowed;
+        case "RECEIPT_ANALYSIS_RETRY_LIMIT":
+            return strings.errors.receiptAnalysisRetryLimit;
         case "PREVIOUS_BUDGET_NOT_FOUND":
             return strings.errors.previousBudgetNotFound;
         case "BUDGET_ALREADY_EXISTS":

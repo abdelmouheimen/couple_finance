@@ -45,6 +45,12 @@ class S3DocumentStorage implements DocumentStorage {
     }
 
     @Override
+    public byte[] get(String key) {
+        return client.getObjectAsBytes(GetObjectRequest.builder().bucket(properties.bucket()).key(key).build())
+                .asByteArray();
+    }
+
+    @Override
     public URI presignedGet(String key, Duration validity) {
         GetObjectRequest get = GetObjectRequest.builder()
                 .bucket(properties.bucket())

@@ -38,6 +38,24 @@ export function getReceiptPageUrl(id: string, position: number): Promise<Receipt
     );
 }
 
+/**
+ * Queues the analysis of an open receipt (BR-RCP-17): a manual retry of a failure, or the first analysis of a receipt
+ * uploaded before the user consented. Needs the caller's receipt-analysis consent (BR-AI-05).
+ */
+export function requestReceiptAnalysis(id: string): Promise<Receipt> {
+    return unwrap(api.POST("/api/v1/receipts/{id}/analysis", { params: { path: { id } } }));
+}
+
+/** States of a receipt that is still an open draft of its uploader (deletable, BR-RCP-20). */
+export function isOpenReceipt(receipt: Receipt): boolean {
+    return !["CONFIRMED", "ATTACHED", "ABANDONED"].includes(receipt.state);
+}
+
+/** The analysis is queued or running: the screen polls until it settles. */
+export function isAnalysisPending(receipt: Receipt): boolean {
+    return receipt.state === "QUEUED" || receipt.state === "ANALYSING";
+}
+
 export async function deleteReceipt(id: string): Promise<void> {
     await unwrap(api.DELETE("/api/v1/receipts/{id}", { params: { path: { id } } }));
 }

@@ -108,7 +108,12 @@ export function SettingsScreen() {
         { key: "rules", icon: "rules", label: strings.settings.rules },
         { key: "notifications", icon: "bell", label: strings.settings.notifications },
         { key: "security", icon: "shield", label: strings.settings.security },
-        { key: "privacy", icon: "lock", label: strings.settings.privacy },
+        {
+            key: "privacy",
+            icon: "lock",
+            label: strings.settings.privacy,
+            onPress: () => router.push("/privacy"),
+        },
     ];
     const about: Entry[] = [
         { key: "help", icon: "help", label: strings.settings.help },

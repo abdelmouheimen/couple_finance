@@ -24,14 +24,52 @@ class ReceiptTest {
     }
 
     private static Receipt receipt(ReceiptStatus status, List<ReceiptPage> pages) {
+        return receipt(status, AnalysisStatus.SKIPPED_NO_CONSENT, 0, pages);
+    }
+
+    private static Receipt receipt(ReceiptStatus status, AnalysisStatus analysis, int manualRetries,
+            List<ReceiptPage> pages) {
         return new Receipt(UUID.randomUUID(), new HouseholdId(UUID.randomUUID()), new UserId(UUID.randomUUID()),
-                SourceKind.IMAGES, 3000, status, AnalysisStatus.SKIPPED_NO_CONSENT, NOW, NOW, 0, pages);
+                SourceKind.IMAGES, 3000, status, analysis, null, manualRetries, NOW, NOW, 0, pages);
     }
 
     @Test
-    void BR_RCP_17_an_upload_is_an_open_draft_never_sent_to_ai() {
+    void BR_AI_05_an_upload_with_consent_is_queued_for_analysis() {
         Receipt receipt = Receipt.uploaded(UUID.randomUUID(), new HouseholdId(UUID.randomUUID()),
-                new UserId(UUID.randomUUID()), SourceKind.PDF, 5000, List.of(page(2), page(1)), NOW);
+                new UserId(UUID.randomUUID()), SourceKind.IMAGES, 5000, List.of(page(1)), true, NOW);
+        assertThat(receipt.analysisStatus()).isEqualTo(AnalysisStatus.PENDING);
+        assertThat(ReceiptState.of(receipt.status(), receipt.analysisStatus())).isEqualTo(ReceiptState.QUEUED);
+    }
+
+    @Test
+    void BR_RCP_17_a_failed_analysis_can_be_retried_manually_at_most_three_times() {
+        assertThat(receipt(ReceiptStatus.OPEN, AnalysisStatus.FAILED, 2, List.of(page(1))).requireAnalysable())
+                .isTrue();
+        assertThatThrownBy(() -> receipt(ReceiptStatus.OPEN, AnalysisStatus.FAILED, 3, List.of(page(1)))
+                .requireAnalysable()).isInstanceOfSatisfying(ApplicationException.class,
+                        e -> assertThat(e.errorCode()).isEqualTo(ReceiptErrorCode.RECEIPT_ANALYSIS_RETRY_LIMIT));
+    }
+
+    @Test
+    void BR_RCP_17_only_an_open_receipt_never_analysed_or_failed_can_be_analysed() {
+        for (AnalysisStatus fresh : List.of(AnalysisStatus.SKIPPED_NO_CONSENT, AnalysisStatus.CANCELLED)) {
+            assertThat(receipt(ReceiptStatus.OPEN, fresh, 0, List.of(page(1))).requireAnalysable()).isFalse();
+        }
+        for (AnalysisStatus busy : List.of(AnalysisStatus.PENDING, AnalysisStatus.RUNNING,
+                AnalysisStatus.SUCCEEDED)) {
+            assertThatThrownBy(() -> receipt(ReceiptStatus.OPEN, busy, 0, List.of(page(1))).requireAnalysable())
+                    .isInstanceOfSatisfying(ApplicationException.class, e -> assertThat(e.errorCode())
+                            .isEqualTo(ReceiptErrorCode.RECEIPT_ANALYSIS_NOT_ALLOWED));
+        }
+        assertThatThrownBy(() -> receipt(ReceiptStatus.CONFIRMED, AnalysisStatus.FAILED, 0, List.of(page(1)))
+                .requireAnalysable()).isInstanceOfSatisfying(ApplicationException.class,
+                        e -> assertThat(e.errorCode()).isEqualTo(ReceiptErrorCode.RECEIPT_ANALYSIS_NOT_ALLOWED));
+    }
+
+    @Test
+    void BR_RCP_17_an_upload_without_consent_is_an_open_draft_never_sent_to_ai() {
+        Receipt receipt = Receipt.uploaded(UUID.randomUUID(), new HouseholdId(UUID.randomUUID()),
+                new UserId(UUID.randomUUID()), SourceKind.PDF, 5000, List.of(page(2), page(1)), false, NOW);
         assertThat(receipt.status()).isEqualTo(ReceiptStatus.OPEN);
         assertThat(receipt.analysisStatus()).isEqualTo(AnalysisStatus.SKIPPED_NO_CONSENT);
         assertThat(receipt.isDraft()).isTrue();

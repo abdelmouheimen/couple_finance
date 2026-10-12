@@ -11,6 +11,9 @@ import java.util.UUID;
 
 import com.couplefinance.household.api.CurrentHousehold;
 import com.couplefinance.household.api.HouseholdContext;
+import com.couplefinance.identity.api.AiConsentPurpose;
+import com.couplefinance.identity.api.AiConsents;
+import com.couplefinance.receipt.domain.ReceiptAnalysisStore;
 import com.couplefinance.receipt.domain.Receipt;
 import com.couplefinance.receipt.domain.ReceiptAuditLog;
 import com.couplefinance.receipt.domain.ReceiptErrorCode;
@@ -49,14 +52,19 @@ public class UploadReceiptService {
     private final DocumentStorage storage;
     private final ReceiptRepository receipts;
     private final ReceiptAuditLog audit;
+    private final ReceiptAnalysisStore analysis;
+    private final AiConsents consents;
     private final IdempotencyService idempotency;
     private final TransactionTemplate transaction;
     private final JsonMapper jsonMapper;
     private final Clock clock;
 
     UploadReceiptService(CurrentHousehold currentHousehold, MalwareScanner scanner, PageNormaliser normaliser,
-            DocumentStorage storage, ReceiptRepository receipts, ReceiptAuditLog audit,
-            IdempotencyService idempotency, TransactionTemplate transaction, JsonMapper jsonMapper, Clock clock) {
+            DocumentStorage storage, ReceiptRepository receipts, ReceiptAuditLog audit, ReceiptAnalysisStore analysis,
+            AiConsents consents, IdempotencyService idempotency, TransactionTemplate transaction, JsonMapper jsonMapper,
+            Clock clock) {
+        this.analysis = analysis;
+        this.consents = consents;
         this.currentHousehold = currentHousehold;
         this.scanner = scanner;
         this.normaliser = normaliser;
@@ -115,10 +123,16 @@ public class UploadReceiptService {
                         p.page().content().length, p.page().widthPx(), p.page().heightPx(), p.sha256(),
                         p.page().perceptualHash()));
             }
+            // BR-AI-05 / BR-RCP-17: queued for analysis only with the uploader's consent at upload time.
+            boolean consented = consents.isGranted(context.userId(), AiConsentPurpose.RECEIPT_ANALYSIS);
             Receipt receipt = Receipt.uploaded(receiptId, context.householdId(), context.userId(), checked.kind(),
-                    checked.totalBytes(), pages, clock.instant());
+                    checked.totalBytes(), pages, consented, clock.instant());
             transaction.executeWithoutResult(status -> {
                 receipts.insert(receipt);
+                if (consented) {
+                    analysis.enqueue(receipt.id(), receipt.householdId(), ReceiptAnalysisStore.Trigger.UPLOAD,
+                            receipt.createdAt());
+                }
                 audit.uploaded(receipt, context.userId());
             });
             log.info("Receipt uploaded: receipt={} pages={}", receiptId, pages.size());

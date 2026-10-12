@@ -57,6 +57,7 @@ function receipt(over: Partial<Receipt> = {}): Receipt {
             },
         ],
         createdAt: "2026-10-04T09:00:00Z",
+        manualRetriesLeft: 3,
         version: 0,
         ...over,
     };
@@ -246,7 +247,18 @@ describe("receipt capture and upload (DOC-002, BR-RCP-01)", () => {
         await screen.findByLabelText("Page 1 sélectionnée");
         await fireEvent.press(screen.getByRole("button", { name: "Envoyer le ticket" }));
         await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith(`/receipts/${ID}`));
-        expect(await screen.findByText(/saisissez la dépense manuellement/)).toBeTruthy();
+        expect(await screen.findByText("Ticket enregistré")).toBeTruthy();
+    });
+
+    test("an upload queued for analysis says so (consent given, DOC-003)", async () => {
+        installApi({ "POST /api/v1/receipts": () => json(201, receipt({ state: "QUEUED" })) });
+        mocked.captureFromCamera.mockResolvedValue({ kind: "picked", files: [photo(1)] });
+        await mount(<QuickAddScreen now={NOW} />);
+        await fireEvent.press(await screen.findByRole("radio", { name: "Scanner" }));
+        await fireEvent.press(await screen.findByRole("button", { name: "Prendre la photo" }));
+        await screen.findByLabelText("Page 1 sélectionnée");
+        await fireEvent.press(screen.getByRole("button", { name: "Envoyer le ticket" }));
+        expect(await screen.findByText(/Analyse en cours/)).toBeTruthy();
     });
 });
 
@@ -283,13 +295,13 @@ describe("receipt vault (DOC-002, BR-RCP-16)", () => {
     });
 });
 
-describe("receipt detail (DOC-002)", () => {
-    const pageUrl = {
-        url: "https://storage.example/receipts/abc?X-Amz-Signature=sig",
-        expiresAt: "2026-10-12T10:05:00Z",
-        contentType: "image/jpeg",
-    };
+const pageUrl = {
+    url: "https://storage.example/receipts/abc?X-Amz-Signature=sig",
+    expiresAt: "2026-10-12T10:05:00Z",
+    contentType: "image/jpeg",
+};
 
+describe("receipt detail (DOC-002)", () => {
     test("previews the page through its short-lived URL and shares a fresh one", async () => {
         const api = installApi({
             [`GET /api/v1/receipts/${ID}`]: () => json(200, receipt()),
@@ -350,6 +362,97 @@ describe("receipt detail (DOC-002)", () => {
         installApi({ [`GET /api/v1/receipts/${ID}`]: () => problem(404, "RECEIPT_NOT_FOUND") });
         await mount(<ReceiptDetailScreen id={ID} />);
         expect(await screen.findByText("Ce ticket est introuvable.")).toBeTruthy();
+    });
+});
+
+describe("receipt analysis state and retry (DOC-003, BR-RCP-17, BR-AI-05)", () => {
+    const pageRoute = { [`GET /api/v1/receipts/${ID}/pages/1/url`]: () => json(200, pageUrl) };
+
+    test("BR_RCP_17_a_failed_analysis_shows_its_reason_and_can_be_relaunched", async () => {
+        const api = installApi({
+            ...pageRoute,
+            [`GET /api/v1/receipts/${ID}`]: () =>
+                json(
+                    200,
+                    receipt({
+                        state: "FAILED",
+                        analysisFailureReason: "TIMEOUT",
+                        manualRetriesLeft: 2,
+                    }),
+                ),
+            [`POST /api/v1/receipts/${ID}/analysis`]: () =>
+                json(202, receipt({ state: "QUEUED", manualRetriesLeft: 1 })),
+        });
+        await mount(<ReceiptDetailScreen id={ID} />);
+
+        expect(await screen.findByText(/L'analyse a pris trop de temps/)).toBeTruthy();
+        expect(screen.getByText("2 relances restantes")).toBeTruthy();
+        await fireEvent.press(screen.getByRole("button", { name: "Relancer l'analyse" }));
+
+        expect(await screen.findByText(/L'analyse est en cours/)).toBeTruthy();
+        expect(api.of(`POST /api/v1/receipts/${ID}/analysis`)).toHaveLength(1);
+        expect(screen.queryByRole("button", { name: "Relancer l'analyse" })).toBeNull();
+    });
+
+    test("BR_RCP_17_no_relaunch_is_offered_once_the_three_retries_are_used", async () => {
+        installApi({
+            ...pageRoute,
+            [`GET /api/v1/receipts/${ID}`]: () =>
+                json(
+                    200,
+                    receipt({
+                        state: "FAILED",
+                        analysisFailureReason: "SCHEMA_INVALID",
+                        manualRetriesLeft: 0,
+                    }),
+                ),
+        });
+        await mount(<ReceiptDetailScreen id={ID} />);
+
+        expect(await screen.findByText(/n'a pas pu être lu correctement/)).toBeTruthy();
+        expect(screen.getByText(/saisir la dépense manuellement/)).toBeTruthy();
+        expect(screen.queryByRole("button", { name: "Relancer l'analyse" })).toBeNull();
+        expect(screen.getByRole("button", { name: "Supprimer le ticket" })).toBeTruthy();
+    });
+
+    test("BR_AI_05_analysing_without_consent_points_to_the_privacy_settings", async () => {
+        installApi({
+            ...pageRoute,
+            [`GET /api/v1/receipts/${ID}`]: () => json(200, receipt()),
+            [`POST /api/v1/receipts/${ID}/analysis`]: () => problem(409, "AI_CONSENT_REQUIRED"),
+        });
+        await mount(<ReceiptDetailScreen id={ID} />);
+
+        expect(await screen.findByText(/nécessite votre accord/)).toBeTruthy();
+        await fireEvent.press(screen.getByRole("button", { name: "Analyser ce ticket" }));
+
+        expect(await screen.findByTestId("receipt-action-error")).toHaveTextContent(
+            /Données & confidentialité/,
+        );
+    });
+
+    test("BR_RCP_10_an_analysed_receipt_is_presented_as_a_proposal_never_as_an_expense", async () => {
+        installApi({
+            ...pageRoute,
+            [`GET /api/v1/receipts/${ID}`]: () => json(200, receipt({ state: "READY_FOR_REVIEW" })),
+        });
+        await mount(<ReceiptDetailScreen id={ID} />);
+
+        expect(await screen.findByText(/Rien n'est enregistré comme dépense/)).toBeTruthy();
+        expect(screen.queryByRole("button", { name: "Analyser ce ticket" })).toBeNull();
+        expect(screen.getByRole("button", { name: "Supprimer le ticket" })).toBeTruthy();
+    });
+
+    test("a receipt linked to an expense offers neither analysis nor deletion", async () => {
+        installApi({
+            ...pageRoute,
+            [`GET /api/v1/receipts/${ID}`]: () => json(200, receipt({ state: "CONFIRMED" })),
+        });
+        await mount(<ReceiptDetailScreen id={ID} />);
+
+        await screen.findByRole("button", { name: "Télécharger / partager" });
+        expect(screen.queryByRole("button", { name: "Analyser ce ticket" })).toBeNull();
+        expect(screen.queryByRole("button", { name: "Supprimer le ticket" })).toBeNull();
     });
 });
 

@@ -1,0 +1,31 @@
+databaseChangeLog:
+  - changeSet:
+      id: identity-0006-create-ai-consent-event
+      author: couplefinance
+      comment: >
+        Per-user AI consent as an append-only event log (database-schema.md section 4.5, ADR-005, BR-AI-05, DOC-003):
+        who agreed to which purpose, under which wording, when. The current consent of a purpose is the latest row.
+        ix_consent_current serves that lookup, read before every AI call.
+      changes:
+        - sql:
+            sql: |
+              CREATE TABLE identity.ai_consent_event (
+                  id                   uuid        NOT NULL,
+                  user_id              uuid        NOT NULL,
+                  purpose              text        NOT NULL,
+                  action               text        NOT NULL,
+                  consent_text_version text        NOT NULL,
+                  occurred_at          timestamptz NOT NULL,
+                  CONSTRAINT pk_ai_consent_event PRIMARY KEY (id),
+                  CONSTRAINT fk_ai_consent_event_user FOREIGN KEY (user_id)
+                      REFERENCES identity.user_account (id) ON DELETE CASCADE,
+                  CONSTRAINT ck_ai_consent_event_purpose
+                      CHECK (purpose IN ('RECEIPT_ANALYSIS', 'INSIGHTS_ASSISTANT', 'QUALITY_DATASET')),
+                  CONSTRAINT ck_ai_consent_event_action CHECK (action IN ('GRANT', 'WITHDRAW')),
+                  CONSTRAINT ck_ai_consent_event_text_version
+                      CHECK (char_length(consent_text_version) BETWEEN 1 AND 40)
+              );
+              CREATE INDEX ix_consent_current ON identity.ai_consent_event (user_id, purpose, occurred_at DESC);
+      rollback:
+        - sql:
+            sql: DROP TABLE identity.ai_consent_event

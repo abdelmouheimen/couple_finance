@@ -20,9 +20,41 @@ import {
     useToast,
 } from "@/shared/ui";
 import { radius, spacing, viewfinderAspectRatio } from "@/shared/ui/theme/tokens";
-import { deleteReceipt, getReceipt, getReceiptPageUrl, RECEIPTS_KEY } from "./receiptApi";
+import {
+    deleteReceipt,
+    getReceipt,
+    getReceiptPageUrl,
+    isAnalysisPending,
+    isOpenReceipt,
+    type Receipt,
+    RECEIPTS_KEY,
+    requestReceiptAnalysis,
+} from "./receiptApi";
 import { sharePage } from "./receiptDevice";
 import { receiptDate, receiptStateLabel, receiptSummary } from "./receiptFormat";
+
+/** Poll interval while an analysis is queued or running. */
+const ANALYSIS_POLL_MS = 3000;
+
+/** What the screen says about the analysis of an open receipt, if anything. */
+function analysisMessage(receipt: Receipt): string | null {
+    switch (receipt.state) {
+        case "QUEUED":
+        case "ANALYSING":
+            return strings.receipt.analysisPending;
+        case "READY_FOR_REVIEW":
+            return strings.receipt.analysisReady;
+        case "UPLOADED":
+            return strings.receipt.analysisNeedsConsent;
+        case "FAILED":
+            return `${
+                strings.receipt.failure[receipt.analysisFailureReason ?? ""] ??
+                strings.receipt.failureDefault
+            } ${strings.receipt.failureManual}`;
+        default:
+            return null;
+    }
+}
 
 /**
  * One receipt of the vault: page preview through a short-lived URL (fetched on demand, kept in memory only, never
@@ -41,6 +73,8 @@ export function ReceiptDetailScreen({ id }: { id: string }) {
         queryKey: [...RECEIPTS_KEY, "detail", id],
         queryFn: () => getReceipt(id),
         retry: false,
+        refetchInterval: (query) =>
+            query.state.data && isAnalysisPending(query.state.data) ? ANALYSIS_POLL_MS : false,
     });
     const page = useQuery({
         queryKey: [...RECEIPTS_KEY, "page-url", id, position],
@@ -100,6 +134,22 @@ export function ReceiptDetailScreen({ id }: { id: string }) {
         }
     };
 
+    const retriesLeft = data.manualRetriesLeft ?? 0;
+    const canAnalyse =
+        !readOnly && (data.state === "UPLOADED" || (data.state === "FAILED" && retriesLeft > 0));
+    const message = analysisMessage(data);
+
+    const analyse = async () => {
+        setActionError(null);
+        try {
+            const queued = await requestReceiptAnalysis(id);
+            queryClient.setQueryData([...RECEIPTS_KEY, "detail", id], queued);
+            toast(strings.receipt.analysisQueued, "success");
+        } catch (e) {
+            setActionError(errorMessage(e));
+        }
+    };
+
     const remove = async () => {
         setConfirming(false);
         setActionError(null);
@@ -124,6 +174,21 @@ export function ReceiptDetailScreen({ id }: { id: string }) {
                 <Text variant="caption" tone="secondary">
                     {`${receiptSummary(data)} · ${receiptStateLabel(data)}`}
                 </Text>
+                {message ? (
+                    <Text
+                        variant="caption"
+                        tone={data.state === "FAILED" ? "danger" : "secondary"}
+                        testID="receipt-analysis-message"
+                        accessibilityLiveRegion="polite"
+                    >
+                        {message}
+                    </Text>
+                ) : null}
+                {data.state === "FAILED" ? (
+                    <Text variant="caption" tone="secondary">
+                        {strings.receipt.retriesLeft(retriesLeft)}
+                    </Text>
+                ) : null}
             </Card>
             <View style={[styles.preview, { backgroundColor: colors.card }]}>
                 {page.data ? (
@@ -168,13 +233,23 @@ export function ReceiptDetailScreen({ id }: { id: string }) {
                     {actionError}
                 </Text>
             ) : null}
+            {canAnalyse ? (
+                <Button
+                    label={
+                        data.state === "FAILED"
+                            ? strings.receipt.retryAnalysis
+                            : strings.receipt.analyse
+                    }
+                    onPress={analyse}
+                />
+            ) : null}
             <Button
                 variant="secondary"
                 icon="upload"
                 label={strings.receipt.share}
                 onPress={share}
             />
-            {readOnly || data.state !== "UPLOADED" ? null : (
+            {readOnly || !isOpenReceipt(data) ? null : (
                 <Button
                     variant="destructive"
                     label={strings.receipt.delete}

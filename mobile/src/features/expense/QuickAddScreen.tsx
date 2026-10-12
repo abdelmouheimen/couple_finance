@@ -99,9 +99,9 @@ export function QuickAddScreen({ now }: { now?: () => Date }) {
                     onUploaded={(receipt) => {
                         void queryClient.invalidateQueries({ queryKey: RECEIPTS_KEY });
                         toast(
-                            RECEIPT_ANALYSIS_AVAILABLE
-                                ? strings.receipt.uploaded
-                                : strings.receipt.uploadedNoAnalysis,
+                            receipt.state === "QUEUED"
+                                ? strings.receipt.uploadedAnalysing
+                                : strings.receipt.uploaded,
                             "success",
                         );
                         router.replace(`/receipts/${receipt.id}`);
