@@ -26,8 +26,9 @@ import {
 } from "./receiptDevice";
 
 /**
- * Receipt AI analysis (F5) is not available yet (DOC-003): uploads are stored in the vault and the user is told to
- * enter the expense manually. Nothing is presented as analysed.
+ * Creating an expense from an analysed receipt (review and confirmation, DOC-004) is not available yet: uploads are
+ * stored in the vault, analysed when the user consented (DOC-003), and the expense is still entered manually.
+ * Nothing is presented as a confirmed amount.
  */
 export const RECEIPT_ANALYSIS_AVAILABLE = false;
 

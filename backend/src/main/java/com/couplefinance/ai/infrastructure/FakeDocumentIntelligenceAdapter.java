@@ -1,5 +1,7 @@
 package com.couplefinance.ai.infrastructure;
 
+import java.util.function.Supplier;
+
 import com.couplefinance.ai.api.DocumentExtractionRequest;
 import com.couplefinance.ai.api.DocumentExtractionResult;
 import com.couplefinance.ai.api.DocumentIntelligencePort;
@@ -29,15 +31,22 @@ final class FakeDocumentIntelligenceAdapter implements DocumentIntelligencePort 
             """;
 
     private final ExtractionPipeline pipeline;
+    private final Supplier<String> output;
 
     FakeDocumentIntelligenceAdapter(ExtractionPipeline pipeline) {
+        this(pipeline, () -> FIXTURE);
+    }
+
+    /** @param output the scripted model output of each call (contract tests) */
+    FakeDocumentIntelligenceAdapter(ExtractionPipeline pipeline, Supplier<String> output) {
         this.pipeline = pipeline;
+        this.output = output;
     }
 
     @Override
     public DocumentExtractionResult extract(DocumentExtractionRequest request) {
         return pipeline.run(request, new DocumentExtractionResult.Provenance(PROVIDER, MODEL,
-                ExtractionPipeline.PROMPT_VERSION), (prompt, pages) -> new ExtractionPipeline.ModelAnswer(FIXTURE,
-                        null, null));
+                ExtractionPipeline.PROMPT_VERSION), (prompt, pages) -> new ExtractionPipeline.ModelAnswer(
+                        output.get(), null, null));
     }
 }

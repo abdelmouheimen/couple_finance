@@ -68,6 +68,10 @@ export const strings = {
         receiptNotFound: "Ce ticket est introuvable.",
         receiptNotDeletable:
             "Ce ticket est rattaché à une dépense et ne peut pas être supprimé ici.",
+        aiConsentRequired:
+            "Autorisez d'abord l'analyse des tickets dans Réglages › Données & confidentialité.",
+        receiptAnalysisNotAllowed: "Ce ticket est déjà analysé ou en cours d'analyse.",
+        receiptAnalysisRetryLimit: "Ce ticket a déjà été ré-analysé trois fois.",
     },
     auth: {
         signInTitle: "Connexion",
@@ -141,6 +145,26 @@ export const strings = {
         copied: "Code copié",
         share: "Partager le code",
         done: "Terminé",
+    },
+    privacy: {
+        receiptAnalysis: {
+            title: "Analyse automatique des tickets",
+            statusLabel: "Votre accord",
+            statusGranted: "Accordé",
+            statusNotGranted: "Non accordé",
+            // Wording version: RECEIPT_ANALYSIS_CONSENT_VERSION (aiConsentApi.ts). Bump it with any change here.
+            disclosure: [
+                "Si vous l'acceptez, les photos des tickets que vous envoyez sont transmises à un service d'intelligence artificielle (Google Gemini) pour en lire le commerçant, la date et le montant.",
+                "Seules les images du ticket sont transmises : ni votre nom, ni votre e-mail, ni vos autres dépenses.",
+                "Le résultat est une proposition : aucune dépense n'est créée sans votre vérification et votre confirmation.",
+                "Sans accord, vos tickets restent simplement conservés dans votre coffre et rien n'est transmis.",
+                "Vous pouvez retirer votre accord à tout moment : les analyses en attente sont alors annulées.",
+            ] as readonly string[],
+            grant: "Autoriser l'analyse des tickets",
+            withdraw: "Retirer mon accord",
+            grantedToast: "Analyse des tickets autorisée",
+            withdrawnToast: "Accord retiré",
+        },
     },
     settings: {
         profile: "Profil",
@@ -451,8 +475,7 @@ export const strings = {
         deleteMessage: "Les photos du ticket seront définitivement effacées.",
         deleted: "Ticket supprimé",
         uploaded: "Ticket enregistré",
-        uploadedNoAnalysis:
-            "Ticket enregistré. L'analyse automatique arrive bientôt : saisissez la dépense manuellement.",
+        uploadedAnalysing: "Ticket enregistré. Analyse en cours…",
         send: (pages: number) =>
             pages > 1 ? `Envoyer le ticket (${pages} pages)` : "Envoyer le ticket",
         sending: "Envoi du ticket…",
@@ -468,6 +491,24 @@ export const strings = {
         flashHint: "Le flash se règle dans l'appareil photo",
         maxPages: "5 pages maximum par ticket.",
         previewUnavailable: "Aperçu indisponible. Réessayez.",
+        analyse: "Analyser ce ticket",
+        retryAnalysis: "Relancer l'analyse",
+        retriesLeft: (count: number) =>
+            count > 1 ? `${count} relances restantes` : `${count} relance restante`,
+        analysisQueued: "Analyse demandée",
+        analysisPending: "L'analyse est en cours. Cet écran se met à jour automatiquement.",
+        analysisReady:
+            "Analyse terminée. Rien n'est enregistré comme dépense tant que vous ne l'avez pas vérifié et confirmé.",
+        analysisNeedsConsent:
+            "Ce ticket n'a pas été analysé. L'analyse automatique nécessite votre accord (Réglages › Données & confidentialité).",
+        failure: {
+            TIMEOUT: "L'analyse a pris trop de temps.",
+            PROVIDER_ERROR: "Le service d'analyse est indisponible.",
+            SCHEMA_INVALID: "Le ticket n'a pas pu être lu correctement.",
+            QUOTA_EXCEEDED: "Le quota d'analyses est atteint pour le moment.",
+        } as Readonly<Record<string, string>>,
+        failureDefault: "L'analyse a échoué.",
+        failureManual: "Vous pouvez saisir la dépense manuellement.",
     },
     placeholders: {
         home: "L'aperçu de votre foyer apparaîtra ici.",

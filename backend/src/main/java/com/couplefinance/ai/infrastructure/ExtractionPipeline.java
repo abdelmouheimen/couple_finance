@@ -57,37 +57,42 @@ final class ExtractionPipeline {
         long start = clock.millis();
         String prompt = promptTemplate.replace("{{currency}}", request.hints().householdCurrency())
                 .replace("{{locales}}", String.join(", ", request.hints().localeTags()));
-        ModelAnswer answer = call(request, provenance, model, prompt);
-        ExtractionSchemaValidator.Outcome outcome = validator.validate(answer.text());
-        if (!outcome.valid()) {
-            String repair = prompt + "\n\nYour previous answer did not match the required JSON schema:\n- "
-                    + outcome.violations().stream().limit(20).collect(Collectors.joining("\n- "))
-                    + "\nPrevious answer:\n" + truncate(answer.text())
-                    + "\nReturn only the corrected JSON object, transcribed from the images.";
-            answer = call(request, provenance, model, repair);
-            outcome = validator.validate(answer.text());
-            if (!outcome.valid()) {
-                callLog.record(request, provenance, AiCallLog.Outcome.SCHEMA_INVALID, 0, null, null);
-                throw new DocumentIntelligenceException(Reason.SCHEMA_INVALID, provenance, answer.text(),
-                        clock.millis() - start, "Output does not match the schema after one repair retry", null);
-            }
+        Validated first = call(request, provenance, model, prompt);
+        if (first.outcome().valid()) {
+            return new DocumentExtractionResult(first.outcome().extraction().orElseThrow(), first.answer().text(),
+                    provenance, clock.millis() - start);
         }
-        return new DocumentExtractionResult(outcome.extraction().orElseThrow(), answer.text(), provenance,
-                clock.millis() - start);
+        String repair = prompt + "\n\nYour previous answer did not match the required JSON schema:\n- "
+                + first.outcome().violations().stream().limit(20).collect(Collectors.joining("\n- "))
+                + "\nPrevious answer:\n" + truncate(first.answer().text())
+                + "\nReturn only the corrected JSON object, transcribed from the images.";
+        Validated second = call(request, provenance, model, repair);
+        if (!second.outcome().valid()) {
+            throw new DocumentIntelligenceException(Reason.SCHEMA_INVALID, provenance, second.answer().text(),
+                    clock.millis() - start, "Output does not match the schema after one repair retry", null);
+        }
+        return new DocumentExtractionResult(second.outcome().extraction().orElseThrow(), second.answer().text(),
+                provenance, clock.millis() - start);
     }
 
-    private ModelAnswer call(DocumentExtractionRequest request, DocumentExtractionResult.Provenance provenance,
+    private record Validated(ModelAnswer answer, ExtractionSchemaValidator.Outcome outcome) {
+    }
+
+    /** One model call, validated and logged with its real outcome (one {@code ai_call} row per call). */
+    private Validated call(DocumentExtractionRequest request, DocumentExtractionResult.Provenance provenance,
             ModelCall model, String prompt) {
         long start = clock.millis();
+        ModelAnswer answer;
         try {
-            ModelAnswer answer = model.generate(prompt, request.pages());
-            callLog.record(request, provenance, AiCallLog.Outcome.OK, clock.millis() - start, answer.tokensIn(),
-                    answer.tokensOut());
-            return answer;
+            answer = model.generate(prompt, request.pages());
         } catch (DocumentIntelligenceException e) {
             callLog.record(request, provenance, AiCallLog.Outcome.of(e.reason()), clock.millis() - start, null, null);
             throw e;
         }
+        ExtractionSchemaValidator.Outcome outcome = validator.validate(answer.text());
+        callLog.record(request, provenance, outcome.valid() ? AiCallLog.Outcome.OK : AiCallLog.Outcome.SCHEMA_INVALID,
+                clock.millis() - start, answer.tokensIn(), answer.tokensOut());
+        return new Validated(answer, outcome);
     }
 
     private static String truncate(String text) {

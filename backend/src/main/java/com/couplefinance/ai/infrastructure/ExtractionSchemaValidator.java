@@ -203,6 +203,11 @@ final class ExtractionSchemaValidator {
             errors.add("confidence." + field + " must be a number");
             return Optional.empty();
         }
-        return Optional.of(value.decimalValue());
+        BigDecimal confidence = value.decimalValue();
+        if (confidence.signum() < 0 || confidence.compareTo(BigDecimal.ONE) > 0) {
+            errors.add("confidence." + field + " must be between 0 and 1");
+            return Optional.empty();
+        }
+        return Optional.of(confidence);
     }
 }

@@ -119,6 +119,9 @@ class JdbcReceiptAnalysisStore implements ReceiptAnalysisStore {
 
     @Override
     public boolean succeed(Claim claim, Attempt attempt, ReceiptDraft draft, Instant now) {
+        if (!lockReceipt(claim)) {
+            return false; // deleted meanwhile: its jobs went with it, the result is discarded
+        }
         UUID extraction = insertAttempt(claim, attempt, now);
         int updated = jdbc.sql("""
                         UPDATE receipt.receipt
@@ -142,6 +145,9 @@ class JdbcReceiptAnalysisStore implements ReceiptAnalysisStore {
     @Override
     public void fail(Claim claim, @Nullable Attempt attempt, String errorCode, @Nullable Instant retryAt,
             String failureReason, boolean processed, Instant now) {
+        if (!lockReceipt(claim)) {
+            return;
+        }
         if (attempt != null) {
             insertAttempt(claim, attempt, now);
         }
@@ -232,6 +238,13 @@ class JdbcReceiptAnalysisStore implements ReceiptAnalysisStore {
                         """)
                 .param("now", utc(now)).param("uploader", uploader.value())
                 .update();
+    }
+
+    /** Locks the receipt row so it cannot be deleted while a result is applied; {@code false} when it is gone. */
+    private boolean lockReceipt(Claim claim) {
+        return !jdbc.sql("SELECT 1 FROM receipt.receipt WHERE id = :receipt AND household_id = :household FOR UPDATE")
+                .param("receipt", claim.receiptId()).param("household", claim.householdId().value())
+                .query(Integer.class).list().isEmpty();
     }
 
     private UUID insertAttempt(Claim claim, Attempt attempt, Instant now) {

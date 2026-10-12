@@ -54,22 +54,22 @@ class AiConfiguration {
         Duration timeout = properties.documentIntelligence().timeout();
         HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
         boolean apiKeyMode = "api-key".equals(gemini.endpointMode());
-        URI endpoint;
-        Supplier<String> authorization;
-        if (apiKeyMode) {
+        String key = gemini.apiKey();
+        Supplier<String> authorization = apiKeyMode ? () -> key : vertexAccessTokens();
+        return new GeminiDocumentIntelligenceAdapter(pipeline, http, json, endpoint(gemini), apiKeyMode,
+                authorization, timeout, gemini.model());
+    }
+
+    /** The generateContent endpoint: Gemini Developer API (api-key mode) or Vertex AI in the configured region. */
+    static URI endpoint(AiProperties.Gemini gemini) {
+        if ("api-key".equals(gemini.endpointMode())) {
             String root = gemini.baseUrl() != null ? gemini.baseUrl().toString() : GEMINI_ROOT;
-            endpoint = URI.create(root + "/v1beta/models/" + gemini.model() + ":generateContent");
-            String key = gemini.apiKey();
-            authorization = () -> key;
-        } else {
-            String root = gemini.baseUrl() != null ? gemini.baseUrl().toString()
-                    : "https://" + gemini.location() + "-aiplatform.googleapis.com";
-            endpoint = URI.create(root + "/v1/projects/" + gemini.project() + "/locations/" + gemini.location()
-                    + "/publishers/google/models/" + gemini.model() + ":generateContent");
-            authorization = vertexAccessTokens();
+            return URI.create(root + "/v1beta/models/" + gemini.model() + ":generateContent");
         }
-        return new GeminiDocumentIntelligenceAdapter(pipeline, http, json, endpoint, apiKeyMode, authorization,
-                timeout, gemini.model());
+        String root = gemini.baseUrl() != null ? gemini.baseUrl().toString()
+                : "https://" + gemini.location() + "-aiplatform.googleapis.com";
+        return URI.create(root + "/v1/projects/" + gemini.project() + "/locations/" + gemini.location()
+                + "/publishers/google/models/" + gemini.model() + ":generateContent");
     }
 
     /** ADR-008 §4: refuse every configuration that could send production documents to an unapproved endpoint. */

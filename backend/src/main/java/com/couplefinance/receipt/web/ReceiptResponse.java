@@ -12,7 +12,8 @@ import org.jspecify.annotations.Nullable;
 
 /** A receipt of the vault: metadata only (pages are read through short-lived URLs). */
 @Schema(name = "Receipt",
-        requiredProperties = {"id", "sourceKind", "state", "totalSizeBytes", "pages", "createdAt", "version"})
+        requiredProperties = {"id", "sourceKind", "state", "manualRetriesLeft", "totalSizeBytes", "pages",
+                "createdAt", "version"})
 record ReceiptResponse(
         UUID id,
         @Schema(description = "IMAGES (1-5 photos) or PDF (rasterised into page images).") SourceKind sourceKind,
