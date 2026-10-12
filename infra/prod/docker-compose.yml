@@ -1,0 +1,105 @@
+# Production stack on the single server (infra/prod/README.md). Deployed by .github/workflows/deploy.yml.
+# Secrets live only in the server's /opt/couplefinance/.env (created by init-env.sh, never committed).
+# Distinct from the development stack's project name (infra/docker-compose.yml): --remove-orphans never touches it.
+name: couplefinance-prod
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: couplefinance
+      POSTGRES_USER: couplefinance
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks: [internal]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U couplefinance -d couplefinance"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # Private receipt bucket (security.md section 6), served to phones only through presigned URLs.
+  minio:
+    image: bitnamilegacy/minio:2025.7.23
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?}
+      MINIO_KMS_SECRET_KEY: ${MINIO_KMS_SECRET_KEY:?}
+    volumes:
+      - minio-data:/bitnami/minio/data
+    networks: [internal, edge]
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 3s
+      retries: 20
+
+  # Upload malware scanning; uploads are refused until clamd answers (first start: a few minutes).
+  clamav:
+    image: clamav/clamav:1.4
+    restart: unless-stopped
+    volumes:
+      - clamav-data:/var/lib/clamav
+    networks: [internal]
+
+  # Outbound-only SMTP relay with DKIM (no published port).
+  postfix:
+    build: ./postfix
+    image: couplefinance-postfix:local
+    restart: unless-stopped
+    hostname: ${MAIL_HOSTNAME:?}
+    environment:
+      MAIL_DOMAIN: ${MAIL_DOMAIN:?}
+      MAIL_HOSTNAME: ${MAIL_HOSTNAME:?}
+      DKIM_SELECTOR: ${DKIM_SELECTOR:-couplefinance}
+    volumes:
+      - dkim-keys:/etc/opendkim/keys
+    networks: [internal]
+
+  backend:
+    image: couplefinance-backend:${IMAGE_TAG:?}
+    restart: unless-stopped
+    depends_on:
+      postgres: {condition: service_healthy}
+      minio: {condition: service_healthy}
+    mem_limit: 1536m
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/couplefinance
+      SPRING_DATASOURCE_USERNAME: couplefinance
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      # Behind the reverse proxy: per-IP rate limits must use the forwarded client address.
+      SERVER_FORWARD_HEADERS_STRATEGY: NATIVE
+      COUPLEFINANCE_SECURITY_JWT_SIGNING_JWK: ${JWT_SIGNING_JWK:?}
+      COUPLEFINANCE_PAGINATION_CURSOR_KEY: ${CURSOR_KEY:?}
+      COUPLEFINANCE_RECEIPT_STORAGE_ENDPOINT: http://minio:9000
+      COUPLEFINANCE_RECEIPT_STORAGE_PUBLIC_ENDPOINT: ${RECEIPT_PUBLIC_ENDPOINT:?}
+      COUPLEFINANCE_RECEIPT_STORAGE_REGION: us-east-1
+      COUPLEFINANCE_RECEIPT_STORAGE_ACCESS_KEY: ${MINIO_ROOT_USER}
+      COUPLEFINANCE_RECEIPT_STORAGE_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      COUPLEFINANCE_RECEIPT_STORAGE_PATH_STYLE: "true"
+      # Self-hosted MinIO: the bucket is created by the application on first start.
+      COUPLEFINANCE_RECEIPT_STORAGE_CREATE_BUCKET: "true"
+      COUPLEFINANCE_RECEIPT_SCANNER_HOST: clamav
+      SPRING_MAIL_HOST: postfix
+      SPRING_MAIL_PORT: "25"
+      COUPLEFINANCE_MAIL_FROM: ${MAIL_FROM:?}
+    ports:
+      # Host-local only, for the deploy health check; public traffic comes through the reverse proxy.
+      - "127.0.0.1:${BACKEND_PORT:-8091}:8080"
+    networks: [internal, edge]
+
+networks:
+  internal: {}
+  # Shared with the reverse proxy (docker network connect couplefinance-edge <proxy container>).
+  edge:
+    name: couplefinance-edge
+
+volumes:
+  postgres-data:
+  minio-data:
+  clamav-data:
+  dkim-keys:

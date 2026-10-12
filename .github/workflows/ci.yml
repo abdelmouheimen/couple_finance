@@ -5,6 +5,8 @@ on:
     branches: [main]
   push:
     branches: [main]
+  # Reused by deploy.yml: a push to develop is deployed only after this whole pipeline passes.
+  workflow_call:
 
 permissions:
   contents: read
