@@ -1,0 +1,59 @@
+databaseChangeLog:
+  - changeSet:
+      id: receipt-0002-create-receipt
+      author: couplefinance
+      comment: >
+        Receipt evidence (database-schema.md section 8.2, DOC-001). status (evidence lifecycle) and analysis_status
+        (AI processing) are separate dimensions (section 8.1). uq_receipt_household_id is the composite-FK target of
+        the child tables. ix_receipt_open_by_uploader serves the vault listing of the uploader's open receipts
+        (BR-RCP-16). The abandonment and purge indexes of section 8.2 are added with the jobs that use them.
+      changes:
+        - sql:
+            sql: |
+              CREATE TABLE receipt.receipt (
+                  id                      uuid        NOT NULL,
+                  household_id            uuid        NOT NULL,
+                  uploaded_by             uuid        NOT NULL,
+                  source_kind             text        NOT NULL,
+                  page_count              smallint    NOT NULL,
+                  total_size_bytes        integer     NOT NULL,
+                  status                  text        NOT NULL,
+                  analysis_status         text        NOT NULL,
+                  analysis_failure_reason text,
+                  manual_retry_count      smallint    NOT NULL DEFAULT 0,
+                  ai_processed            boolean     NOT NULL DEFAULT false,
+                  linked_at               timestamptz,
+                  abandoned_at            timestamptz,
+                  purge_after             timestamptz,
+                  created_at              timestamptz NOT NULL,
+                  updated_at              timestamptz NOT NULL,
+                  version                 bigint      NOT NULL DEFAULT 0,
+                  CONSTRAINT pk_receipt PRIMARY KEY (id),
+                  CONSTRAINT uq_receipt_household_id UNIQUE (household_id, id),
+                  CONSTRAINT fk_receipt_uploaded_by FOREIGN KEY (household_id, uploaded_by)
+                      REFERENCES household.household_member (household_id, user_id),
+                  CONSTRAINT ck_receipt_source_kind CHECK (source_kind IN ('IMAGES', 'PDF')),
+                  CONSTRAINT ck_receipt_status CHECK (status IN ('OPEN', 'CONFIRMED', 'ATTACHED', 'ABANDONED')),
+                  CONSTRAINT ck_receipt_analysis_status CHECK (analysis_status IN
+                      ('SKIPPED_NO_CONSENT', 'PENDING', 'RUNNING', 'SUCCEEDED', 'FAILED', 'CANCELLED')),
+                  CONSTRAINT ck_receipt_failure_reason CHECK (analysis_failure_reason IN
+                      ('PROVIDER_ERROR', 'TIMEOUT', 'SCHEMA_INVALID', 'NOT_A_RECEIPT', 'QUOTA_EXCEEDED')),
+                  CONSTRAINT ck_receipt_page_count CHECK (page_count BETWEEN 1 AND 5),
+                  CONSTRAINT ck_receipt_total_size CHECK (total_size_bytes BETWEEN 1 AND 26214400),
+                  CONSTRAINT ck_receipt_manual_retry CHECK (manual_retry_count BETWEEN 0 AND 3),
+                  CONSTRAINT ck_receipt_linked
+                      CHECK ((linked_at IS NOT NULL) = (status IN ('CONFIRMED', 'ATTACHED'))),
+                  CONSTRAINT ck_receipt_abandoned CHECK ((abandoned_at IS NOT NULL) = (status = 'ABANDONED')),
+                  CONSTRAINT ck_receipt_purge_after CHECK (status <> 'ABANDONED' OR purge_after IS NOT NULL),
+                  CONSTRAINT ck_receipt_closed_no_live_analysis
+                      CHECK (status = 'OPEN' OR analysis_status NOT IN ('PENDING', 'RUNNING')),
+                  CONSTRAINT ck_receipt_failure_iff_failed
+                      CHECK ((analysis_failure_reason IS NOT NULL) = (analysis_status = 'FAILED')),
+                  CONSTRAINT ck_receipt_no_consent_not_processed
+                      CHECK (analysis_status <> 'SKIPPED_NO_CONSENT' OR ai_processed = false)
+              );
+              CREATE INDEX ix_receipt_open_by_uploader
+                  ON receipt.receipt (household_id, uploaded_by, created_at DESC) WHERE status = 'OPEN';
+      rollback:
+        - sql:
+            sql: DROP TABLE receipt.receipt

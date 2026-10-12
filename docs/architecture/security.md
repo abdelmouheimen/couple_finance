@@ -109,13 +109,19 @@ an explicit ArchUnit exception.
 
 ## 6. Receipt files
 
-- Content type from magic bytes (Apache Tika); JPEG/PNG/HEIC/PDF only.
+- Content type from magic bytes (signature check in `receipt.domain.DocumentFormat`; no Tika needed for four
+  formats); JPEG/PNG/PDF accepted. HEIC is recognised and refused by the API (no safe server-side decoder): the app
+  converts photos to JPEG before upload (DOC-001; pending Tech Lead confirmation against BR-RCP-01).
 - Images re-encoded (drops EXIF/GPS and embedded payloads); PDFs rasterised; original PDF never served back.
+  Decoding is bounded: dimensions read before pixels (≤ 12 000 px per side, ≤ 50 Mpx), encrypted PDFs refused,
+  stored pages ≤ 3 000 px long side.
 - Private bucket; key = random UUID (no user or household data); server-side encryption.
 - Served via **presigned GET URLs valid 5 minutes**, generated after the household **and visibility** checks.
   Presigned URLs are never logged or sent to crash reporting.
 - `original_sha256` (upload bytes) and perceptual hash stored for duplicate detection (BR-RCP-14).
-- Malware scanning of uploads (ClamAV sidecar) **[proposal]**, PDFs in particular.
+- Malware scanning of every upload before decoding or storage (ClamAV `clamd` over TCP, DOC-001). Fail-closed: an
+  unreachable scanner or an error answer refuses the upload (503); nothing is stored for a rejected file.
+- Every upload and deletion is audited in `receipt.audit_event` (metadata and hashes only, never content or keys).
 - Redaction step before AI per ADR-005.
 
 ## 7. AI-specific security

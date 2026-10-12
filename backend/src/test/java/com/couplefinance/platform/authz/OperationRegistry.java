@@ -77,6 +77,18 @@ public final class OperationRegistry {
     public static Map<String, OperationFixture> defaults() {
         Map<String, OperationFixture> registry = new LinkedHashMap<>();
 
+        // Receipt vault (DOC-001): a draft is private to its uploader (BR-RCP-16), probed like PERSONAL data.
+        registry.put("listReceipts", household(s -> Call.get("/api/v1/receipts?limit=100"), false,
+                PrivacyProbes::receiptList));
+        registry.put("uploadReceipt", householdWithoutPersonalData(s -> AuthzWorld.receiptUpload(), false,
+                "creates a new draft owned by the caller and returns only that draft; it reads nothing else"));
+        registry.put("getReceipt", household(s -> Call.get("/api/v1/receipts/" + s.target().ownerReceipt()), true,
+                PrivacyProbes::receiptGet));
+        registry.put("getReceiptPageUrl", household(s -> Call.get("/api/v1/receipts/" + s.target().ownerReceipt()
+                + "/pages/1/url"), true, PrivacyProbes::receiptPageUrl));
+        registry.put("deleteReceipt", household(s -> Call.without(HttpMethod.DELETE,
+                "/api/v1/receipts/" + s.target().ownerReceipt()), true, PrivacyProbes::receiptDelete));
+
         registry.put("login", OperationFixture.publicOperation());
         registry.put("register", OperationFixture.publicOperation());
         registry.put("verifyEmail", OperationFixture.publicOperation());

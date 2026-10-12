@@ -1,0 +1,38 @@
+databaseChangeLog:
+  - changeSet:
+      id: receipt-0003-create-receipt-page
+      author: couplefinance
+      comment: >
+        Stored (re-encoded) pages of a receipt (database-schema.md section 8.3, DOC-001). storage_key is a random
+        object key carrying no user or household data. Pages are immutable. The duplicate lookup index
+        ix_receipt_page_sha is added with duplicate detection (DOC-004), which is its only query.
+      changes:
+        - sql:
+            sql: |
+              CREATE TABLE receipt.receipt_page (
+                  id              uuid        NOT NULL,
+                  receipt_id      uuid        NOT NULL,
+                  household_id    uuid        NOT NULL,
+                  position        smallint    NOT NULL,
+                  storage_key     text        NOT NULL,
+                  content_type    text        NOT NULL,
+                  size_bytes      integer     NOT NULL,
+                  width_px        integer     NOT NULL,
+                  height_px       integer     NOT NULL,
+                  original_sha256 bytea       NOT NULL,
+                  perceptual_hash bigint,
+                  created_at      timestamptz NOT NULL,
+                  CONSTRAINT pk_receipt_page PRIMARY KEY (id),
+                  CONSTRAINT fk_receipt_page_receipt FOREIGN KEY (household_id, receipt_id)
+                      REFERENCES receipt.receipt (household_id, id) ON DELETE CASCADE,
+                  CONSTRAINT uq_receipt_page_position UNIQUE (receipt_id, position),
+                  CONSTRAINT uq_receipt_page_storage_key UNIQUE (storage_key),
+                  CONSTRAINT ck_receipt_page_position CHECK (position BETWEEN 1 AND 5),
+                  CONSTRAINT ck_receipt_page_size CHECK (size_bytes BETWEEN 1 AND 10485760),
+                  CONSTRAINT ck_receipt_page_sha CHECK (octet_length(original_sha256) = 32),
+                  CONSTRAINT ck_receipt_page_content_type CHECK (content_type IN ('image/jpeg', 'image/png')),
+                  CONSTRAINT ck_receipt_page_dimensions CHECK (width_px > 0 AND height_px > 0)
+              );
+      rollback:
+        - sql:
+            sql: DROP TABLE receipt.receipt_page

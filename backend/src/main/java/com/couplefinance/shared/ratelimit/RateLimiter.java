@@ -2,6 +2,8 @@ package com.couplefinance.shared.ratelimit;
 
 import java.util.LinkedHashMap;
 import java.util.List;
+
+import org.jspecify.annotations.Nullable;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -24,7 +26,7 @@ public final class RateLimiter {
     /** The dimension a limit applies to. */
     public enum Stage { IP, USER }
 
-    private record CompiledRoute(PathPattern pattern, String profile) {}
+    private record CompiledRoute(PathPattern pattern, String profile, RateLimitProperties.Route route) {}
 
     private final RateLimitProperties properties;
     private final List<CompiledRoute> routes;
@@ -34,7 +36,7 @@ public final class RateLimiter {
         this.properties = properties;
         PathPatternParser parser = new PathPatternParser();
         this.routes = properties.routes().stream()
-                .map(route -> new CompiledRoute(parser.parse(route.pattern()), route.profile()))
+                .map(route -> new CompiledRoute(parser.parse(route.pattern()), route.profile(), route))
                 .toList();
     }
 
@@ -42,11 +44,16 @@ public final class RateLimiter {
         return properties.enabled();
     }
 
-    /** Profile applying to a request path: first matching route, else the default profile. */
+    /** Profile applying to a request path whatever its method: first matching route, else the default profile. */
     public String profileFor(String path) {
+        return profileFor(null, path);
+    }
+
+    /** Profile applying to a request: first route matching the path and the method, else the default profile. */
+    public String profileFor(@Nullable String method, String path) {
         PathContainer container = PathContainer.parsePath(path);
         return routes.stream()
-                .filter(route -> route.pattern().matches(container))
+                .filter(route -> route.pattern().matches(container) && route.route().appliesTo(method))
                 .map(CompiledRoute::profile)
                 .findFirst()
                 .orElse(RateLimitProperties.DEFAULT_PROFILE);

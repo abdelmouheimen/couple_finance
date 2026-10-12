@@ -528,6 +528,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/receipts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the receipt vault
+         * @description The caller's receipts, newest first, cursor-paginated. An open receipt is visible only to its uploader (BR-RCP-16): the partner's drafts never appear.
+         */
+        get: operations["listReceipts"];
+        put?: never;
+        /**
+         * Upload a receipt
+         * @description Stores 1-5 images (JPEG, PNG) or one PDF of at most 5 pages as a new private receipt of the caller (BR-RCP-01, BR-RCP-16): file types are checked from the bytes, files are scanned for malware, images are re-encoded without metadata and PDFs rasterised. Limits: 10 MB per file, 25 MB in total. HEIC must be converted to JPEG by the client. Nothing is sent to an AI provider. Send an Idempotency-Key to retry safely (same key and files: original response).
+         */
+        post: operations["uploadReceipt"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/receipts/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read a receipt
+         * @description Metadata of a visible receipt. Unknown, other household and partner drafts are 404.
+         */
+        get: operations["getReceipt"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a receipt
+         * @description Deletes one of the caller's open receipts and its stored pages. The deletion is audited. A receipt linked to an expense cannot be deleted here (409). Rejected on a dissolved household.
+         */
+        delete: operations["deleteReceipt"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/receipts/{id}/pages/{position}/url": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a page preview/download URL
+         * @description A presigned GET URL of one stored page (re-encoded JPEG), valid 5 minutes, issued after the household and visibility checks. The response is never cached.
+         */
+        get: operations["getReceiptPageUrl"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1090,6 +1158,64 @@ export interface components {
             title: string;
             /** @example about:blank */
             type?: string;
+        };
+        Receipt: {
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: uuid */
+            id: string;
+            pages: components["schemas"]["ReceiptPage"][];
+            /**
+             * @description IMAGES (1-5 photos) or PDF (rasterised into page images).
+             * @enum {string}
+             */
+            sourceKind: "IMAGES" | "PDF";
+            /**
+             * @description Combined lifecycle state. UPLOADED: stored, not analysed.
+             * @enum {string}
+             */
+            state:
+                | "UPLOADED"
+                | "QUEUED"
+                | "ANALYSING"
+                | "READY_FOR_REVIEW"
+                | "FAILED"
+                | "CONFIRMED"
+                | "ATTACHED"
+                | "ABANDONED";
+            /**
+             * Format: int32
+             * @description Size of the uploaded files, in bytes.
+             */
+            totalSizeBytes: number;
+            /** Format: int64 */
+            version: number;
+        };
+        ReceiptList: {
+            items: components["schemas"]["Receipt"][];
+            /** @description Opaque cursor of the next page, absent on the last page. */
+            nextCursor?: string;
+        };
+        ReceiptPage: {
+            contentType: string;
+            /** Format: int32 */
+            heightPx: number;
+            /** Format: int32 */
+            position: number;
+            /** Format: int32 */
+            sizeBytes: number;
+            /** Format: int32 */
+            widthPx: number;
+        };
+        ReceiptPageUrl: {
+            contentType: string;
+            /** Format: date-time */
+            expiresAt: string;
+            /**
+             * Format: uri
+             * @description Presigned GET URL, valid 5 minutes.
+             */
+            url: string;
         };
         RefreshRequest: {
             /** @description The opaque refresh token received at login or at the previous refresh. */
@@ -3014,6 +3140,306 @@ export interface operations {
                 };
             };
             /** @description HOUSEHOLD_NOT_FOUND or RESOURCE_NOT_FOUND (unknown category or category of another household) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listReceipts: {
+        parameters: {
+            query?: {
+                /** @description Page size, default 20, capped at 100. */
+                limit?: number;
+                /** @description Opaque cursor of the previous page. */
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of receipts */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReceiptList"];
+                };
+            };
+            /** @description INVALID_CURSOR or INVALID_LIMIT */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description AUTHENTICATION_REQUIRED */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description HOUSEHOLD_NOT_FOUND */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    uploadReceipt: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Client-generated key (1-100 printable ASCII characters). */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "multipart/form-data": {
+                    /** @description 1-5 images or one PDF, in page order. */
+                    files: string[];
+                };
+            };
+        };
+        responses: {
+            /** @description Receipt stored */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Receipt"];
+                };
+            };
+            /** @description VALIDATION_FAILED, RECEIPT_FILE_COUNT_INVALID, RECEIPT_FORMAT_MIXED, RECEIPT_PDF_PAGE_COUNT_INVALID, RECEIPT_FILE_UNREADABLE or IDEMPOTENCY_KEY_INVALID */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description AUTHENTICATION_REQUIRED */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description EMAIL_NOT_VERIFIED or HOUSEHOLD_READ_ONLY */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description HOUSEHOLD_NOT_FOUND */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description REQUEST_IN_PROGRESS */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description RECEIPT_FILE_TOO_LARGE, RECEIPT_TOO_LARGE or PAYLOAD_TOO_LARGE */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description RECEIPT_FORMAT_UNSUPPORTED */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description RECEIPT_FILE_REJECTED (malware) or IDEMPOTENCY_KEY_REUSED */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description RECEIPT_SCAN_UNAVAILABLE */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getReceipt: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The receipt */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Receipt"];
+                };
+            };
+            /** @description AUTHENTICATION_REQUIRED */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description HOUSEHOLD_NOT_FOUND or RECEIPT_NOT_FOUND */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    deleteReceipt: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Receipt deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description AUTHENTICATION_REQUIRED */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description EMAIL_NOT_VERIFIED or HOUSEHOLD_READ_ONLY */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description HOUSEHOLD_NOT_FOUND or RECEIPT_NOT_FOUND */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description RECEIPT_NOT_DELETABLE */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getReceiptPageUrl: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                position: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The page URL */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReceiptPageUrl"];
+                };
+            };
+            /** @description AUTHENTICATION_REQUIRED */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description HOUSEHOLD_NOT_FOUND, RECEIPT_NOT_FOUND or RECEIPT_PAGE_NOT_FOUND */
             404: {
                 headers: {
                     [name: string]: unknown;

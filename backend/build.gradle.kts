@@ -22,10 +22,12 @@ repositories {
 
 val springModulithVersion = "2.1.1"
 val springdocVersion = "3.1.1"
+val awsSdkVersion = "2.31.1"
 
 dependencyManagement {
     imports {
         mavenBom("org.springframework.modulith:spring-modulith-bom:$springModulithVersion")
+        mavenBom("software.amazon.awssdk:bom:$awsSdkVersion")
     }
 }
 
@@ -45,6 +47,15 @@ dependencies {
     implementation("com.bucket4j:bucket4j_jdk17-core:8.20.0")
     // Argon2id password hashing: Spring Security's Argon2PasswordEncoder needs the Bouncy Castle primitives.
     implementation("org.bouncycastle:bcprov-jdk18on:1.82")
+    // Receipt documents (DOC-001, security.md §6): S3-compatible private object storage with server-side
+    // encryption, through the receipt module's DocumentStorage port only. URL-connection HTTP client: no Netty.
+    implementation("software.amazon.awssdk:s3") {
+        exclude(group = "software.amazon.awssdk", module = "netty-nio-client")
+        exclude(group = "software.amazon.awssdk", module = "apache-client")
+    }
+    implementation("software.amazon.awssdk:url-connection-client")
+    // Safe PDF handling (DOC-001): receipt PDFs are rasterised to images, never stored or served as PDF.
+    implementation("org.apache.pdfbox:pdfbox:3.0.5")
     runtimeOnly("org.postgresql:postgresql")
 
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")

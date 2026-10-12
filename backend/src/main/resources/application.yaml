@@ -34,6 +34,13 @@ spring:
       - org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration
   lifecycle:
     timeout-per-shutdown-phase: 20s
+  servlet:
+    multipart:
+      # Receipt uploads (BR-RCP-01): 10 MB per file, 25 MB per receipt (+ multipart overhead). Parts are kept in
+      # memory (no temp files on disk); the receipt module re-checks every limit on the bytes.
+      max-file-size: 10MB
+      max-request-size: 26MB
+      file-size-threshold: 26MB
   jackson:
     deserialization:
       # Unknown JSON properties are rejected (security.md §5): a client can never smuggle e.g. a user id.
@@ -73,16 +80,37 @@ couplefinance:
       auth-refresh:
         ip: {capacity: 60, period: 1m}
         user: {capacity: 20, period: 15m}
-    # Stricter profiles (invitation redemption, receipt upload) are added with those features.
+      # Receipt upload (security.md section 5): costly (scan, decode, storage). Deploy-time values.
+      receipt-upload:
+        ip: {capacity: 60, period: 1h}
+        user: {capacity: 30, period: 1h}
+    # Stricter profile for invitation redemption is added with that feature.
     routes:
       # First match wins: the refresh route precedes the generic authentication pattern.
       - {pattern: "/api/v1/auth/refresh", profile: auth-refresh}
       - {pattern: "/api/v1/auth/**", profile: auth}
       - {pattern: "/api/v1/households/me/invitations/**", profile: invitations}
+      - {pattern: "/api/v1/receipts", profile: receipt-upload, methods: [POST]}
   pagination:
     # COUPLEFINANCE_PAGINATION_CURSOR_KEY: base64 of 32 random bytes (e.g. `openssl rand -base64 32`).
     # Unset = random per-process key (cursors do not survive restarts or span instances): set it in production.
     cursor-key:
+  # Receipt documents (DOC-001, security.md section 6). Set per environment:
+  #   COUPLEFINANCE_RECEIPT_STORAGE_ENDPOINT / _PUBLIC_ENDPOINT / _REGION / _BUCKET   S3-compatible private bucket
+  #   COUPLEFINANCE_RECEIPT_STORAGE_ACCESS_KEY / _SECRET_KEY   secrets, never committed (unset = AWS default chain)
+  #   COUPLEFINANCE_RECEIPT_STORAGE_ENCRYPTION (AES256 | aws:kms) and _KMS_KEY_ID
+  #   COUPLEFINANCE_RECEIPT_SCANNER_HOST / _PORT   ClamAV daemon (clamd); uploads are refused when it is unreachable
+  receipt:
+    storage:
+      region: eu-west-3
+      bucket: couplefinance-receipts
+      path-style: false
+      encryption: AES256
+      create-bucket: false
+    scanner:
+      host: localhost
+      port: 3310
+      timeout: 30s
   household:
     defaults:
       currency: EUR

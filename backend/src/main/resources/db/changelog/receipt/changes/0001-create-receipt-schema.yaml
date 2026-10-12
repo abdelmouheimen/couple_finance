@@ -1,0 +1,10 @@
+databaseChangeLog:
+  - changeSet:
+      id: receipt-0001-create-receipt-schema
+      author: couplefinance
+      changes:
+        - sql:
+            sql: CREATE SCHEMA IF NOT EXISTS receipt
+      rollback:
+        - sql:
+            sql: DROP SCHEMA IF EXISTS receipt

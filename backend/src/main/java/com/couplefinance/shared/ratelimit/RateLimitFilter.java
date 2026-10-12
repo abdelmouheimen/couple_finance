@@ -55,7 +55,7 @@ public final class RateLimitFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
         Optional<String> key = key(request);
         if (key.isPresent()) {
-            String profile = limiter.profileFor(request.getRequestURI());
+            String profile = limiter.profileFor(request.getMethod(), request.getRequestURI());
             Optional<Long> retryAfter = limiter.tryConsume(stage, profile, key.get());
             if (retryAfter.isPresent()) {
                 logger.debug("Rate limit exceeded: stage=" + stage + " profile=" + profile);
