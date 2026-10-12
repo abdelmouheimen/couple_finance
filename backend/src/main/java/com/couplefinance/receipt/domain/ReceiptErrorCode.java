@@ -34,6 +34,16 @@ public enum ReceiptErrorCode implements ErrorCode {
     RECEIPT_ANALYSIS_NOT_ALLOWED(HttpStatus.CONFLICT),
     /** BR-RCP-17: a failed analysis can be re-run at most three times. */
     RECEIPT_ANALYSIS_RETRY_LIMIT(HttpStatus.CONFLICT),
+    /** BR-RCP-15: a receipt is confirmed or attached exactly once. */
+    RECEIPT_ALREADY_CONFIRMED(HttpStatus.CONFLICT),
+    /** The receipt changed (e.g. a new analysis) since the member displayed it: review again. */
+    RECEIPT_VERSION_CONFLICT(HttpStatus.CONFLICT),
+    /** BR-RCP-10: the acknowledged total and date must equal the submitted expense values. */
+    RECEIPT_ACKNOWLEDGEMENT_MISMATCH(HttpStatus.BAD_REQUEST),
+    /** BR-RCP-10: every field whose status is not OK must be resolved individually. */
+    RECEIPT_FIELD_UNRESOLVED(HttpStatus.BAD_REQUEST),
+    /** A resolution names an unknown field or is too long. */
+    RECEIPT_RESOLUTION_INVALID(HttpStatus.BAD_REQUEST),
     /** Only an open receipt can be deleted from the vault; a linked one is removed from its expense. */
     RECEIPT_NOT_DELETABLE(HttpStatus.CONFLICT);
 

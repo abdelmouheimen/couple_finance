@@ -92,6 +92,9 @@ public class Expense {
     /** The original expense of a linked REFUND (BR-EXP-03); {@code null} otherwise. */
     private UUID refundOfExpenseId;
 
+    /** The receipt this expense was confirmed from or that was attached to it (BR-RCP-15); at most one. */
+    private UUID receiptId;
+
     @Enumerated(EnumType.STRING)
     private ExpenseSource source;
 
@@ -357,6 +360,37 @@ public class Expense {
     }
 
     /**
+     * Marks this new expense as confirmed from a receipt (BR-RCP-02, BR-RCP-15): source RECEIPT and the single link
+     * to its evidence. Only at creation, before the first save.
+     */
+    public void confirmedFrom(UUID receipt) {
+        Objects.requireNonNull(receipt, "receipt");
+        if (version != null || receiptId != null) {
+            throw new IllegalStateException("only a new expense can be confirmed from a receipt");
+        }
+        this.receiptId = receipt;
+        this.source = ExpenseSource.RECEIPT;
+    }
+
+    /**
+     * Attaches a receipt as evidence of this existing expense (BR-RCP-14, BR-RCP-15). Same permission as an edit
+     * (BR-EXP-09): any member for a SHARED expense, only the owner for a PERSONAL one (partner: not found). Amounts,
+     * source and every other value are untouched: a receipt never changes an expense.
+     */
+    public void attachReceipt(UUID receipt, UserId editor) {
+        Objects.requireNonNull(receipt, "receipt");
+        Objects.requireNonNull(editor, "editor");
+        if (ownerUserId != null && !ownerUserId.equals(editor.value())) {
+            throw new ApplicationException(ExpenseErrorCode.EXPENSE_NOT_FOUND, "The expense was not found.");
+        }
+        if (receiptId != null) {
+            throw new ApplicationException(ExpenseErrorCode.EXPENSE_RECEIPT_ALREADY_LINKED,
+                    "This expense already has a receipt.");
+        }
+        this.receiptId = receipt;
+    }
+
+    /**
      * Edits this expense (BR-EXP-09): full replacement of amount, date, items, payer, sharing type, merchant and
      * note. Kind, refund link, source and creator never change. The caller has loaded the row under a lock, scoped
      * by household and visibility, and has checked the version (BR-EXP-12), the payer membership and the
@@ -594,6 +628,10 @@ public class Expense {
 
     public ExpenseSource source() {
         return source;
+    }
+
+    public @Nullable UUID receiptId() {
+        return receiptId;
     }
 
     public Instant createdAt() {

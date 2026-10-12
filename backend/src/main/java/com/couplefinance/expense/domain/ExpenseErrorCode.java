@@ -36,6 +36,8 @@ public enum ExpenseErrorCode implements ErrorCode {
     EXPENSE_REFUND_EXCEEDS_ORIGINAL(HttpStatus.BAD_REQUEST),
     /** The original of a refund does not exist, is deleted, or is not visible to the caller (404). */
     EXPENSE_NOT_FOUND(HttpStatus.NOT_FOUND),
+    /** BR-RCP-15: an expense holds at most one receipt. */
+    EXPENSE_RECEIPT_ALREADY_LINKED(HttpStatus.CONFLICT),
     /** BR-EXP-03: an expense with live refunds cannot be deleted. */
     EXPENSE_HAS_LIVE_REFUNDS(HttpStatus.CONFLICT),
     /** BR-EXP-09: only the payer can switch an expense between SHARED and PERSONAL. */

@@ -217,6 +217,34 @@ final class PrivacyProbes {
         assertThat(world.get(s.owner(), uri)).as("the partner delete had no effect").hasStatus(HttpStatus.OK);
     }
 
+    static void receiptReview(AuthzWorld world, SeededHousehold s) {
+        String uri = "/api/v1/receipts/" + s.ownerReceipt() + "/review";
+        MvcTestResult result = world.get(s.partner(), uri);
+        assertThat(result).hasStatus(HttpStatus.NOT_FOUND);
+        assertNoPrivateData(s, AuthzWorld.text(result), uri);
+    }
+
+    static void receiptConfirm(AuthzWorld world, SeededHousehold s) {
+        String uri = "/api/v1/receipts/" + s.ownerReceipt() + "/confirm";
+        MvcTestResult result = world.send(s.partner(), Call.with(HttpMethod.POST, uri,
+                AuthzWorld.confirmBody(s.partner())));
+        assertThat(result).hasStatus(HttpStatus.NOT_FOUND);
+        assertNoPrivateData(s, AuthzWorld.text(result), uri);
+        assertThat(world.body(world.get(s.owner(), "/api/v1/receipts/" + s.ownerReceipt())).get("state").asString())
+                .as("the partner confirmation had no effect").isEqualTo("UPLOADED");
+    }
+
+    static void receiptAttach(AuthzWorld world, SeededHousehold s) {
+        String uri = "/api/v1/receipts/" + s.ownerReceipt() + "/attach";
+        // Neither the owner's draft (as the partner) nor the owner's PERSONAL expense (as a target) is reachable.
+        MvcTestResult asPartner = world.send(s.partner(), Call.with(HttpMethod.POST, uri,
+                "{\"expenseId\":\"" + s.sharedExpense() + "\",\"version\":0}"));
+        assertThat(asPartner).hasStatus(HttpStatus.NOT_FOUND);
+        assertNoPrivateData(s, AuthzWorld.text(asPartner), uri);
+        assertThat(world.body(world.get(s.owner(), "/api/v1/receipts/" + s.ownerReceipt())).get("state").asString())
+                .isEqualTo("UPLOADED");
+    }
+
     static void receiptAnalysis(AuthzWorld world, SeededHousehold s) {
         String uri = "/api/v1/receipts/" + s.ownerReceipt() + "/analysis";
         MvcTestResult result = world.send(s.partner(), Call.without(HttpMethod.POST, uri));

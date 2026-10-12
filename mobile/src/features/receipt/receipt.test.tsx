@@ -456,6 +456,40 @@ describe("receipt analysis state and retry (DOC-003, BR-RCP-17, BR-AI-05)", () =
     });
 });
 
+describe("receipt and expense links (DOC-004)", () => {
+    const pageRoute = { [`GET /api/v1/receipts/${ID}/pages/1/url`]: () => json(200, pageUrl) };
+
+    test("an open receipt leads to its review before any expense exists", async () => {
+        installApi({
+            ...pageRoute,
+            [`GET /api/v1/receipts/${ID}`]: () => json(200, receipt({ state: "READY_FOR_REVIEW" })),
+        });
+        await mount(<ReceiptDetailScreen id={ID} />);
+
+        await fireEvent.press(
+            await screen.findByRole("button", { name: "Vérifier et créer la dépense" }),
+        );
+
+        expect(mockRouter.push).toHaveBeenCalledWith(`/receipts/review/${ID}`);
+        expect(screen.queryByRole("button", { name: "Voir la dépense" })).toBeNull();
+    });
+
+    test("a confirmed receipt links to its expense and is no longer reviewable", async () => {
+        installApi({
+            ...pageRoute,
+            [`GET /api/v1/receipts/${ID}`]: () =>
+                json(200, receipt({ state: "CONFIRMED", expenseId: "e-1" })),
+        });
+        await mount(<ReceiptDetailScreen id={ID} />);
+
+        await fireEvent.press(await screen.findByRole("button", { name: "Voir la dépense" }));
+
+        expect(mockRouter.push).toHaveBeenCalledWith("/expense/e-1");
+        expect(screen.getByText(/justificatif d'une dépense/)).toBeTruthy();
+        expect(screen.queryByRole("button", { name: "Vérifier et créer la dépense" })).toBeNull();
+    });
+});
+
 describe("pure helpers", () => {
     test("the multipart body carries one files part per page, in order", () => {
         const body = receiptFormData([photo(1), photo(2)]);

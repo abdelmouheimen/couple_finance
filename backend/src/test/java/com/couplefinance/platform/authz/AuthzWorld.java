@@ -55,6 +55,14 @@ public final class AuthzWorld {
                 + (note == null ? "" : ",\"note\":\"" + note + "\"") + "}";
     }
 
+    /** A complete, valid confirmation of a receipt in version 0, paid by {@code paidBy}. */
+    public static String confirmBody(UUID paidBy) {
+        String amount = "{\"amount\":\"" + SeededHousehold.SHARED_AMOUNT + "\",\"currency\":\"EUR\"}";
+        return "{\"version\":0,\"amount\":" + amount + ",\"date\":\"" + EXPENSE_DATE + "\",\"categoryId\":\""
+                + SeededHousehold.SYSTEM_GROCERIES + "\",\"paidByUserId\":\"" + paidBy
+                + "\",\"acknowledgedTotal\":" + amount + ",\"acknowledgedDate\":\"" + EXPENSE_DATE + "\"}";
+    }
+
     public UUID newUser() {
         return users.active();
     }

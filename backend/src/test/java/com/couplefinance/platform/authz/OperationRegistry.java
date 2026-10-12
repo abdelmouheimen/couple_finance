@@ -92,6 +92,17 @@ public final class OperationRegistry {
         registry.put("requestReceiptAnalysis", household(s -> Call.without(HttpMethod.POST,
                 "/api/v1/receipts/" + s.target().ownerReceipt() + "/analysis"), true, PrivacyProbes::receiptAnalysis));
 
+        // Review and confirmation (DOC-004): uploader only while the receipt is open (BR-RCP-16).
+        registry.put("getReceiptReview", household(s -> Call.get("/api/v1/receipts/" + s.target().ownerReceipt()
+                + "/review"), true, PrivacyProbes::receiptReview));
+        registry.put("confirmReceipt", household(s -> Call.with(HttpMethod.POST,
+                "/api/v1/receipts/" + s.target().ownerReceipt() + "/confirm", AuthzWorld.confirmBody(s.caller())),
+                true, PrivacyProbes::receiptConfirm));
+        registry.put("attachReceipt", household(s -> Call.with(HttpMethod.POST,
+                "/api/v1/receipts/" + s.target().ownerReceipt() + "/attach",
+                "{\"expenseId\":\"" + s.target().sharedExpense() + "\",\"version\":0}"), true,
+                PrivacyProbes::receiptAttach));
+
         // AI consents (DOC-003, BR-AI-05): the caller's own decisions only, never another user's.
         registry.put("listAiConsents", authenticated(s -> Call.get("/api/v1/me/ai-consents")));
         registry.put("decideAiConsent", authenticated(s -> Call.with(HttpMethod.PUT,

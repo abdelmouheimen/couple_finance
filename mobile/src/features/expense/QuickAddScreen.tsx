@@ -25,9 +25,10 @@ const MODES: readonly { value: Mode; label: string }[] = [
 
 /**
  * "Ajouter une dépense": Scanner / Manuel / Importer, as in the approved design. Manual entry is the
- * keyboard-first quick add (amount -> category -> Save, approved defaults prefilled). It opens on
- * manual entry for as long as receipt analysis is not available (the design default is "Scanner"): a scanned
- * receipt is stored in the vault, but the expense must still be entered manually.
+ * keyboard-first quick add (amount -> category -> Save, approved defaults prefilled). It still opens on
+ * manual entry (the design default is "Scanner"): switching the default entry mode is a product decision left to
+ * the Tech Lead. A scanned or imported receipt is stored in the vault, analysed when the member consented, and
+ * becomes an expense only through its review ("Vérifier et créer la dépense").
  */
 export function QuickAddScreen({ now }: { now?: () => Date }) {
     const router = useRouter();

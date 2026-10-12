@@ -46,6 +46,11 @@ export function errorTarget(error: unknown): Target {
 interface Props {
     /** Present when editing. */
     expense?: Expense | undefined;
+    /**
+     * Proposed values of a NEW expense (receipt review): they prefill the form and every field is shown, so the
+     * member checks each one. They are proposals only; nothing is saved until the member submits.
+     */
+    initial?: Partial<ExpenseFormValues> | undefined;
     currency: string;
     timezone: string;
     categories: readonly Category[];
@@ -61,6 +66,7 @@ interface Props {
 /** Quick-add / edit form: amount first (autofocused), then category chips, then Save. */
 export function ExpenseForm({
     expense,
+    initial,
     currency,
     timezone,
     categories,
@@ -84,6 +90,7 @@ export function ExpenseForm({
                   note: "",
                   // Approved quick-add defaults: SHARED, today (household timezone), payer = me.
                   sharingType: "SHARED",
+                  ...initial,
               },
     );
     const [more, setMore] = useState(false);
@@ -93,7 +100,7 @@ export function ExpenseForm({
         categoryId: string;
         source: string;
     } | null>(null);
-    const showAll = editing || more;
+    const showAll = editing || more || initial !== undefined;
     const singleItem = !editing || isSingleItem(expense);
     const pickable = selectableCategories(
         categories,

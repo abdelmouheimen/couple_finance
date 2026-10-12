@@ -46,6 +46,9 @@ function analysisMessage(receipt: Receipt): string | null {
             return strings.receipt.analysisReady;
         case "UPLOADED":
             return strings.receipt.analysisNeedsConsent;
+        case "CONFIRMED":
+        case "ATTACHED":
+            return strings.receipt.linkedNotice;
         case "FAILED":
             return `${
                 strings.receipt.failure[receipt.analysisFailureReason ?? ""] ??
@@ -233,8 +236,22 @@ export function ReceiptDetailScreen({ id }: { id: string }) {
                     {actionError}
                 </Text>
             ) : null}
+            {!readOnly && isOpenReceipt(data) ? (
+                <Button
+                    size="lg"
+                    label={strings.receipt.reviewAction}
+                    onPress={() => router.push(`/receipts/review/${id}`)}
+                />
+            ) : null}
+            {data.expenseId ? (
+                <Button
+                    label={strings.receipt.viewExpense}
+                    onPress={() => router.push(`/expense/${data.expenseId}`)}
+                />
+            ) : null}
             {canAnalyse ? (
                 <Button
+                    variant="outline"
                     label={
                         data.state === "FAILED"
                             ? strings.receipt.retryAnalysis

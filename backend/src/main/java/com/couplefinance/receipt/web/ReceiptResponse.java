@@ -24,7 +24,9 @@ record ReceiptResponse(
         @Schema(description = "Size of the uploaded files, in bytes.") int totalSizeBytes,
         List<Page> pages,
         Instant createdAt,
-        long version) {
+        long version,
+        @Schema(description = "The expense this receipt is evidence of (CONFIRMED or ATTACHED).",
+                requiredMode = Schema.RequiredMode.NOT_REQUIRED) @Nullable UUID expenseId) {
 
     @Schema(name = "ReceiptPage", requiredProperties = {"position", "contentType", "sizeBytes", "widthPx", "heightPx"})
     record Page(int position, String contentType, int sizeBytes, int widthPx, int heightPx) {
@@ -35,6 +37,6 @@ record ReceiptResponse(
                 view.manualRetriesLeft(), view.totalSizeBytes(),
                 view.pages().stream().map(p -> new Page(p.position(), p.contentType(), p.sizeBytes(), p.widthPx(),
                         p.heightPx())).toList(),
-                view.createdAt(), view.version());
+                view.createdAt(), view.version(), view.expenseId());
     }
 }

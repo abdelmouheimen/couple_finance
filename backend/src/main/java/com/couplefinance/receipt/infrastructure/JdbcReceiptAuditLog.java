@@ -43,6 +43,16 @@ class JdbcReceiptAuditLog implements ReceiptAuditLog {
         insert(receipt, actor, "DELETE", describe(receipt, false));
     }
 
+    @Override
+    public void linked(Receipt receipt, UserId actor, String action) {
+        Map<String, Map<String, Object>> changes = new LinkedHashMap<>();
+        Map<String, Object> status = new LinkedHashMap<>();
+        status.put("old", receipt.status().name());
+        status.put("new", "CONFIRM".equals(action) ? "CONFIRMED" : "ATTACHED");
+        changes.put("status", status);
+        insert(receipt, actor, action, changes);
+    }
+
     private Map<String, Map<String, Object>> describe(Receipt receipt, boolean created) {
         Map<String, Map<String, Object>> changes = new LinkedHashMap<>();
         put(changes, "sourceKind", receipt.sourceKind().name(), created);
