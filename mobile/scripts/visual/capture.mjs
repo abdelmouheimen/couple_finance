@@ -46,6 +46,22 @@ const REFERENCE_SCREENS = {
     settings: { x: 1335, y: 12, w: 199, h: 686 },
 };
 
+/** A receipt-like placeholder page for the presigned-URL route (not a real receipt). */
+function receiptSvg() {
+    const lines = Array.from(
+        { length: 14 },
+        (_, i) =>
+            `<rect x="60" y="${180 + i * 70}" width="${i % 3 === 0 ? 520 : 380}" height="22" fill="#4b5563"/>` +
+            `<rect x="900" y="${180 + i * 70}" width="180" height="22" fill="#4b5563"/>`,
+    ).join("");
+    return (
+        `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="2000" viewBox="0 0 1200 2000">` +
+        `<rect width="1200" height="2000" fill="#f3f4f6"/><rect x="60" y="60" width="520" height="60" fill="#111827"/>` +
+        lines +
+        `</svg>`
+    );
+}
+
 function json(body, status = 200) {
     return {
         status,
@@ -73,6 +89,16 @@ function apiResponse(url) {
     if (path.startsWith("/api/v1/analytics/periods/")) return json(fx.periodAnalytics(scope));
     if (path === "/api/v1/expenses") return json(fx.expensePage(scope));
     if (path.startsWith("/api/v1/budgets/")) return json(fx.budget);
+    const pageUrl = /^\/api\/v1\/receipts\/([^/]+)\/pages\/(\d+)\/url$/.exec(path);
+    if (pageUrl) return json(fx.receiptPageUrl(pageUrl[1], Number(pageUrl[2])));
+    const receiptId = /^\/api\/v1\/receipts\/([^/]+)$/.exec(path);
+    if (receiptId) {
+        const found = fx.receipts.items.find((r) => r.id === receiptId[1]);
+        return found
+            ? json(found)
+            : json({ status: 404, code: "RECEIPT_NOT_FOUND", title: "x" }, 404);
+    }
+    if (path === "/api/v1/receipts") return json(fx.receipts);
     return json({ status: 404, code: "NOT_FOUND", title: "Not found" }, 404);
 }
 
@@ -130,6 +156,10 @@ async function main() {
     const page = await context.newPage();
     await page.clock.setFixedTime(new Date("2026-10-12T10:00:00+02:00"));
     await page.route(`${API}/**`, (route) => route.fulfill(apiResponse(route.request().url())));
+    // Presigned page URLs: a generated receipt-like image (the real storage is private).
+    await page.route(`${fx.STORAGE}/**`, (route) =>
+        route.fulfill({ status: 200, contentType: "image/svg+xml", body: receiptSvg() }),
+    );
     const errors = [];
     page.on("pageerror", (e) => errors.push(String(e)));
     page.on("console", (m) => {
@@ -224,6 +254,18 @@ async function main() {
         profile: page.getByText("Profil"),
         about: page.getByText("À propos"),
         nav,
+    });
+    await page.getByText("Tickets").first().click();
+    await shoot("07-receipt-vault", {
+        title: page.getByRole("heading", { name: "Tickets" }),
+        filter: page.getByRole("radiogroup").first(),
+        firstRow: page.locator('[data-testid^="receipt-row-"]').first(),
+    });
+    await page.locator('[data-testid^="receipt-row-"]').first().click();
+    await page.getByTestId("receipt-page-image").waitFor();
+    await shoot("08-receipt-detail", {
+        title: page.getByText("Ticket", { exact: true }).first(),
+        image: page.getByTestId("receipt-page-image"),
     });
     // Receipt review: design preview (no receipt API yet; sample values, nothing is sent).
     await page.goto(`${BASE}/design-preview?screen=review`);

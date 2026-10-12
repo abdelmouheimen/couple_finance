@@ -24,7 +24,10 @@ session.onSignedOut(() => {
     pendingEmail.clear();
 });
 
+/** Authenticated fetch (token + single refresh retry); also used directly for multipart receipt uploads. */
+export const authedFetch = createAuthedFetch(session, (request) => baseFetch(request));
+
 export const api = createClient<paths>({
     baseUrl: appConfig.apiBaseUrl,
-    fetch: createAuthedFetch(session, (request) => baseFetch(request)),
+    fetch: authedFetch,
 });

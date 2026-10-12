@@ -158,3 +158,40 @@ export const budget = {
         limit(CAT.HOUSING, "300.00", "0.00", "300.00", "0.0"),
     ],
 };
+
+/** Receipt vault (DOC-002): metadata only; page images are served by the storage route of the harness. */
+const receiptPage = (position) => ({
+    position,
+    contentType: "image/jpeg",
+    sizeBytes: 182000,
+    widthPx: 1200,
+    heightPx: 2000,
+});
+export const receipts = {
+    items: [
+        {
+            id: "01920000-0000-7000-8000-0000000d0001",
+            sourceKind: "IMAGES",
+            state: "UPLOADED",
+            totalSizeBytes: 364000,
+            pages: [receiptPage(1), receiptPage(2)],
+            createdAt: "2026-10-04T12:32:00Z",
+            version: 0,
+        },
+        {
+            id: "01920000-0000-7000-8000-0000000d0002",
+            sourceKind: "PDF",
+            state: "UPLOADED",
+            totalSizeBytes: 98000,
+            pages: [receiptPage(1)],
+            createdAt: "2026-10-01T08:10:00Z",
+            version: 0,
+        },
+    ],
+};
+export const STORAGE = "http://localhost:9000";
+export const receiptPageUrl = (id, position) => ({
+    url: `${STORAGE}/couplefinance-receipts/receipts/${id}-${position}?X-Amz-Expires=300&X-Amz-Signature=visual`,
+    expiresAt: "2026-10-12T08:05:00Z",
+    contentType: "image/jpeg",
+});
