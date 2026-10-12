@@ -183,6 +183,40 @@ final class PrivacyProbes {
     }
 
     /** The request URI is echoed in the Problem {@code instance}: it is the caller's own input, not a leak. */
+    // ------------------------------------------------------------------ receipts (BR-RCP-16)
+
+    static void receiptList(AuthzWorld world, SeededHousehold s) {
+        JsonNode own = world.body(world.get(s.owner(), "/api/v1/receipts?limit=100"));
+        assertThat(own.get("items")).anySatisfy(item ->
+                assertThat(item.get("id").asString()).isEqualTo(s.ownerReceipt().toString()));
+        MvcTestResult result = world.get(s.partner(), "/api/v1/receipts?limit=100");
+        assertThat(result).hasStatus(HttpStatus.OK);
+        assertNoPrivateData(s, AuthzWorld.text(result), "/api/v1/receipts");
+    }
+
+    static void receiptGet(AuthzWorld world, SeededHousehold s) {
+        String uri = "/api/v1/receipts/" + s.ownerReceipt();
+        MvcTestResult result = world.get(s.partner(), uri);
+        assertThat(result).hasStatus(HttpStatus.NOT_FOUND);
+        assertNoPrivateData(s, AuthzWorld.text(result), uri);
+    }
+
+    static void receiptPageUrl(AuthzWorld world, SeededHousehold s) {
+        String uri = "/api/v1/receipts/" + s.ownerReceipt() + "/pages/1/url";
+        MvcTestResult result = world.get(s.partner(), uri);
+        assertThat(result).hasStatus(HttpStatus.NOT_FOUND);
+        assertThat(AuthzWorld.text(result)).doesNotContain("X-Amz-Signature");
+        assertNoPrivateData(s, AuthzWorld.text(result), uri);
+    }
+
+    static void receiptDelete(AuthzWorld world, SeededHousehold s) {
+        String uri = "/api/v1/receipts/" + s.ownerReceipt();
+        MvcTestResult result = world.send(s.partner(), Call.without(HttpMethod.DELETE, uri));
+        assertThat(result).hasStatus(HttpStatus.NOT_FOUND);
+        assertNoPrivateData(s, AuthzWorld.text(result), uri);
+        assertThat(world.get(s.owner(), uri)).as("the partner delete had no effect").hasStatus(HttpStatus.OK);
+    }
+
     static void assertNoPrivateData(SeededHousehold s, String responseText, String requestUri) {
         String text = responseText.replace(requestUri, "");
         for (String marker : s.privateMarkers()) {

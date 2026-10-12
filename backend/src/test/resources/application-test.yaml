@@ -30,6 +30,9 @@ couplefinance:
       auth-refresh:
         ip: {capacity: 1000000, period: 1h}
         user: {capacity: 25, period: 1h}
+      receipt-upload:
+        ip: {capacity: 1000000, period: 1h}
+        user: {capacity: 1000000, period: 1h}
       tight-ip:
         ip: {capacity: 3, period: 1h}
         user: {capacity: 1000, period: 1h}
@@ -41,5 +44,6 @@ couplefinance:
       - {pattern: "/api/v1/households/me/invitations/**", profile: invitations}
       - {pattern: "/api/v1/auth/refresh", profile: auth-refresh}
       - {pattern: "/api/v1/auth/**", profile: auth}
+      - {pattern: "/api/v1/receipts", profile: receipt-upload, methods: [POST]}
       - {pattern: "/test-support/ratelimit/ip/**", profile: tight-ip}
       - {pattern: "/test-support/ratelimit/user/**", profile: tight-user}

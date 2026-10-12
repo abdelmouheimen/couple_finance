@@ -20,7 +20,7 @@ class RateLimiterTest {
         Limit many = new Limit(1000, Duration.ofHours(1));
         return new RateLimiter(new RateLimitProperties(true, maxKeys,
                 Map.of("strict", new Profile(three, three), "lenient", new Profile(many, many)),
-                List.of(new Route("/api/v1/auth/**", "strict"))));
+                List.of(new Route("/api/v1/auth/**", "strict", null))));
     }
 
     @Test
@@ -68,8 +68,22 @@ class RateLimiterTest {
     }
 
     @Test
+    void a_route_restricted_to_methods_applies_only_to_those_methods() {
+        Limit three = new Limit(3, Duration.ofHours(1));
+        RateLimiter limiter = new RateLimiter(new RateLimitProperties(true, 10,
+                Map.of("upload", new Profile(three, three)),
+                List.of(new Route("/api/v1/receipts", "upload", List.of("POST")))));
+
+        assertThat(limiter.profileFor("POST", "/api/v1/receipts")).isEqualTo("upload");
+        assertThat(limiter.profileFor("post", "/api/v1/receipts")).isEqualTo("upload");
+        assertThat(limiter.profileFor("GET", "/api/v1/receipts")).isEqualTo("default");
+        assertThat(limiter.profileFor("/api/v1/receipts")).isEqualTo("default");
+        assertThat(limiter.profileFor("POST", "/api/v1/receipts/x")).isEqualTo("default");
+    }
+
+    @Test
     void an_unknown_profile_in_a_route_is_a_configuration_error() {
-        assertThatThrownBy(() -> new RateLimitProperties(true, 10, Map.of(), List.of(new Route("/x", "nope"))))
+        assertThatThrownBy(() -> new RateLimitProperties(true, 10, Map.of(), List.of(new Route("/x", "nope", null))))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 }

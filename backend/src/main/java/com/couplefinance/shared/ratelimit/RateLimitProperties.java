@@ -3,6 +3,8 @@ package com.couplefinance.shared.ratelimit;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
+
+import org.jspecify.annotations.Nullable;
 import java.util.Map;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -44,7 +46,17 @@ public record RateLimitProperties(
      */
     public record Profile(Limit ip, Limit user) {}
 
-    public record Route(String pattern, String profile) {}
+    /**
+     * @param methods HTTP methods the route applies to; empty = every method (e.g. receipt upload: POST only, so
+     *                listing the vault does not consume the upload budget)
+     */
+    public record Route(String pattern, String profile, @Nullable List<String> methods) {
+
+        boolean appliesTo(@Nullable String method) {
+            return methods == null || methods.isEmpty()
+                    || (method != null && methods.stream().anyMatch(m -> m.equalsIgnoreCase(method)));
+        }
+    }
 
     public RateLimitProperties {
         if (maxTrackedKeys < 1) {

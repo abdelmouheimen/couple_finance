@@ -5,8 +5,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.UUID;
 
+import com.couplefinance.receipt.ReceiptFiles;
 import com.couplefinance.support.TestTokens;
 import com.couplefinance.support.TestUsers;
 import org.jspecify.annotations.Nullable;
@@ -15,6 +17,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.assertj.MockMvcTester;
 import org.springframework.test.web.servlet.assertj.MvcTestResult;
 import tools.jackson.databind.JsonNode;
@@ -95,8 +98,16 @@ public final class AuthzWorld {
         MvcTestResult budget = send(owner, Call.with(HttpMethod.PUT, "/api/v1/budgets/" + periodStart,
                 "{\"overallLimit\":{\"amount\":\"" + SeededHousehold.BUDGET_LIMIT + "\",\"currency\":\"EUR\"}}"));
         assertThat(budget).hasStatus(HttpStatus.CREATED);
+        // A receipt draft of the owner: private to its uploader until confirmed (BR-RCP-16).
+        MvcTestResult receipt = send(owner, receiptUpload());
+        assertThat(receipt).hasStatus(HttpStatus.CREATED);
         return new SeededHousehold(household, owner, partner, id(invitation), customCategory, id(shared), id(personal),
-                personalMerchant, personalNote, ruleMerchant, periodStart, id(budget));
+                personalMerchant, personalNote, ruleMerchant, periodStart, id(budget), id(receipt));
+    }
+
+    /** Upload of a small generated JPEG receipt. */
+    public static Call receiptUpload() {
+        return Call.multipart("/api/v1/receipts", List.of(ReceiptFiles.jpeg(40, 60)));
     }
 
     /** BR-HH-10: dissolution does not exist yet as an endpoint; same state change as the production lifecycle. */
@@ -115,7 +126,7 @@ public final class AuthzWorld {
         StringBuilder all = new StringBuilder();
         for (String table : new String[] {"expense.expense", "expense.expense_item", "expense.audit_event",
                 "categorization.category", "categorization.merchant_rule", "household.invitation", "budget.budget",
-                "budget.audit_event"}) {
+                "budget.audit_event", "receipt.receipt", "receipt.receipt_page", "receipt.audit_event"}) {
             all.append(jdbc.sql("SELECT coalesce(string_agg(t::text, '|' ORDER BY t::text), '') FROM " + table
                     + " t WHERE t.household_id = :h").param("h", seeded.household()).query(String.class).single());
         }
@@ -124,6 +135,16 @@ public final class AuthzWorld {
 
     /** Sends {@code call} as {@code user}; no Authorization header when {@code user} is {@code null}. */
     public MvcTestResult send(@Nullable UUID user, Call call) {
+        if (call.files() != null) {
+            var multipart = mvc.post().uri(call.uri()).multipart();
+            for (byte[] file : call.files()) {
+                multipart = multipart.file(new MockMultipartFile("files", "receipt", "application/octet-stream", file));
+            }
+            if (user != null) {
+                multipart = multipart.header(HttpHeaders.AUTHORIZATION, tokens.bearer(user));
+            }
+            return multipart.exchange();
+        }
         var request = mvc.method(call.method()).uri(call.uri());
         if (user != null) {
             request = request.header(HttpHeaders.AUTHORIZATION, tokens.bearer(user));

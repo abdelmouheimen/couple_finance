@@ -178,7 +178,9 @@ try {
         # Read by infra/docker-compose.yml and by the backend local profile (application-local.yaml).
         $env:POSTGRES_PORT = [string]$dbPort
         Write-Step 'Starting PostgreSQL (docker compose, waits for its healthcheck)'
-        & docker compose -f $composeFile up -d --wait postgres
+        & docker compose -f $composeFile up -d --wait postgres minio
+        # ClamAV downloads its signatures on first start (minutes): not awaited; receipt uploads answer 503 until ready.
+        & docker compose -f $composeFile up -d clamav
         if ($LASTEXITCODE -ne 0) { throw 'docker compose up failed; see the output above.' }
         $startedPostgres = -not ($running -contains 'postgres')
         $postgresState = 'UP (127.0.0.1:' + $dbPort + ', docker compose)'
@@ -191,6 +193,8 @@ try {
         $env:SPRING_PROFILES_ACTIVE = 'local'
         $env:SERVER_PORT = [string]$ApiPort
         $env:SERVER_ADDRESS = '0.0.0.0'
+        # Presigned receipt URLs must point at an address the phone can reach (MinIO published on the LAN).
+        $env:COUPLEFINANCE_RECEIPT_STORAGE_PUBLIC_ENDPOINT = 'http://' + $LanIp + ':9000'
         $startedBackend = Start-Process -FilePath (Join-Path $backendDir 'gradlew.bat') -ArgumentList @('bootRun', '--no-daemon', '--console=plain') `
             -WorkingDirectory $backendDir -WindowStyle Hidden -PassThru `
             -RedirectStandardOutput $log -RedirectStandardError (Join-Path $logDir 'backend.err.log')

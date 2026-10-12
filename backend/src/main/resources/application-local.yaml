@@ -6,6 +6,21 @@ spring:
     username: ${POSTGRES_USER:couplefinance}
     password: ${POSTGRES_PASSWORD:couplefinance}
 
+couplefinance:
+  receipt:
+    storage:
+      # MinIO of infra/docker-compose.yml (development-only credentials). The public endpoint is what the phone
+      # reaches for presigned URLs: set COUPLEFINANCE_RECEIPT_STORAGE_PUBLIC_ENDPOINT=http://<LAN IP>:9000.
+      endpoint: http://localhost:${MINIO_PORT:9000}
+      region: us-east-1
+      bucket: couplefinance-receipts
+      access-key: ${MINIO_ROOT_USER:couplefinance}
+      secret-key: ${MINIO_ROOT_PASSWORD:couplefinance-dev}
+      path-style: true
+      create-bucket: true
+    scanner:
+      port: ${CLAMAV_PORT:3310}
+
 springdoc:
   api-docs:
     enabled: true
