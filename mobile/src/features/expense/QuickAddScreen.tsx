@@ -2,9 +2,11 @@ import { useRouter } from "expo-router";
 import { useRef, useState } from "react";
 import { useHouseholdContext } from "@/features/household/HouseholdProvider";
 import {
-    RECEIPT_CAPTURE_AVAILABLE,
+    RECEIPT_ANALYSIS_AVAILABLE,
     ReceiptCapturePanel,
 } from "@/features/receipt/ReceiptCapturePanel";
+import { RECEIPTS_KEY } from "@/features/receipt/receiptApi";
+import { useQueryClient } from "@tanstack/react-query";
 import { errorMessage } from "@/shared/i18n/errorMessage";
 import { strings } from "@/shared/i18n/strings";
 import { ErrorState, Screen, Segmented, Skeleton, Text, useToast } from "@/shared/ui";
@@ -24,7 +26,8 @@ const MODES: readonly { value: Mode; label: string }[] = [
 /**
  * "Ajouter une dépense": Scanner / Manuel / Importer, as in the approved design. Manual entry is the
  * keyboard-first quick add (amount -> category -> Save, approved defaults prefilled). It opens on
- * manual entry for as long as receipt capture is not available; the design default is "Scanner".
+ * manual entry for as long as receipt analysis is not available (the design default is "Scanner"): a scanned
+ * receipt is stored in the vault, but the expense must still be entered manually.
  */
 export function QuickAddScreen({ now }: { now?: () => Date }) {
     const router = useRouter();
@@ -33,9 +36,10 @@ export function QuickAddScreen({ now }: { now?: () => Date }) {
     const categories = useCategories(false);
     const me = useCurrentUserId();
     const invalidate = useInvalidateExpenses();
+    const queryClient = useQueryClient();
     const keys = useRef(new IdempotencyKeys());
     const inFlight = useRef(false);
-    const [mode, setMode] = useState<Mode>(RECEIPT_CAPTURE_AVAILABLE ? "SCAN" : "MANUAL");
+    const [mode, setMode] = useState<Mode>(RECEIPT_ANALYSIS_AVAILABLE ? "SCAN" : "MANUAL");
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<unknown>(undefined);
 
@@ -89,7 +93,20 @@ export function QuickAddScreen({ now }: { now?: () => Date }) {
                 onChange={setMode}
             />
             {mode !== "MANUAL" ? (
-                <ReceiptCapturePanel mode={mode} onUseManual={() => setMode("MANUAL")} />
+                <ReceiptCapturePanel
+                    mode={mode}
+                    onUseManual={() => setMode("MANUAL")}
+                    onUploaded={(receipt) => {
+                        void queryClient.invalidateQueries({ queryKey: RECEIPTS_KEY });
+                        toast(
+                            RECEIPT_ANALYSIS_AVAILABLE
+                                ? strings.receipt.uploaded
+                                : strings.receipt.uploadedNoAnalysis,
+                            "success",
+                        );
+                        router.replace(`/receipts/${receipt.id}`);
+                    }}
+                />
             ) : categories.isPending || me.isPending ? (
                 <Skeleton variant="card" />
             ) : categories.isError || me.isError ? (

@@ -54,6 +54,28 @@ export function errorMessage(error: unknown): string {
         case "EXPENSE_REFUND_VISIBILITY_MISMATCH":
         case "EXPENSE_REFUND_EXCEEDS_ORIGINAL":
             return strings.errors.refundProblem;
+        case "RECEIPT_FILE_COUNT_INVALID":
+        case "RECEIPT_FORMAT_MIXED":
+            return strings.errors.receiptFileCount;
+        case "RECEIPT_FORMAT_UNSUPPORTED":
+            return strings.errors.receiptFormat;
+        case "RECEIPT_FILE_TOO_LARGE":
+        case "RECEIPT_TOO_LARGE":
+        case "PAYLOAD_TOO_LARGE":
+            return strings.errors.receiptTooLarge;
+        case "RECEIPT_PDF_PAGE_COUNT_INVALID":
+            return strings.errors.receiptPdfPages;
+        case "RECEIPT_FILE_UNREADABLE":
+            return strings.errors.receiptUnreadable;
+        case "RECEIPT_FILE_REJECTED":
+            return strings.errors.receiptRejected;
+        case "RECEIPT_SCAN_UNAVAILABLE":
+            return strings.errors.receiptScanUnavailable;
+        case "RECEIPT_NOT_FOUND":
+        case "RECEIPT_PAGE_NOT_FOUND":
+            return strings.errors.receiptNotFound;
+        case "RECEIPT_NOT_DELETABLE":
+            return strings.errors.receiptNotDeletable;
         case "PREVIOUS_BUDGET_NOT_FOUND":
             return strings.errors.previousBudgetNotFound;
         case "BUDGET_ALREADY_EXISTS":

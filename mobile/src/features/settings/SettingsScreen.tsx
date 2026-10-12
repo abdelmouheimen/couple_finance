@@ -99,6 +99,12 @@ export function SettingsScreen() {
             label: strings.settings.budget,
             onPress: () => router.push("/budget"),
         },
+        {
+            key: "receipts",
+            icon: "receipt",
+            label: strings.settings.receipts,
+            onPress: () => router.push("/receipts"),
+        },
         { key: "rules", icon: "rules", label: strings.settings.rules },
         { key: "notifications", icon: "bell", label: strings.settings.notifications },
         { key: "security", icon: "shield", label: strings.settings.security },

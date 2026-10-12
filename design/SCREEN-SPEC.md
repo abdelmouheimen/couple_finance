@@ -88,3 +88,20 @@ inline error state with "Réessayer"; empty = empty state with the next action.
 4. Card list: Aide & support, À propos.
 5. Secondary "Se déconnecter" with confirmation (A-16).
    Rows without a destination yet show "Bientôt disponible" (A-15).
+
+## 7. Tickets (receipt vault) — `src/features/receipt/` (DOC-002, not in the reference)
+
+Built only from the approved components (A-19): Settings › Tickets.
+
+1. Header: ← back, "Tickets" (H1), bordered + icon button (opens "Ajouter une dépense").
+2. Segmented Tous / Photos / PDF (filter over the loaded pages).
+3. Receipt cards: 40 dp receipt tile, upload date (medium), "Photos · 2 pages" (secondary), state, chevron.
+   Cursor pagination, pull to refresh, empty state with "Ajouter un ticket", error state with "Réessayer".
+4. Detail ("Ticket"): summary card, page preview (short-lived URL, never cached), page pager for multi-page
+   receipts, "Télécharger / partager" (secondary), "Supprimer le ticket" (destructive, confirmation sheet) for
+   open receipts only.
+
+Scanner / Importer panels of section 3 are functional since DOC-002: shutter = system camera (one page per
+shot, up to 5), gallery = multi-select, Importer = PDF or photos; selected pages appear as thumbnails in the
+viewfinder (removable); "Envoyer le ticket" uploads, then opens the stored receipt. The flash control stays
+disabled (the system camera owns the flash).
