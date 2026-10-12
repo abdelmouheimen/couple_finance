@@ -153,7 +153,8 @@ describe("receipt review and confirmation (DOC-004)", () => {
 
         // Nothing is sent before the explicit acknowledgement of the total and the date.
         expect(await screen.findByText("Confirmer le montant et la date")).toBeTruthy();
-        expect(screen.getByText(/13,78/)).toBeTruthy();
+        // The amount is displayed in the device locale (13,78 € or €13.78): display only.
+        expect(screen.getByText(/Vous confirmez une dépense de .*13[.,]78/)).toBeTruthy();
         expect(api.of(CONFIRM)).toHaveLength(0);
         await fireEvent.press(screen.getByRole("button", { name: "Je confirme" }));
 
