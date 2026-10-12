@@ -1,6 +1,7 @@
-import { View } from "react-native";
+import { type ReactNode } from "react";
+import { StyleSheet, View } from "react-native";
 import Svg, { Circle, G } from "react-native-svg";
-import { donutSize, donutThickness } from "@/shared/ui/theme/tokens";
+import { size } from "@/shared/ui/theme/tokens";
 
 export interface DonutArc {
     key: string;
@@ -14,16 +15,18 @@ interface Props {
     trackColor: string;
     /** Text alternative of the whole chart (the svg itself is hidden from assistive tech). */
     accessibilityLabel: string;
+    /** Centre label (server total); part of the chart for assistive tech through the label above. */
+    children?: ReactNode;
     testID?: string;
 }
 
 /**
  * Donut drawn with stroked circles (one dash segment per slice). Geometry comes from integer tenths of
- * server percentages; the chart carries no amounts.
+ * server percentages; the chart computes no amount.
  */
-export function DonutChart({ arcs, trackColor, accessibilityLabel, testID }: Props) {
-    const center = donutSize / 2;
-    const radius = (donutSize - donutThickness) / 2;
+export function DonutChart({ arcs, trackColor, accessibilityLabel, children, testID }: Props) {
+    const center = size.donut / 2;
+    const radius = (size.donut - size.donutStroke) / 2;
     const circumference = 2 * Math.PI * radius;
     const total = arcs.reduce((sum, a) => sum + a.tenths, 0);
     let consumed = 0;
@@ -33,16 +36,16 @@ export function DonutChart({ arcs, trackColor, accessibilityLabel, testID }: Pro
             accessible
             accessibilityRole="image"
             accessibilityLabel={accessibilityLabel}
-            style={{ width: donutSize, height: donutSize }}
+            style={styles.box}
         >
-            <Svg width={donutSize} height={donutSize} viewBox={`0 0 ${donutSize} ${donutSize}`}>
-                <G rotation={-90} origin={`${center}, ${center}`}>
+            <Svg width={size.donut} height={size.donut} viewBox={`0 0 ${size.donut} ${size.donut}`}>
+                <G transform={`rotate(-90 ${center} ${center})`}>
                     <Circle
                         cx={center}
                         cy={center}
                         r={radius}
                         stroke={trackColor}
-                        strokeWidth={donutThickness}
+                        strokeWidth={size.donutStroke}
                         fill="none"
                     />
                     {total > 0
@@ -58,7 +61,7 @@ export function DonutChart({ arcs, trackColor, accessibilityLabel, testID }: Pro
                                       cy={center}
                                       r={radius}
                                       stroke={arc.color}
-                                      strokeWidth={donutThickness}
+                                      strokeWidth={size.donutStroke}
                                       fill="none"
                                       strokeDasharray={`${length} ${circumference - length}`}
                                       strokeDashoffset={-offset}
@@ -68,6 +71,20 @@ export function DonutChart({ arcs, trackColor, accessibilityLabel, testID }: Pro
                         : null}
                 </G>
             </Svg>
+            {children ? <View style={styles.center}>{children}</View> : null}
         </View>
     );
 }
+
+const styles = StyleSheet.create({
+    box: { width: size.donut, height: size.donut },
+    center: {
+        position: "absolute",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+});

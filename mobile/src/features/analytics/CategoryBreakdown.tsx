@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { strings } from "@/shared/i18n/strings";
-import { formatMoney } from "@/shared/money/money";
-import { Card, ListRow, Text, useChartColors, useColors } from "@/shared/ui";
-import { borderWidth, radius, spacing, swatchSize } from "@/shared/ui/theme/tokens";
+import { formatMoney, type Money } from "@/shared/money/money";
+import { Card, Dot, SectionTitle, Text, useChartColors, useColors } from "@/shared/ui";
+import { minTouchTarget, spacing } from "@/shared/ui/theme/tokens";
 import { COLLAPSED_LIST_ROWS, donutSummary, MAX_DONUT_SLICES, toDonutSlices } from "./chartModel";
 import { DonutChart } from "./charts/DonutChart";
 import type { CategoryRow } from "./dashboardModel";
@@ -12,28 +12,71 @@ interface Props {
     /** Every category of the period as returned by the API (largest first). */
     rows: readonly CategoryRow[];
     refunds: readonly CategoryRow[];
+    /** Net total of the period, verbatim from the API; shown in the centre of the donut. */
+    total?: Money | undefined;
     scopeLabel: string;
     onSelect: (categoryId: string) => void;
 }
 
 const MAX_REFUNDS = 3;
 
-function Swatch({ color }: { color: string }) {
+/** One legend entry: marker, name, then the server amount and percentage. */
+function LegendRow({
+    testID,
+    color,
+    name,
+    amount,
+    percentage,
+    hint,
+    onPress,
+}: {
+    testID: string;
+    color?: string;
+    name: string;
+    amount?: string;
+    percentage?: string | undefined;
+    hint?: string;
+    onPress: () => void;
+}) {
+    const detail = [amount, percentage !== undefined ? strings.percent(percentage) : undefined]
+        .filter((part) => part !== undefined)
+        .join(", ");
     return (
-        <View
-            importantForAccessibility="no-hide-descendants"
-            accessibilityElementsHidden
-            style={[styles.swatch, { backgroundColor: color }]}
-        />
+        <Pressable
+            testID={testID}
+            accessibilityRole="button"
+            accessibilityLabel={detail ? `${name}, ${detail}` : name}
+            accessibilityHint={hint}
+            onPress={onPress}
+            style={styles.legendRow}
+        >
+            {color ? <Dot color={color} /> : null}
+            <View style={styles.legendText}>
+                <Text variant="caption" weight="medium" numberOfLines={1}>
+                    {name}
+                </Text>
+                {amount ? (
+                    <Text variant="caption" tone="secondary" tabular>
+                        {amount}
+                    </Text>
+                ) : null}
+            </View>
+            {percentage !== undefined ? (
+                <Text variant="caption" weight="medium" tabular>
+                    {strings.percent(percentage)}
+                </Text>
+            ) : null}
+        </Pressable>
     );
 }
 
 /**
- * "Where your money goes": a donut of the top categories (+ "Other" in the chart only) and the ranked
- * list. Both render the same server values (BR-ANA-05); the full list is one tap away so "Other" never
- * hides a category. Negative (refund) categories stay outside the donut (BR-ANA-06).
+ * "Répartition par catégorie": a donut of the top categories (+ "Autres" in the chart only) with the
+ * period total in its centre, next to the ranked legend. Both render the same server values (BR-ANA-05);
+ * the full list is one tap away so "Autres" never hides a category. Negative (refund) categories stay
+ * outside the donut (BR-ANA-06).
  */
-export function CategoryBreakdown({ rows, refunds, scopeLabel, onSelect }: Props) {
+export function CategoryBreakdown({ rows, refunds, total, scopeLabel, onSelect }: Props) {
     const colors = useColors();
     const chart = useChartColors();
     const [expanded, setExpanded] = useState(false);
@@ -44,91 +87,104 @@ export function CategoryBreakdown({ rows, refunds, scopeLabel, onSelect }: Props
     const otherSlice = slices.find((s) => s.other);
 
     return (
-        <Card>
-            <Text variant="title" accessibilityRole="header">
-                {strings.dashboard.whereTitle}
-            </Text>
-            {slices.length > 0 ? (
-                <View style={styles.donut}>
+        <View style={styles.block}>
+            <SectionTitle>{strings.dashboard.whereTitle}</SectionTitle>
+            <View style={styles.body}>
+                {slices.length > 0 ? (
                     <DonutChart
                         testID="category-chart"
-                        trackColor={colors.surfaceMuted}
+                        trackColor={colors.surface}
                         accessibilityLabel={donutSummary(slices, scopeLabel)}
                         arcs={slices.map((s, i) => ({
                             key: s.key,
                             tenths: s.tenths,
                             color: s.other ? chart.other : colorOf(i),
                         }))}
-                    />
-                </View>
-            ) : (
-                <Text tone="secondary" testID="category-chart-empty">
-                    {strings.dashboard.noChartData}
-                </Text>
-            )}
-            <View>
-                {visible.map((r, index) => (
-                    <ListRow
-                        key={r.categoryId}
-                        testID={`category-row-${r.categoryId}`}
-                        title={r.name}
-                        leading={<Swatch color={colorOf(index)} />}
-                        subtitle={
-                            r.percentage !== undefined
-                                ? `${formatMoney(r.total)} · ${r.percentage} %`
-                                : formatMoney(r.total)
-                        }
-                        accessibilityHint={strings.dashboard.categoryHint}
-                        onPress={() => onSelect(r.categoryId)}
-                    />
-                ))}
-                {grouped && !expanded && otherSlice ? (
-                    <ListRow
-                        testID="category-other-row"
-                        title={strings.dashboard.otherRow(rows.length - COLLAPSED_LIST_ROWS)}
-                        leading={<Swatch color={chart.other} />}
-                        subtitle={`${otherSlice.percentage} %`}
-                        onPress={() => setExpanded(true)}
-                    />
+                    >
+                        {total ? (
+                            <>
+                                <Text weight="semibold" tabular numberOfLines={1}>
+                                    {formatMoney(total)}
+                                </Text>
+                                <Text variant="caption" tone="secondary">
+                                    {strings.dashboard.total}
+                                </Text>
+                            </>
+                        ) : null}
+                    </DonutChart>
                 ) : null}
-                {grouped ? (
-                    <ListRow
-                        testID="category-toggle"
-                        title={
-                            expanded
-                                ? strings.dashboard.showTopCategories
-                                : strings.dashboard.showAllCategories(rows.length)
-                        }
-                        onPress={() => setExpanded((v) => !v)}
-                    />
-                ) : null}
-            </View>
-            {refunds.length > 0 ? (
-                <View style={[styles.refunds, { borderTopColor: colors.border }]}>
-                    <Text variant="caption" tone="secondary" bold>
-                        {strings.dashboard.refundsTitle}
-                    </Text>
-                    {refunds.slice(0, MAX_REFUNDS).map((r) => (
-                        <ListRow
+                <Card style={styles.legend}>
+                    {slices.length === 0 ? (
+                        <Text variant="caption" tone="secondary" testID="category-chart-empty">
+                            {strings.dashboard.noChartData}
+                        </Text>
+                    ) : null}
+                    {visible.map((r, index) => (
+                        <LegendRow
                             key={r.categoryId}
-                            testID={`refund-row-${r.categoryId}`}
-                            title={r.name}
-                            subtitle={formatMoney(r.total)}
+                            testID={`category-row-${r.categoryId}`}
+                            color={colorOf(index)}
+                            name={r.name}
+                            amount={formatMoney(r.total)}
+                            percentage={r.percentage}
+                            hint={strings.dashboard.categoryHint}
                             onPress={() => onSelect(r.categoryId)}
                         />
                     ))}
-                </View>
+                    {grouped && !expanded && otherSlice ? (
+                        <LegendRow
+                            testID="category-other-row"
+                            color={chart.other}
+                            name={strings.dashboard.otherRow(rows.length - COLLAPSED_LIST_ROWS)}
+                            percentage={otherSlice.percentage}
+                            onPress={() => setExpanded(true)}
+                        />
+                    ) : null}
+                    {grouped ? (
+                        <Pressable
+                            testID="category-toggle"
+                            accessibilityRole="button"
+                            onPress={() => setExpanded((v) => !v)}
+                            style={styles.legendRow}
+                        >
+                            <Text variant="caption" tone="primary" weight="semibold">
+                                {expanded
+                                    ? strings.dashboard.showTopCategories
+                                    : strings.dashboard.showAllCategories(rows.length)}
+                            </Text>
+                        </Pressable>
+                    ) : null}
+                </Card>
+            </View>
+            {refunds.length > 0 ? (
+                <Card>
+                    <Text variant="caption" tone="secondary">
+                        {strings.dashboard.refundsTitle}
+                    </Text>
+                    {refunds.slice(0, MAX_REFUNDS).map((r) => (
+                        <LegendRow
+                            key={r.categoryId}
+                            testID={`refund-row-${r.categoryId}`}
+                            name={r.name}
+                            amount={formatMoney(r.total)}
+                            onPress={() => onSelect(r.categoryId)}
+                        />
+                    ))}
+                </Card>
             ) : null}
-        </Card>
+        </View>
     );
 }
 
 const styles = StyleSheet.create({
-    donut: { alignItems: "center", paddingVertical: spacing.xs },
-    swatch: { width: swatchSize, height: swatchSize, borderRadius: radius.sm },
-    refunds: {
-        gap: spacing.xs,
-        paddingTop: spacing.sm,
-        borderTopWidth: borderWidth.hairline,
+    block: { gap: spacing.md },
+    body: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: spacing.md },
+    legend: { flex: 1, minWidth: spacing.xxl * 5, gap: spacing.none, paddingVertical: spacing.sm },
+    legendRow: {
+        minHeight: minTouchTarget,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: spacing.sm,
     },
+    legendText: { flex: 1 },
 });

@@ -7,7 +7,7 @@ import { ReadOnlyBanner } from "./ReadOnlyBanner";
 
 const household = (status: string) => ({
     id: "11111111-1111-7111-8111-111111111111",
-    name: "Home",
+    name: "Accueil",
     currency: "EUR",
     timezone: "Europe/Paris",
     periodStartDay: 1,

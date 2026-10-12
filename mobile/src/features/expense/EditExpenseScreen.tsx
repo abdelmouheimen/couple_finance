@@ -100,7 +100,7 @@ export function EditExpenseScreen({ id }: { id: string }) {
 
     return (
         <Screen onClose={close}>
-            <Text variant="headline" accessibilityRole="header">
+            <Text variant="h2" accessibilityRole="header">
                 {strings.expense.editTitle}
             </Text>
             {conflict ? (

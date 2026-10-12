@@ -69,7 +69,7 @@ export function Sheet({ visible, title, onClose, children }: SheetProps) {
                         styles.sheet,
                         elevation.floating,
                         {
-                            backgroundColor: colors.surface,
+                            backgroundColor: colors.card,
                             maxHeight: height * sheetMaxHeightRatio,
                             paddingBottom: spacing.xl + insets.bottom,
                         },
@@ -82,9 +82,14 @@ export function Sheet({ visible, title, onClose, children }: SheetProps) {
                             accessibilityRole="header"
                             style={styles.title}
                         >
-                            <Text variant="title">{title}</Text>
+                            <Text variant="h3">{title}</Text>
                         </View>
-                        <IconButton icon="close" label={strings.close} onPress={onClose} />
+                        <IconButton
+                            variant="plain"
+                            icon="close"
+                            label={strings.close}
+                            onPress={onClose}
+                        />
                     </View>
                     <ScrollView
                         contentContainerStyle={styles.body}
@@ -134,8 +139,8 @@ const styles = StyleSheet.create({
     sheet: {
         borderTopLeftRadius: radius.lg,
         borderTopRightRadius: radius.lg,
-        paddingHorizontal: spacing.xl,
-        paddingTop: spacing.xl,
+        paddingHorizontal: spacing.screen,
+        paddingTop: spacing.lg,
         gap: spacing.lg,
     },
     header: { flexDirection: "row", alignItems: "center", gap: spacing.md },

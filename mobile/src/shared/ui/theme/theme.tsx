@@ -1,24 +1,22 @@
-import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
-import { AccessibilityInfo, useColorScheme } from "react-native";
+import { type ReactNode, useEffect, useState } from "react";
+import { AccessibilityInfo } from "react-native";
 import { chartPalettes, type ColorScheme, type Palette, palettes } from "./tokens";
 
-const SchemeOverride = createContext<ColorScheme | null>(null);
+const SCHEME: ColorScheme = "dark";
 
-/** Optional: force a scheme (gallery, tests). Without it the system scheme is used. */
-export function ThemeProvider({ scheme, children }: { scheme: ColorScheme; children: ReactNode }) {
-    return <SchemeOverride.Provider value={scheme}>{children}</SchemeOverride.Provider>;
+/** Kept as the single theming seam (gallery, tests); the approved design has one dark scheme. */
+export function ThemeProvider({ children }: { scheme?: ColorScheme; children: ReactNode }) {
+    return <>{children}</>;
 }
 
+/** The approved palette. Dark only: the OS colour scheme is deliberately not followed. */
 export function useColors(): Palette & { scheme: ColorScheme } {
-    const override = useContext(SchemeOverride);
-    const system = useColorScheme();
-    const scheme: ColorScheme = override ?? (system === "dark" ? "dark" : "light");
-    return { ...palettes[scheme], scheme };
+    return { ...palettes[SCHEME], scheme: SCHEME };
 }
 
-/** Categorical chart colours for the active scheme (light/dark). */
+/** Categorical chart colours. */
 export function useChartColors() {
-    return chartPalettes[useColors().scheme];
+    return chartPalettes[SCHEME];
 }
 
 /** True when the OS asks for reduced motion; animations must then be skipped. */

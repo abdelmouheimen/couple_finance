@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRouter } from "expo-router";
+import { Fragment, useRef, useState } from "react";
 import { RefreshControl, StyleSheet, View } from "react-native";
+import { categoryVisual } from "@/features/expense/categoryVisual";
 import { shiftBudgetPeriod } from "@/features/household/currentPeriod";
 import { useHouseholdContext } from "@/features/household/HouseholdProvider";
 import type { components } from "@/shared/api/client";
@@ -10,6 +12,7 @@ import { formatMoney, type Money } from "@/shared/money/money";
 import {
     Button,
     Card,
+    Divider,
     EmptyState,
     ErrorState,
     Icon,
@@ -17,12 +20,14 @@ import {
     MoneyText,
     ProgressBar,
     Screen,
+    ScreenTitle,
+    SectionTitle,
     Skeleton,
     Text,
     useColors,
     useToast,
 } from "@/shared/ui";
-import { minTouchTarget, radius, spacing } from "@/shared/ui/theme/tokens";
+import { radius, spacing } from "@/shared/ui/theme/tokens";
 import { BudgetEditSheet } from "./BudgetEditSheet";
 import {
     type Budget,
@@ -35,7 +40,7 @@ import {
 } from "./budgetApi";
 import { type BudgetForm, categoryName, toSetBudgetRequest } from "./budgetForm";
 import { CategoryLimitRow } from "./CategoryLimitRow";
-import { periodLabel } from "./periodLabel";
+import { periodLabel, periodTitle } from "./periodLabel";
 
 type ApiMoney = components["schemas"]["Money"];
 
@@ -51,52 +56,54 @@ function OverallCard({ budget }: { budget: Budget }) {
     const limit = asMoney(budget.overallLimit);
     const remaining = asMoney(c?.remaining);
     const consumed = asMoney(c?.consumed);
+    if (!(c && limit && remaining && consumed && c.status && c.percentage !== undefined)) {
+        return (
+            <Card>
+                <Text variant="caption" weight="medium">
+                    {strings.budget.overall}
+                </Text>
+                <Text tone="secondary">{strings.budget.noOverall}</Text>
+            </Card>
+        );
+    }
     return (
-        <Card>
-            <Text variant="title" accessibilityRole="header">
-                {strings.budget.overall}
-            </Text>
-            {c && limit && remaining && consumed && c.status && c.percentage !== undefined ? (
-                <>
-                    <Text variant="caption" tone="secondary" bold>
+        <>
+            <Card testID="overall-card" style={styles.overall}>
+                <Text variant="caption" weight="medium">
+                    {strings.budget.overall}
+                </Text>
+                <View style={styles.amountRow}>
+                    <MoneyText money={remaining} scope="HOUSEHOLD" scopeVisible={false} />
+                    <Text tone="secondary" tabular style={styles.of}>
+                        {strings.budget.of(formatMoney(limit))}
+                    </Text>
+                </View>
+                <ProgressBar
+                    percent={Number(c.percentage)}
+                    percentText={c.percentage}
+                    status={c.status}
+                    valueText={strings.budget.progressA11y(c.percentage, formatMoney(remaining))}
+                />
+            </Card>
+            <View style={styles.pair}>
+                <Card accessible style={styles.stat}>
+                    <Text variant="caption" tone="secondary">
+                        {strings.budget.consumed}
+                    </Text>
+                    <Text variant="h2" tabular>
+                        {formatMoney(consumed)}
+                    </Text>
+                </Card>
+                <Card accessible style={styles.stat}>
+                    <Text variant="caption" tone="secondary">
                         {strings.budget.remaining}
                     </Text>
-                    <MoneyText money={remaining} scope="HOUSEHOLD" variant="headline" />
-                    <ProgressBar
-                        percent={Number(c.percentage)}
-                        percentText={c.percentage}
-                        status={c.status}
-                        valueText={strings.budget.progressA11y(
-                            c.percentage,
-                            formatMoney(remaining),
-                        )}
-                    />
-                    <View style={styles.pair}>
-                        <View accessible style={styles.flex}>
-                            <Text variant="caption" tone="secondary">
-                                {strings.budget.consumed}
-                            </Text>
-                            <Text bold tabular>
-                                {formatMoney(consumed)}
-                            </Text>
-                        </View>
-                        <View accessible style={styles.flex}>
-                            <Text variant="caption" tone="secondary">
-                                {strings.budget.limit}
-                            </Text>
-                            <Text bold tabular>
-                                {formatMoney(limit)}
-                            </Text>
-                        </View>
-                    </View>
-                </>
-            ) : (
-                <Text tone="secondary">{strings.budget.noOverall}</Text>
-            )}
-            <Text variant="caption" tone="secondary">
-                {strings.budget.scopeNote}
-            </Text>
-        </Card>
+                    <Text variant="h2" tabular>
+                        {formatMoney(remaining)}
+                    </Text>
+                </Card>
+            </View>
+        </>
     );
 }
 
@@ -111,12 +118,12 @@ function WarningBanner({ budget }: { budget: Budget }) {
         <View
             accessible
             accessibilityRole="alert"
-            style={[styles.banner, { backgroundColor: colors.surfaceMuted }]}
+            style={[styles.banner, { backgroundColor: colors.card }]}
         >
             <Icon name="warning" color={colors.warning} />
             <View style={styles.flex}>
-                <Text bold>{strings.budget.warningTitle}</Text>
-                <Text>
+                <Text weight="semibold">{strings.budget.warningTitle}</Text>
+                <Text variant="caption" tone="secondary">
                     {strings.budget.warningMessage(formatMoney(total), formatMoney(overall))}
                 </Text>
             </View>
@@ -128,12 +135,15 @@ function WarningBanner({ budget }: { budget: Budget }) {
 export function BudgetScreen() {
     const { household, readOnly, currentPeriod } = useHouseholdContext();
     const queryClient = useQueryClient();
+    const router = useRouter();
     const toast = useToast();
     const colors = useColors();
     const [refreshing, setRefreshing] = useState(false);
     const [offset, setOffset] = useState(0);
     const [editing, setEditing] = useState(false);
     const [copyError, setCopyError] = useState<unknown>(null);
+    // Per-navigation nonce (event handlers only): re-seeds the expense filters on a repeat drill-down.
+    const drillDowns = useRef(0);
     const period = offset === 0 ? currentPeriod : shiftBudgetPeriod(currentPeriod, offset);
     const key = budgetKey(period.start);
     const past = period.start < currentPeriod.start;
@@ -190,6 +200,17 @@ export function BudgetScreen() {
         setCopyError(null);
         setEditing(false);
     };
+    // Same drill-down as the dashboard categories: the expenses of that category, household scope.
+    const openCategory = (categoryId: string) =>
+        router.push({
+            pathname: "/expenses",
+            params: {
+                categoryId,
+                periodStart: period.start,
+                scope: "HOUSEHOLD",
+                nav: `budget-${++drillDowns.current}`,
+            },
+        });
     const prevLabel = periodLabel(shiftBudgetPeriod(period, -1));
     const nextLabel = periodLabel(shiftBudgetPeriod(period, 1));
 
@@ -223,8 +244,9 @@ export function BudgetScreen() {
                 ) : null}
                 {readOnly ? null : (
                     <>
-                        <Button label={strings.budget.set} onPress={openEditor} />
+                        <Button size="lg" label={strings.budget.set} onPress={openEditor} />
                         <Button
+                            size="lg"
                             label={strings.budget.copyPrevious}
                             variant="secondary"
                             loading={copy.isPending}
@@ -239,26 +261,45 @@ export function BudgetScreen() {
             <>
                 <WarningBanner budget={budget} />
                 <OverallCard budget={budget} />
-                <Card>
-                    <Text variant="title" accessibilityRole="header">
-                        {strings.budget.categoryProgressTitle}
-                    </Text>
+                <SectionTitle>{strings.budget.categoryProgressTitle}</SectionTitle>
+                <Card style={styles.categories}>
                     {budget.categoryLimits.length === 0 ? (
-                        <Text tone="secondary">{strings.budget.noCategories}</Text>
+                        <Text tone="secondary" style={styles.none}>
+                            {strings.budget.noCategories}
+                        </Text>
                     ) : (
-                        budget.categoryLimits.map((l) => (
-                            <CategoryLimitRow
-                                key={l.categoryId}
-                                name={categoryName(categories.find((c) => c.id === l.categoryId))}
-                                limit={l.limit}
-                                consumption={l.consumption}
-                            />
-                        ))
+                        budget.categoryLimits.map((l, index) => {
+                            const category = categories.find((c) => c.id === l.categoryId);
+                            return (
+                                <Fragment key={l.categoryId}>
+                                    {index > 0 ? <Divider /> : null}
+                                    <CategoryLimitRow
+                                        name={categoryName(category)}
+                                        limit={l.limit}
+                                        consumption={l.consumption}
+                                        visual={categoryVisual(category)}
+                                        onPress={
+                                            l.consumption
+                                                ? () => openCategory(l.categoryId)
+                                                : undefined
+                                        }
+                                    />
+                                </Fragment>
+                            );
+                        })
                     )}
                 </Card>
                 {readOnly ? null : (
-                    <Button label={strings.budget.edit} variant="secondary" onPress={openEditor} />
+                    <Button
+                        size="lg"
+                        label={strings.budget.edit}
+                        variant="outline"
+                        onPress={openEditor}
+                    />
                 )}
+                <Text variant="caption" tone="secondary">
+                    {strings.budget.scopeNote}
+                </Text>
             </>
         );
     }
@@ -273,9 +314,7 @@ export function BudgetScreen() {
                 />
             }
         >
-            <Text variant="headline" accessibilityRole="header">
-                {strings.tabs.budget}
-            </Text>
+            <ScreenTitle>{strings.tabs.budget}</ScreenTitle>
             <View style={styles.header}>
                 <IconButton
                     icon="chevronBack"
@@ -283,21 +322,23 @@ export function BudgetScreen() {
                     onPress={() => move(-1)}
                 />
                 <View accessible accessibilityRole="header" style={styles.flex}>
-                    <Text variant="title" style={styles.centered}>
-                        {periodLabel(period)}
+                    <Text weight="semibold" style={styles.centered} testID="budget-period">
+                        {periodTitle(period)}
                     </Text>
                 </View>
-                {offset < 0 ? (
-                    <IconButton
-                        icon="chevron"
-                        label={strings.budget.nextPeriod(nextLabel)}
-                        onPress={() => move(1)}
-                    />
-                ) : (
-                    <View style={styles.spacer} />
-                )}
+                {/* The future is never browsable: the control keeps its place, disabled. */}
+                <IconButton
+                    icon="chevron"
+                    label={strings.budget.nextPeriod(nextLabel)}
+                    disabled={offset >= 0}
+                    onPress={() => move(1)}
+                />
             </View>
-            {past ? <Text tone="secondary">{strings.budget.pastNote}</Text> : null}
+            {past ? (
+                <Text variant="caption" tone="secondary">
+                    {strings.budget.pastNote}
+                </Text>
+            ) : null}
             {body}
             <BudgetEditSheet
                 visible={editing && !readOnly}
@@ -322,13 +363,18 @@ const styles = StyleSheet.create({
     header: { flexDirection: "row", alignItems: "center", gap: spacing.md },
     flex: { flex: 1 },
     centered: { textAlign: "center" },
-    spacer: { width: minTouchTarget },
+    overall: { gap: spacing.md },
+    amountRow: { flexDirection: "row", alignItems: "flex-end", flexWrap: "wrap", gap: spacing.sm },
+    of: { paddingBottom: spacing.xs },
     pair: { flexDirection: "row", gap: spacing.md },
+    stat: { flex: 1, gap: spacing.xs },
+    categories: { gap: spacing.none, paddingVertical: spacing.xs },
+    none: { paddingVertical: spacing.md },
     banner: {
         flexDirection: "row",
         gap: spacing.md,
-        padding: spacing.md,
-        borderRadius: radius.md,
+        padding: spacing.lg,
+        borderRadius: radius.lg,
         alignItems: "flex-start",
     },
 });

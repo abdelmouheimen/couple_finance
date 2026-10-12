@@ -17,7 +17,7 @@ export default function SignUp() {
                 />
             ) : (
                 <>
-                    <Text variant="headline" accessibilityRole="header">
+                    <Text variant="h2" accessibilityRole="header">
                         {strings.auth.signUpTitle}
                     </Text>
                     <SignUpForm

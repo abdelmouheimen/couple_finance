@@ -25,7 +25,7 @@ describe("dashboard chart data mapping", () => {
         );
         expect(rows).toEqual([
             { categoryId: "a", name: "Pets", total: eur("70.10"), percentage: "70.1" },
-            { categoryId: "b", name: "Groceries", total: eur("29.90"), percentage: "29.9" },
+            { categoryId: "b", name: "Courses", total: eur("29.90"), percentage: "29.9" },
         ]);
     });
 
@@ -45,6 +45,6 @@ describe("dashboard chart data mapping", () => {
     });
 
     test("an unknown category id falls back to a generic label", () => {
-        expect(categoryName(undefined)).toBe("Category");
+        expect(categoryName(undefined)).toBe("Catégorie");
     });
 });

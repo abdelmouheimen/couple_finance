@@ -57,7 +57,7 @@ describe("donut slices (BR-ANA-05, BR-ANA-01)", () => {
         expect(slices).toHaveLength(MAX_DONUT_SLICES + 1);
         const other = slices[MAX_DONUT_SLICES]!;
         expect(other.other).toBe(true);
-        expect(other.label).toBe("Other");
+        expect(other.label).toBe("Autres");
         expect(other.percentage).toBe("9.9"); // 4.9 + 3.2 + 1.8, summed in tenths
         expect(slices.slice(0, MAX_DONUT_SLICES).map((s) => s.percentage)).toEqual([
             "40.0",
@@ -75,8 +75,8 @@ describe("donut slices (BR-ANA-05, BR-ANA-01)", () => {
 
     test("text alternative lists the same names and server percentages", () => {
         const slices = toDonutSlices([row("a", "72.9"), row("b", "27.1")]);
-        expect(donutSummary(slices, "Household")).toBe(
-            "Spending by category, Household: Cat a 72.9 %, Cat b 27.1 %",
+        expect(donutSummary(slices, "Foyer")).toBe(
+            "Dépenses par catégorie, Foyer : Cat a 72.9%, Cat b 27.1%",
         );
     });
 

@@ -73,9 +73,9 @@ describe("CreateHouseholdForm (BR-HH-16)", () => {
     test("a name alone is enough: only the name is sent, the server applies defaults", async () => {
         const onSubmit = jest.fn(async () => undefined);
         await renderUi(<CreateHouseholdForm onSubmit={onSubmit} />);
-        await fireEvent.changeText(screen.getByLabelText(strings.household.name), "Home");
+        await fireEvent.changeText(screen.getByLabelText(strings.household.name), "Accueil");
         await fireEvent.press(screen.getByRole("button", { name: strings.household.createAction }));
-        await waitFor(() => expect(onSubmit).toHaveBeenCalledWith({ name: "Home" }));
+        await waitFor(() => expect(onSubmit).toHaveBeenCalledWith({ name: "Accueil" }));
     });
 
     test("requires a name", async () => {
@@ -89,13 +89,13 @@ describe("CreateHouseholdForm (BR-HH-16)", () => {
     test("more options are editable and sent explicitly", async () => {
         const onSubmit = jest.fn(async () => undefined);
         await renderUi(<CreateHouseholdForm onSubmit={onSubmit} />);
-        await fireEvent.changeText(screen.getByLabelText(strings.household.name), "Home");
+        await fireEvent.changeText(screen.getByLabelText(strings.household.name), "Accueil");
         await fireEvent.press(screen.getByRole("button", { name: strings.household.moreOptions }));
         await fireEvent.changeText(screen.getByLabelText(strings.household.periodStartDay), "15");
         await fireEvent.press(screen.getByRole("button", { name: strings.household.createAction }));
         await waitFor(() =>
             expect(onSubmit).toHaveBeenCalledWith({
-                name: "Home",
+                name: "Accueil",
                 currency: "EUR",
                 timezone: "Europe/Paris",
                 periodStartDay: 15,

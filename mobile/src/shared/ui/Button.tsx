@@ -1,28 +1,43 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet } from "react-native";
 import { strings } from "@/shared/i18n/strings";
+import { Icon } from "./Icon";
 import { Text } from "./Text";
+import { type IconName } from "./theme/icons";
 import { useColors } from "./theme/theme";
-import { borderWidth, minTouchTarget, opacity, radius, spacing } from "./theme/tokens";
+import { borderWidth, minTouchTarget, opacity, radius, size, spacing } from "./theme/tokens";
 
-export type ButtonVariant = "primary" | "secondary" | "destructive";
+export type ButtonVariant = "primary" | "secondary" | "outline" | "destructive";
 
 interface Props {
     label: string;
     /** May return a promise: further presses are ignored until it settles (double-submit protection). */
     onPress: () => void | Promise<unknown>;
     variant?: ButtonVariant;
+    /** `lg` is the full-width call to action at the bottom of a screen. */
+    size?: "md" | "lg";
+    icon?: IconName;
     loading?: boolean;
     disabled?: boolean;
     testID?: string;
 }
 
-export function Button({ label, onPress, variant = "primary", loading, disabled, testID }: Props) {
+export function Button({
+    label,
+    onPress,
+    variant = "primary",
+    size: buttonSize = "md",
+    icon,
+    loading,
+    disabled,
+    testID,
+}: Props) {
     const colors = useColors();
     const palette = {
-        primary: { bg: colors.primary, fg: colors.onPrimary },
-        secondary: { bg: colors.secondary, fg: colors.onSecondary },
-        destructive: { bg: colors.danger, fg: colors.onDanger },
+        primary: { bg: colors.primary, fg: colors.onPrimary, border: colors.primary },
+        secondary: { bg: colors.card, fg: colors.text, border: colors.border },
+        outline: { bg: colors.background, fg: colors.primary, border: colors.primary },
+        destructive: { bg: colors.danger, fg: colors.onDanger, border: colors.danger },
     }[variant];
     const inFlight = useRef(false);
     const mounted = useRef(true);
@@ -59,9 +74,10 @@ export function Button({ label, onPress, variant = "primary", loading, disabled,
             onPress={press}
             style={({ pressed }) => [
                 styles.base,
+                buttonSize === "lg" ? styles.large : null,
                 {
                     backgroundColor: palette.bg,
-                    borderColor: palette.bg,
+                    borderColor: palette.border,
                     opacity: inactive
                         ? opacity.disabled
                         : pressed
@@ -72,8 +88,14 @@ export function Button({ label, onPress, variant = "primary", loading, disabled,
         >
             {busy ? (
                 <ActivityIndicator color={palette.fg} accessibilityLabel={strings.loading} />
+            ) : icon ? (
+                <Icon name={icon} color={palette.fg} />
             ) : null}
-            <Text style={{ color: palette.fg }} bold>
+            <Text
+                variant={buttonSize === "lg" ? "body" : "caption"}
+                weight="semibold"
+                style={{ color: palette.fg }}
+            >
                 {label}
             </Text>
         </Pressable>
@@ -82,15 +104,16 @@ export function Button({ label, onPress, variant = "primary", loading, disabled,
 
 const styles = StyleSheet.create({
     base: {
-        minHeight: minTouchTarget,
+        minHeight: Math.max(size.controlMd, minTouchTarget),
         minWidth: minTouchTarget,
-        borderRadius: radius.md,
+        borderRadius: radius.pill,
         borderWidth: borderWidth.hairline,
-        paddingHorizontal: spacing.lg,
+        paddingHorizontal: spacing.xl,
         paddingVertical: spacing.sm,
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "center",
         gap: spacing.sm,
     },
+    large: { minHeight: size.controlLg },
 });

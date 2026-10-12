@@ -7,7 +7,7 @@ import { BudgetScreen } from "./BudgetScreen";
 
 const household = (status: string) => ({
     id: "11111111-1111-7111-8111-111111111111",
-    name: "Home",
+    name: "Accueil",
     currency: "EUR",
     timezone: "Europe/Paris",
     periodStartDay: 1,
@@ -109,14 +109,14 @@ describe("BudgetScreen", () => {
     test("BR-BUD-03/05/06, BR-MON-09: figures are shown exactly as returned, labelled HOUSEHOLD", async () => {
         mockApi(withBudget(budget()));
         await mount();
-        expect(await screen.findByText("82.5 %")).toBeTruthy();
-        expect(screen.getByText("Warning")).toBeTruthy();
-        expect(screen.getByText("Remaining")).toBeTruthy();
-        expect(screen.getByLabelText(`${fmt("87.50")}, Household`)).toBeTruthy();
+        expect(await screen.findByText("82.5%")).toBeTruthy();
+        expect(screen.getByText("À surveiller")).toBeTruthy();
+        expect(screen.getByText("Reste")).toBeTruthy();
+        expect(screen.getByLabelText(`${fmt("87.50")}, Foyer`)).toBeTruthy();
         expect(screen.getByText(fmt("412.50"))).toBeTruthy();
-        expect(screen.getByText("Groceries")).toBeTruthy();
+        expect(screen.getByText("Courses")).toBeTruthy();
         expect(screen.getByRole("progressbar").props.accessibilityValue.text).toBe(
-            `82.5 percent of budget used, ${fmt("87.50")} remaining`,
+            `82.5 pour cent du budget utilisé, reste ${fmt("87.50")}`,
         );
     });
 
@@ -135,10 +135,10 @@ describe("BudgetScreen", () => {
             ),
         );
         await mount();
-        expect(await screen.findByText("Remaining")).toBeTruthy();
-        expect(screen.getByText("Exceeded")).toBeTruthy();
-        expect(screen.getByText("110.0 %")).toBeTruthy();
-        expect(screen.getByLabelText(`${fmt("-50.00")}, Household`)).toBeTruthy();
+        expect(await screen.findByText("Reste")).toBeTruthy();
+        expect(screen.getByText("Dépassé")).toBeTruthy();
+        expect(screen.getByText("110.0%")).toBeTruthy();
+        expect(screen.getByLabelText(`${fmt("-50.00")}, Foyer`)).toBeTruthy();
     });
 
     test("BR-BUD-01: ON_TRACK is labelled in text", async () => {
@@ -156,7 +156,7 @@ describe("BudgetScreen", () => {
             ),
         );
         await mount();
-        expect(await screen.findByText("On track")).toBeTruthy();
+        expect(await screen.findByText("Dans les clous")).toBeTruthy();
     });
 
     test("BR-BUD-04: the server's categoryLimitsWarning is displayed, non-blocking", async () => {
@@ -171,18 +171,20 @@ describe("BudgetScreen", () => {
             ),
         );
         await mount();
-        expect(await screen.findByText("Category limits exceed the overall limit")).toBeTruthy();
+        expect(
+            await screen.findByText("Les plafonds par catégorie dépassent le plafond global"),
+        ).toBeTruthy();
         expect(screen.getByText(fmt("600.00"), { exact: false })).toBeTruthy();
-        expect(screen.getByText("Edit budget")).toBeTruthy();
+        expect(screen.getByText("Modifier le budget")).toBeTruthy();
     });
 
     test("404 BUDGET_NOT_FOUND shows the empty state with Set and Copy actions (not an error)", async () => {
         mockApi(noBudget());
         await mount();
-        expect(await screen.findByText("No budget for this month")).toBeTruthy();
-        expect(screen.getByText("Set budget")).toBeTruthy();
-        expect(screen.getByText("Copy previous budget")).toBeTruthy();
-        expect(screen.queryByText("Retry")).toBeNull();
+        expect(await screen.findByText("Aucun budget pour cette période")).toBeTruthy();
+        expect(screen.getByText("Définir le budget")).toBeTruthy();
+        expect(screen.getByText("Copier le budget précédent")).toBeTruthy();
+        expect(screen.queryByText("Réessayer")).toBeNull();
     });
 
     test("404 BUDGET_PERIOD_NOT_FOUND is an error state with retry (no probing)", async () => {
@@ -191,8 +193,8 @@ describe("BudgetScreen", () => {
             "GET /api/v1/budgets/2026-03-01": () => problem(404, "BUDGET_PERIOD_NOT_FOUND"),
         });
         await mount();
-        expect(await screen.findByText("Retry")).toBeTruthy();
-        expect(screen.queryByText("No budget for this month")).toBeNull();
+        expect(await screen.findByText("Réessayer")).toBeTruthy();
+        expect(screen.queryByText("Aucun budget pour cette période")).toBeNull();
         expect(calls.filter((c) => c.url.includes("/budgets/")).length).toBe(1);
     });
 
@@ -208,10 +210,10 @@ describe("BudgetScreen", () => {
             },
         });
         await mount();
-        await screen.findByText("Copy previous budget");
+        await screen.findByText("Copier le budget précédent");
         expect(calls.some((c) => c.method === "POST")).toBe(false);
-        await fireEvent.press(screen.getByText("Copy previous budget"));
-        expect(await screen.findByText("82.5 %")).toBeTruthy();
+        await fireEvent.press(screen.getByText("Copier le budget précédent"));
+        expect(await screen.findByText("82.5%")).toBeTruthy();
         expect(calls.some((c) => c.method === "POST")).toBe(true);
     });
 
@@ -222,25 +224,25 @@ describe("BudgetScreen", () => {
                 problem(404, "PREVIOUS_BUDGET_NOT_FOUND"),
         });
         await mount();
-        await fireEvent.press(await screen.findByText("Copy previous budget"));
+        await fireEvent.press(await screen.findByText("Copier le budget précédent"));
         expect(
-            await screen.findByText("There is no budget in the previous period to copy."),
+            await screen.findByText("Aucun budget à copier sur la période précédente."),
         ).toBeTruthy();
     });
 
     test("BR-HH-10: a DISSOLVED household has no set or copy action", async () => {
         mockApi(noBudget("DISSOLVED"));
         await mount();
-        expect(await screen.findByText("No budget for this month")).toBeTruthy();
-        expect(screen.queryByText("Set budget")).toBeNull();
-        expect(screen.queryByText("Copy previous budget")).toBeNull();
+        expect(await screen.findByText("Aucun budget pour cette période")).toBeTruthy();
+        expect(screen.queryByText("Définir le budget")).toBeNull();
+        expect(screen.queryByText("Copier le budget précédent")).toBeNull();
     });
 
     test("BR-HH-10: a DISSOLVED household cannot edit an existing budget", async () => {
         mockApi(withBudget(budget(), "DISSOLVED"));
         await mount();
-        expect(await screen.findByText("82.5 %")).toBeTruthy();
-        expect(screen.queryByText("Edit budget")).toBeNull();
+        expect(await screen.findByText("82.5%")).toBeTruthy();
+        expect(screen.queryByText("Modifier le budget")).toBeNull();
     });
 
     test("BR-BUD-07: past periods are viewable and editable, with an audit note", async () => {
@@ -252,20 +254,20 @@ describe("BudgetScreen", () => {
             }),
         });
         await mount();
-        await fireEvent.press(await screen.findByLabelText(/^Previous period/));
-        expect(await screen.findByText("82.5 %")).toBeTruthy();
-        expect(screen.getByText("This is a past period. Edits to it are audited.")).toBeTruthy();
-        expect(screen.getByText("Edit budget")).toBeTruthy();
-        expect(screen.getByLabelText(/^Next period/)).toBeTruthy();
+        await fireEvent.press(await screen.findByLabelText(/^Période précédente/));
+        expect(await screen.findByText("82.5%")).toBeTruthy();
+        expect(screen.getByText("Période passée. Ses modifications sont tracées.")).toBeTruthy();
+        expect(screen.getByText("Modifier le budget")).toBeTruthy();
+        expect(screen.getByLabelText(/^Période suivante/)).toBeTruthy();
     });
 
     test("BR-BUD-02: saving without any limit is refused locally", async () => {
         const calls = mockApi(noBudget());
         await mount();
-        await fireEvent.press(await screen.findByText("Set budget"));
-        await fireEvent.press(await screen.findByText("Save"));
+        await fireEvent.press(await screen.findByText("Définir le budget"));
+        await fireEvent.press(await screen.findByText("Enregistrer"));
         expect(
-            await screen.findByText("Set at least one limit: overall or for a category."),
+            await screen.findByText("Définissez au moins un plafond : global ou par catégorie."),
         ).toBeTruthy();
         expect(calls.some((c) => c.method === "PUT")).toBe(false);
     });
@@ -276,11 +278,11 @@ describe("BudgetScreen", () => {
             "PUT /api/v1/budgets/2026-03-01": () => ({ status: 201, body: budget() }),
         });
         await mount();
-        await fireEvent.press(await screen.findByText("Set budget"));
-        const input = await screen.findByLabelText("Overall limit (EUR)");
+        await fireEvent.press(await screen.findByText("Définir le budget"));
+        const input = await screen.findByLabelText("Plafond global (EUR)");
         await fireEvent.changeText(input, "500");
         await fireEvent(input, "blur");
-        await fireEvent.press(screen.getByText("Save"));
+        await fireEvent.press(screen.getByText("Enregistrer"));
         await waitFor(() => expect(calls.some((c) => c.method === "PUT")).toBe(true));
         const put = calls.find((c) => c.method === "PUT")!;
         expect(await put.json()).toEqual({
@@ -296,12 +298,12 @@ describe("BudgetScreen", () => {
             "PUT /api/v1/budgets/2026-03-01": () => ({ status: 201, body: budget() }),
         });
         await mount();
-        await fireEvent.press(await screen.findByText("Set budget"));
-        await fireEvent.press(await screen.findByLabelText("Housing"));
-        const input = await screen.findByLabelText("Housing limit (EUR)");
+        await fireEvent.press(await screen.findByText("Définir le budget"));
+        await fireEvent.press(await screen.findByLabelText("Logement"));
+        const input = await screen.findByLabelText("Plafond Logement (EUR)");
         await fireEvent.changeText(input, "800.5");
         await fireEvent(input, "blur");
-        await fireEvent.press(screen.getByText("Save"));
+        await fireEvent.press(screen.getByText("Enregistrer"));
         await waitFor(() => expect(calls.some((c) => c.method === "PUT")).toBe(true));
         const put = calls.find((c) => c.method === "PUT")!;
         expect(await put.json()).toEqual({
@@ -320,12 +322,12 @@ describe("BudgetScreen", () => {
             "PUT /api/v1/budgets/2026-03-01": () => problem(412, "VERSION_CONFLICT"),
         });
         await mount();
-        await fireEvent.press(await screen.findByText("Edit budget"));
-        await fireEvent.press(await screen.findByText("Save"));
+        await fireEvent.press(await screen.findByText("Modifier le budget"));
+        await fireEvent.press(await screen.findByText("Enregistrer"));
         expect(
-            await screen.findByText(/changed elsewhere\. Reload it before editing again/),
+            await screen.findByText(/Modifié ailleurs entre-temps. Rechargez avant de modifier/),
         ).toBeTruthy();
-        expect(screen.getByText("Reload budget")).toBeTruthy();
+        expect(screen.getByText("Recharger le budget")).toBeTruthy();
         const put = calls.find((c) => c.method === "PUT")!;
         expect(put.headers.get("If-Match")).toBe('"3"');
     });
@@ -366,18 +368,19 @@ describe("Budget vs spent per category (MOBILE-008)", () => {
             ),
         );
         await mount();
-        expect(await screen.findByText("Budget vs spent")).toBeTruthy();
-        expect(screen.getByText(`${fmt("50.00")} of ${fmt("200.00")}`)).toBeTruthy();
-        expect(screen.getByText("25.0 %")).toBeTruthy();
-        expect(screen.getByText("On track")).toBeTruthy();
+        expect(await screen.findByText("Par catégorie")).toBeTruthy();
+        expect(screen.getByText(`${fmt("50.00")} / ${fmt("200.00")}`)).toBeTruthy();
+        expect(screen.getByText("25.0%")).toBeTruthy();
+        // On track: design shows no status word on the row, but the bar names it for assistive tech.
+        expect(screen.getByRole("progressbar", { name: "Dans les clous, 25.0%" })).toBeTruthy();
         // the over-budget category: state in words, not only colour
-        expect(screen.getByText(`${fmt("900.00")} of ${fmt("800.00")}`)).toBeTruthy();
-        expect(screen.getByText("112.5 %")).toBeTruthy();
-        expect(screen.getByText("Exceeded")).toBeTruthy();
+        expect(screen.getByText(`${fmt("900.00")} / ${fmt("800.00")}`)).toBeTruthy();
+        expect(screen.getByText("112.5%")).toBeTruthy();
+        expect(screen.getByText("Dépassé")).toBeTruthy();
         const bars = screen.getAllByRole("progressbar");
         expect(bars).toHaveLength(3); // overall + 2 categories
-        const exceeded = bars.find((b) => b.props.accessibilityLabel === "Exceeded, 112.5 %");
-        expect(exceeded?.props.accessibilityValue.text).toContain("Housing: spent");
+        const exceeded = bars.find((b) => b.props.accessibilityLabel === "Dépassé, 112.5%");
+        expect(exceeded?.props.accessibilityValue.text).toContain("Logement : ");
     });
 
     test("WARNING category shows its approaching-limit state", async () => {
@@ -395,14 +398,14 @@ describe("Budget vs spent per category (MOBILE-008)", () => {
             ),
         );
         await mount();
-        expect(await screen.findByText("80.0 %")).toBeTruthy();
-        expect(screen.getAllByText("Warning").length).toBeGreaterThan(0);
+        expect(await screen.findByText("80.0%")).toBeTruthy();
+        expect(screen.getAllByText("À surveiller").length).toBeGreaterThan(0);
     });
 
     test("a limit without consumption (older server) still shows its limit only", async () => {
         mockApi(withBudget(budget()));
         await mount();
-        expect(await screen.findByText("Groceries")).toBeTruthy();
+        expect(await screen.findByText("Courses")).toBeTruthy();
         expect(screen.getByText(fmt("200.00"))).toBeTruthy();
         expect(screen.queryByTestId("category-limit-row")).toBeNull();
     });
@@ -423,6 +426,6 @@ describe("Budget vs spent per category (MOBILE-008)", () => {
             ),
         );
         await mount();
-        expect(await screen.findByText(`${fmt(huge)} of ${fmt(huge)}`)).toBeTruthy();
+        expect(await screen.findByText(`${fmt(huge)} / ${fmt(huge)}`)).toBeTruthy();
     });
 });

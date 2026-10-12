@@ -1,0 +1,367 @@
+{
+  "viewport": {
+    "width": 412,
+    "height": 915
+  },
+  "scale": 2,
+  "samples": {
+    "background": "#0B0F0E",
+    "card": "#111827",
+    "primary": "#22C55E"
+  },
+  "checks": [
+    {
+      "id": "AC-01 background colour",
+      "ok": true,
+      "detail": "#0B0F0E"
+    },
+    {
+      "id": "AC-01 card colour",
+      "ok": true,
+      "detail": "#111827"
+    },
+    {
+      "id": "AC-01 primary colour",
+      "ok": true,
+      "detail": "#22C55E"
+    },
+    {
+      "id": "AC-02 no runtime error",
+      "ok": true,
+      "detail": 0
+    },
+    {
+      "id": "AC-03 01-home navigation bar height",
+      "ok": true,
+      "detail": 80
+    },
+    {
+      "id": "AC-03 01-home navigation bar docked to the bottom",
+      "ok": true,
+      "detail": 0.913
+    },
+    {
+      "id": "AC-03 02-expenses navigation bar height",
+      "ok": true,
+      "detail": 80
+    },
+    {
+      "id": "AC-03 02-expenses navigation bar docked to the bottom",
+      "ok": true,
+      "detail": 0.913
+    },
+    {
+      "id": "AC-03 05-budget navigation bar height",
+      "ok": true,
+      "detail": 80
+    },
+    {
+      "id": "AC-03 05-budget navigation bar docked to the bottom",
+      "ok": true,
+      "detail": 0.913
+    },
+    {
+      "id": "AC-03 06-settings navigation bar height",
+      "ok": true,
+      "detail": 80
+    },
+    {
+      "id": "AC-03 06-settings navigation bar docked to the bottom",
+      "ok": true,
+      "detail": 0.913
+    },
+    {
+      "id": "AC-04 central add action size",
+      "ok": true,
+      "detail": 56
+    },
+    {
+      "id": "AC-04 central add action centred",
+      "ok": true,
+      "detail": 178
+    },
+    {
+      "id": "AC-05 01-home block order",
+      "ok": true,
+      "detail": "0.022 < 0.14 < 0.225 < 0.527"
+    },
+    {
+      "id": "AC-05 02-expenses block order",
+      "ok": true,
+      "detail": "0.017 < 0.074 < 0.142 < 0.341"
+    },
+    {
+      "id": "AC-05 03-add-expense-scan block order",
+      "ok": true,
+      "detail": "0.02 < 0.079 < 0.697"
+    },
+    {
+      "id": "AC-05 04-receipt-review block order",
+      "ok": true,
+      "detail": "0.02 < 0.599 < 0.901"
+    },
+    {
+      "id": "AC-05 05-budget block order",
+      "ok": true,
+      "detail": "0.017 < 0.157 < 0.527"
+    },
+    {
+      "id": "AC-05 06-settings block order",
+      "ok": true,
+      "detail": "0.017 < 0.098 < 0.214 < 0.743"
+    },
+    {
+      "id": "AC-06 01-home title on the 20 dp gutter",
+      "ok": true,
+      "detail": 20
+    },
+    {
+      "id": "AC-06 02-expenses title on the 20 dp gutter",
+      "ok": true,
+      "detail": 20
+    },
+    {
+      "id": "AC-06 05-budget title on the 20 dp gutter",
+      "ok": true,
+      "detail": 20
+    },
+    {
+      "id": "AC-06 06-settings title on the 20 dp gutter",
+      "ok": true,
+      "detail": 20
+    },
+    {
+      "id": "AC-06 01-home segmented on the 20 dp gutter",
+      "ok": true,
+      "detail": 20
+    },
+    {
+      "id": "AC-06 02-expenses search on the 20 dp gutter",
+      "ok": true,
+      "detail": 20
+    },
+    {
+      "id": "AC-07 segmented control spans the content width",
+      "ok": true,
+      "detail": 372
+    },
+    {
+      "id": "AC-08 primary call to action height",
+      "ok": true,
+      "detail": 56
+    }
+  ],
+  "results": [
+    {
+      "name": "01-home",
+      "file": "C:\\Abdel\\sources\\financecouple\\design\\screenshots\\01-home.png",
+      "anchors": {
+        "title": {
+          "top": 0.022,
+          "height": 32,
+          "left": 20,
+          "width": 320
+        },
+        "segmented": {
+          "top": 0.14,
+          "height": 50,
+          "left": 20,
+          "width": 372
+        },
+        "hero": {
+          "top": 0.225,
+          "height": 20,
+          "left": 36,
+          "width": 236
+        },
+        "breakdown": {
+          "top": 0.527,
+          "height": 28,
+          "left": 20,
+          "width": 372
+        },
+        "nav": {
+          "top": 0.913,
+          "height": 80,
+          "left": 0,
+          "width": 412
+        },
+        "fab": {
+          "top": 0.913,
+          "height": 56,
+          "left": 178,
+          "width": 56
+        }
+      }
+    },
+    {
+      "name": "02-expenses",
+      "file": "C:\\Abdel\\sources\\financecouple\\design\\screenshots\\02-expenses.png",
+      "anchors": {
+        "title": {
+          "top": 0.017,
+          "height": 40,
+          "left": 20,
+          "width": 372
+        },
+        "search": {
+          "top": 0.074,
+          "height": 50,
+          "left": 20,
+          "width": 312
+        },
+        "segmented": {
+          "top": 0.142,
+          "height": 50,
+          "left": 20,
+          "width": 372
+        },
+        "firstRow": {
+          "top": 0.341,
+          "height": 24,
+          "left": 84,
+          "width": 74
+        },
+        "nav": {
+          "top": 0.913,
+          "height": 80,
+          "left": 0,
+          "width": 412
+        }
+      }
+    },
+    {
+      "name": "03-add-expense-scan",
+      "file": "C:\\Abdel\\sources\\financecouple\\design\\screenshots\\03-add-expense-scan.png",
+      "anchors": {
+        "title": {
+          "top": 0.02,
+          "height": 28,
+          "left": 64,
+          "width": 284
+        },
+        "segmented": {
+          "top": 0.079,
+          "height": 50,
+          "left": 20,
+          "width": 372
+        },
+        "shutter": {
+          "top": 0.697,
+          "height": 72,
+          "left": 170,
+          "width": 72
+        }
+      }
+    },
+    {
+      "name": "03b-add-expense-manual",
+      "file": "C:\\Abdel\\sources\\financecouple\\design\\screenshots\\03b-add-expense-manual.png",
+      "anchors": {
+        "title": {
+          "top": 0.02,
+          "height": 28,
+          "left": 64,
+          "width": 284
+        }
+      }
+    },
+    {
+      "name": "05-budget",
+      "file": "C:\\Abdel\\sources\\financecouple\\design\\screenshots\\05-budget.png",
+      "anchors": {
+        "title": {
+          "top": 0.017,
+          "height": 40,
+          "left": 20,
+          "width": 372
+        },
+        "overall": {
+          "top": 0.157,
+          "height": 20,
+          "left": 36,
+          "width": 340
+        },
+        "byCategory": {
+          "top": 0.527,
+          "height": 28,
+          "left": 20,
+          "width": 372
+        },
+        "edit": {
+          "top": 0.856,
+          "height": 56,
+          "left": 20,
+          "width": 372
+        },
+        "nav": {
+          "top": 0.913,
+          "height": 80,
+          "left": 0,
+          "width": 412
+        }
+      }
+    },
+    {
+      "name": "06-settings",
+      "file": "C:\\Abdel\\sources\\financecouple\\design\\screenshots\\06-settings.png",
+      "anchors": {
+        "title": {
+          "top": 0.017,
+          "height": 40,
+          "left": 20,
+          "width": 372
+        },
+        "household": {
+          "top": 0.098,
+          "height": 24,
+          "left": 108,
+          "width": 232
+        },
+        "profile": {
+          "top": 0.214,
+          "height": 24,
+          "left": 68,
+          "width": 276
+        },
+        "about": {
+          "top": 0.743,
+          "height": 24,
+          "left": 68,
+          "width": 276
+        },
+        "nav": {
+          "top": 0.913,
+          "height": 80,
+          "left": 0,
+          "width": 412
+        }
+      }
+    },
+    {
+      "name": "04-receipt-review",
+      "file": "C:\\Abdel\\sources\\financecouple\\design\\screenshots\\04-receipt-review.png",
+      "anchors": {
+        "title": {
+          "top": 0.02,
+          "height": 28,
+          "left": 64,
+          "width": 284
+        },
+        "confidence": {
+          "top": 0.599,
+          "height": 20,
+          "left": 36,
+          "width": 340
+        },
+        "cta": {
+          "top": 0.901,
+          "height": 56,
+          "left": 20,
+          "width": 372
+        }
+      }
+    }
+  ],
+  "errors": []
+}

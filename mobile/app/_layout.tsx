@@ -1,6 +1,14 @@
+import {
+    Inter_400Regular,
+    Inter_500Medium,
+    Inter_600SemiBold,
+    Inter_700Bold,
+    useFonts,
+} from "@expo-google-fonts/inter";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import { useEffect } from "react";
+import { View } from "react-native";
 import { signOut } from "@/features/identity/authApi";
 import { HouseholdProvider, useHouseholdState } from "@/features/household/HouseholdProvider";
 import { queryClient, session } from "@/shared/api/instance";
@@ -37,6 +45,7 @@ function Navigator() {
     const status = useSessionStatus(session);
     const { state, refetch } = useHouseholdState();
     const signedIn = status === "signedIn";
+    const colors = useColors();
 
     if (status === "restoring") return <Splash />;
     if (status === "restoreFailed") {
@@ -49,7 +58,12 @@ function Navigator() {
         return <Failure message={errorMessage(state.error)} onRetry={refetch} />;
     }
     return (
-        <Stack screenOptions={{ headerShown: false }}>
+        <Stack
+            screenOptions={{
+                headerShown: false,
+                contentStyle: { backgroundColor: colors.background },
+            }}
+        >
             <Stack.Protected guard={!signedIn}>
                 <Stack.Screen name="(auth)" />
             </Stack.Protected>
@@ -65,6 +79,7 @@ function Navigator() {
                 <Stack.Screen name="expense/[id]" />
                 <Stack.Screen name="expense/edit/[id]" />
                 <Stack.Screen name="categories" />
+                <Stack.Screen name="household" />
             </Stack.Protected>
         </Stack>
     );
@@ -72,10 +87,21 @@ function Navigator() {
 
 function Root() {
     const status = useSessionStatus(session);
-    useColors(); // theme resolves from the OS scheme
+    const colors = useColors();
+    // Inter is the typeface of the approved design; a load failure falls back to the system font
+    // rather than blocking the app.
+    const [fontsLoaded, fontError] = useFonts({
+        Inter_400Regular,
+        Inter_500Medium,
+        Inter_600SemiBold,
+        Inter_700Bold,
+    });
     useEffect(() => {
         void session.restore();
     }, []);
+    if (!fontsLoaded && !fontError) {
+        return <View style={{ flex: 1, backgroundColor: colors.background }} />;
+    }
     return (
         <HouseholdProvider enabled={status === "signedIn"}>
             <Navigator />

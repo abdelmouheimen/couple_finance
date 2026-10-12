@@ -19,8 +19,8 @@ describe("Button double-submit protection (MOBILE-007)", () => {
                     resolve = r;
                 }),
         );
-        await renderUi(<Button label="Save" onPress={onPress} />);
-        const button = screen.getByRole("button", { name: "Save" });
+        await renderUi(<Button label="Enregistrer" onPress={onPress} />);
+        const button = screen.getByRole("button", { name: "Enregistrer" });
         await fireEvent.press(button);
         await fireEvent.press(button);
         expect(onPress).toHaveBeenCalledTimes(1);
@@ -40,8 +40,8 @@ describe("Button double-submit protection (MOBILE-007)", () => {
                 }),
         );
         const errors = jest.spyOn(globalThis.console, "error").mockImplementation(() => {});
-        await renderUi(<Button label="Save" onPress={onPress} />);
-        await fireEvent.press(screen.getByRole("button", { name: "Save" }));
+        await renderUi(<Button label="Enregistrer" onPress={onPress} />);
+        await fireEvent.press(screen.getByRole("button", { name: "Enregistrer" }));
         await act(async () => {
             screen.unmount();
         });
@@ -54,8 +54,8 @@ describe("Button double-submit protection (MOBILE-007)", () => {
 
     test("a rejected action releases the guard", async () => {
         const onPress = jest.fn(() => Promise.reject(new Error("x")));
-        await renderUi(<Button label="Save" onPress={onPress} />);
-        const button = screen.getByRole("button", { name: "Save" });
+        await renderUi(<Button label="Enregistrer" onPress={onPress} />);
+        const button = screen.getByRole("button", { name: "Enregistrer" });
         await fireEvent.press(button);
         await act(async () => {});
         await fireEvent.press(button);
@@ -107,11 +107,11 @@ describe("touch targets", () => {
     test("Button and IconButton render at least the minimum touch target", async () => {
         await renderUi(
             <>
-                <Button label="Save" onPress={() => {}} />
+                <Button label="Enregistrer" onPress={() => {}} />
                 <IconButton icon="close" label="Close it" onPress={() => {}} />
             </>,
         );
-        for (const name of ["Save", "Close it"]) {
+        for (const name of ["Enregistrer", "Close it"]) {
             const style = StyleSheet.flatten(
                 screen.getByRole("button", { name }).props.style as never,
             ) as { minHeight?: number; minWidth?: number; width?: number; height?: number };
@@ -130,7 +130,7 @@ describe("component accessibility contracts (MOBILE-007)", () => {
         let resolve: () => void = () => {};
         await renderUi(
             <Button
-                label="Save"
+                label="Enregistrer"
                 onPress={() =>
                     new Promise<void>((r) => {
                         resolve = r;
@@ -138,7 +138,7 @@ describe("component accessibility contracts (MOBILE-007)", () => {
                 }
             />,
         );
-        const button = screen.getByRole("button", { name: "Save" });
+        const button = screen.getByRole("button", { name: "Enregistrer" });
         const style = StyleSheet.flatten(
             typeof button.props.style === "function"
                 ? button.props.style({ pressed: false })
@@ -146,19 +146,19 @@ describe("component accessibility contracts (MOBILE-007)", () => {
         );
         expect(style.minHeight).toBeGreaterThanOrEqual(44);
         await fireEvent.press(button);
-        expect(screen.getByRole("button", { name: "Save" }).props.accessibilityState.busy).toBe(
-            true,
-        );
+        expect(
+            screen.getByRole("button", { name: "Enregistrer" }).props.accessibilityState.busy,
+        ).toBe(true);
         await act(async () => {
             resolve();
         });
-        expect(screen.getByRole("button", { name: "Save" }).props.accessibilityState.busy).toBe(
-            false,
-        );
+        expect(
+            screen.getByRole("button", { name: "Enregistrer" }).props.accessibilityState.busy,
+        ).toBe(false);
     });
 
-    test("Text caps font scaling so amounts are not clipped at 200 %", async () => {
-        await renderUi(<Text variant="amount">12.50</Text>);
+    test("Text caps font scaling so amounts are not clipped at 200%", async () => {
+        await renderUi(<Text variant="h1">12.50</Text>);
         expect(screen.getByText("12.50").props.maxFontSizeMultiplier).toBe(2);
     });
 

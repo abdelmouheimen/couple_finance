@@ -1,17 +1,19 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from "react-native";
+import { ActivityIndicator, FlatList, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { periodTitle } from "@/features/budget/periodLabel";
 import { useHouseholdContext } from "@/features/household/HouseholdProvider";
 import { errorMessage } from "@/shared/i18n/errorMessage";
 import { strings } from "@/shared/i18n/strings";
 import {
-    Button,
     Chip,
     EmptyState,
     ErrorState,
-    Icon,
-    MoneyText,
+    FilterChip,
+    IconButton,
+    ScreenTitle,
+    Segmented,
     Selector,
     Sheet,
     Skeleton,
@@ -19,15 +21,10 @@ import {
     TextInput,
 } from "@/shared/ui";
 import { useColors } from "@/shared/ui/theme/theme";
-import {
-    borderWidth,
-    fabContentInset,
-    minTouchTarget,
-    radius,
-    spacing,
-} from "@/shared/ui/theme/tokens";
+import { spacing } from "@/shared/ui/theme/tokens";
+import { categoryVisual } from "./categoryVisual";
 import type { Expense, ExpenseFilters, ExpenseScope } from "./expenseApi";
-import { categoryLabel, shiftDate, toMoney } from "./expenseRules";
+import { categoryLabel, shiftDate } from "./expenseRules";
 import { ExpenseRow } from "./ExpenseRow";
 import { useCategories, useExpensePages } from "./expenseQueries";
 
@@ -112,10 +109,14 @@ export function ExpenseListScreen() {
 
     const query = useExpensePages(filters);
     const categories = useCategories(true);
-    const categoryName = useMemo(
-        () => new Map((categories.data ?? []).map((c) => [c.id, categoryLabel(c)])),
+    const categoryById = useMemo(
+        () => new Map((categories.data ?? []).map((c) => [c.id, c])),
         [categories.data],
     );
+    const nameOf = (id: string | undefined) => {
+        const category = categoryById.get(id ?? "");
+        return category ? categoryLabel(category) : undefined;
+    };
 
     const filtered = period !== "current" || categoryId !== undefined || q !== "";
     const clearFilters = () => {
@@ -141,29 +142,26 @@ export function ExpenseListScreen() {
         return out;
     }, [query.data]);
 
-    const totals = query.data?.pages[0]?.totals;
-
     const activeCategory =
         categoryId === undefined
             ? undefined
-            : (categoryName.get(categoryId) ?? strings.dashboard.unknownCategory);
-    // Category is the only filter hidden behind the sheet; scope, period and search stay on the bar.
+            : (nameOf(categoryId) ?? strings.dashboard.unknownCategory);
     const activeCount = categoryId === undefined ? 0 : 1;
+    const periodChip =
+        period === "current"
+            ? periodTitle(currentPeriod)
+            : period === "all"
+              ? strings.expense.periodAll
+              : strings.expense.periodCustom;
 
     const header = (
         <View style={styles.header}>
-            <View style={styles.titleRow}>
-                <Text variant="headline" accessibilityRole="header" style={styles.flex}>
-                    {strings.expense.title}
-                </Text>
-                {/* Period total comes from the API (ExpenseTotals); never summed on the device. */}
-                {totals ? (
-                    <MoneyText money={toMoney(totals.net)} scope={totals.scope} variant="title" />
-                ) : null}
-            </View>
+            <ScreenTitle>{strings.expense.title}</ScreenTitle>
             <View style={styles.searchRow}>
                 <View style={styles.flex}>
                     <TextInput
+                        hideLabel
+                        icon="search"
                         label={strings.expense.searchLabel}
                         placeholder={strings.expense.searchPlaceholder}
                         value={search}
@@ -174,18 +172,18 @@ export function ExpenseListScreen() {
                         maxLength={100}
                     />
                 </View>
-                <Button
+                <IconButton
+                    icon="filters"
                     label={
                         activeCount > 0
                             ? strings.expense.filtersActive(activeCount)
                             : strings.expense.filters
                     }
-                    variant={activeCount > 0 ? "primary" : "secondary"}
                     onPress={() => setFiltersOpen(true)}
                     testID="open-filters"
                 />
             </View>
-            <Selector
+            <Segmented
                 label={strings.expense.scopeLabel}
                 value={scope}
                 onChange={setScope}
@@ -194,6 +192,51 @@ export function ExpenseListScreen() {
                     { value: "PERSONAL", label: strings.scope.PERSONAL },
                 ]}
             />
+            <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.chipRow}
+                style={styles.chipScroll}
+            >
+                <FilterChip
+                    testID="period-chip"
+                    icon="calendar"
+                    label={periodChip}
+                    accessibilityLabel={`${strings.expense.periodLabel}, ${periodChip}`}
+                    onPress={() => setFiltersOpen(true)}
+                />
+                <FilterChip
+                    testID="category-chip"
+                    icon="categories"
+                    label={strings.expense.categories}
+                    count={activeCount}
+                    accessibilityLabel={`${strings.expense.categoryFilter}, ${
+                        activeCategory ?? strings.expense.allCategories
+                    }`}
+                    onPress={() => setFiltersOpen(true)}
+                />
+                {activeCategory !== undefined ? (
+                    <FilterChip
+                        testID="active-category-filter"
+                        label={activeCategory}
+                        removable
+                        accessibilityLabel={strings.expense.removeFilter(activeCategory)}
+                        onPress={() => setCategoryId(undefined)}
+                    />
+                ) : null}
+            </ScrollView>
+        </View>
+    );
+
+    const filtersSheet = (
+        <Sheet
+            visible={filtersOpen}
+            title={strings.expense.filtersTitle}
+            onClose={() => setFiltersOpen(false)}
+        >
+            <Text variant="caption" tone="secondary">
+                {strings.expense.periodLabel}
+            </Text>
             <Selector
                 label={strings.expense.periodLabel}
                 value={period}
@@ -211,7 +254,7 @@ export function ExpenseListScreen() {
                             label={strings.expense.dateFrom}
                             value={from}
                             onChangeText={setFrom}
-                            placeholder="YYYY-MM-DD"
+                            placeholder="AAAA-MM-JJ"
                             error={
                                 from !== "" && !DATE_RE.test(from)
                                     ? strings.expense.dateFormatError
@@ -226,7 +269,7 @@ export function ExpenseListScreen() {
                             label={strings.expense.dateTo}
                             value={to}
                             onChangeText={setTo}
-                            placeholder="YYYY-MM-DD"
+                            placeholder="AAAA-MM-JJ"
                             error={
                                 to !== "" && !DATE_RE.test(to)
                                     ? strings.expense.dateFormatError
@@ -238,31 +281,9 @@ export function ExpenseListScreen() {
                     </View>
                 </View>
             ) : null}
-            {activeCategory !== undefined ? (
-                <View accessibilityLabel={strings.expense.activeFilters} style={styles.active}>
-                    <Pressable
-                        testID="active-category-filter"
-                        accessibilityRole="button"
-                        accessibilityLabel={strings.expense.removeFilter(activeCategory)}
-                        onPress={() => setCategoryId(undefined)}
-                        style={[styles.activeChip, { borderColor: colors.primary }]}
-                    >
-                        <Text bold tone="primary">
-                            {activeCategory}
-                        </Text>
-                        <Icon name="close" color={colors.primary} />
-                    </Pressable>
-                </View>
-            ) : null}
-        </View>
-    );
-
-    const filtersSheet = (
-        <Sheet
-            visible={filtersOpen}
-            title={strings.expense.filtersTitle}
-            onClose={() => setFiltersOpen(false)}
-        >
+            <Text variant="caption" tone="secondary">
+                {strings.expense.categories}
+            </Text>
             <View
                 accessibilityRole="radiogroup"
                 accessibilityLabel={strings.expense.categoryFilter}
@@ -294,7 +315,7 @@ export function ExpenseListScreen() {
     let empty: React.ReactElement | null = null;
     if (query.isPending) {
         empty = (
-            <View style={styles.header}>
+            <View style={styles.loading}>
                 <Skeleton variant="row" />
                 <Skeleton variant="row" />
                 <Skeleton variant="row" />
@@ -338,7 +359,7 @@ export function ExpenseListScreen() {
                 data={rows}
                 keyExtractor={(r) => (r.type === "header" ? `h-${r.date}` : r.expense.id)}
                 keyboardShouldPersistTaps="handled"
-                contentContainerStyle={[styles.content, { paddingBottom: fabContentInset }]}
+                contentContainerStyle={styles.content}
                 ListHeaderComponent={header}
                 ListEmptyComponent={empty}
                 refreshing={query.isRefetching && !query.isFetchingNextPage}
@@ -357,7 +378,6 @@ export function ExpenseListScreen() {
                         <Text
                             variant="caption"
                             tone="secondary"
-                            bold
                             accessibilityRole="header"
                             style={styles.date}
                         >
@@ -368,12 +388,13 @@ export function ExpenseListScreen() {
                             expense={item.expense}
                             title={
                                 item.expense.merchant ??
-                                categoryName.get(item.expense.items[0]?.categoryId ?? "") ??
+                                nameOf(item.expense.items[0]?.categoryId) ??
                                 strings.expense.untitled
                             }
                             dateLabel={formatDate(item.expense.date)}
-                            categoryLabel={categoryName.get(
-                                item.expense.items[0]?.categoryId ?? "",
+                            categoryLabel={nameOf(item.expense.items[0]?.categoryId)}
+                            visual={categoryVisual(
+                                categoryById.get(item.expense.items[0]?.categoryId ?? ""),
                             )}
                             onPress={() => router.push(`/expense/${item.expense.id}`)}
                         />
@@ -387,21 +408,19 @@ export function ExpenseListScreen() {
 
 const styles = StyleSheet.create({
     flex: { flex: 1 },
-    content: { padding: spacing.lg, gap: spacing.sm, flexGrow: 1 },
+    content: {
+        paddingHorizontal: spacing.screen,
+        paddingTop: spacing.lg,
+        paddingBottom: spacing.xl,
+        gap: spacing.sm,
+        flexGrow: 1,
+    },
     header: { gap: spacing.md, marginBottom: spacing.sm },
-    titleRow: { flexDirection: "row", alignItems: "center", gap: spacing.md },
-    searchRow: { flexDirection: "row", alignItems: "flex-end", gap: spacing.sm },
+    loading: { gap: spacing.sm },
+    searchRow: { flexDirection: "row", alignItems: "center", gap: spacing.md },
+    chipScroll: { marginHorizontal: -spacing.screen },
+    chipRow: { flexDirection: "row", gap: spacing.sm, paddingHorizontal: spacing.screen },
     dates: { flexDirection: "row", gap: spacing.sm },
     chips: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
-    active: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
-    activeChip: {
-        minHeight: minTouchTarget,
-        flexDirection: "row",
-        alignItems: "center",
-        gap: spacing.sm,
-        borderWidth: borderWidth.hairline,
-        borderRadius: radius.pill,
-        paddingHorizontal: spacing.lg,
-    },
-    date: { marginTop: spacing.md },
+    date: { marginTop: spacing.md, marginBottom: spacing.xs },
 });

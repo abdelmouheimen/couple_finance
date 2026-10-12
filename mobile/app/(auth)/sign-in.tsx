@@ -8,7 +8,7 @@ import { Screen, Text } from "@/shared/ui";
 export default function SignIn() {
     return (
         <Screen>
-            <Text variant="headline" accessibilityRole="header">
+            <Text variant="h2" accessibilityRole="header">
                 {strings.auth.signInTitle}
             </Text>
             <SignInForm

@@ -72,7 +72,7 @@ export function toDonutSlices(rows: readonly CategoryRow[]): DonutSlice[] {
 export function donutSummary(slices: readonly DonutSlice[], scopeLabel: string): string {
     return strings.dashboard.donutA11y(
         scopeLabel,
-        slices.map((s) => `${s.label} ${s.percentage} %`).join(", "),
+        slices.map((s) => `${s.label} ${strings.percent(s.percentage)}`).join(", "),
     );
 }
 

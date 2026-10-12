@@ -8,8 +8,9 @@ const config: ExpoConfig = {
     version: "0.1.0",
     scheme: "couplefinance",
     orientation: "portrait",
-    userInterfaceStyle: "automatic",
-    plugins: ["expo-router", "expo-secure-store"],
+    // The approved design is dark only.
+    userInterfaceStyle: "dark",
+    plugins: ["expo-router", "expo-secure-store", "expo-font"],
     experiments: { typedRoutes: true },
     ios: { bundleIdentifier: "com.couplefinance.app", supportsTablet: false },
     android: { package: "com.couplefinance.app" },

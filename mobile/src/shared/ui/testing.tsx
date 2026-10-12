@@ -11,7 +11,7 @@ const metrics = {
 };
 
 /** Test helper: renders UI inside the providers the primitives expect. */
-export function renderUi(ui: ReactElement, scheme: ColorScheme = "light") {
+export function renderUi(ui: ReactElement, scheme: ColorScheme = "dark") {
     return render(
         <SafeAreaProvider initialMetrics={metrics}>
             <ThemeProvider scheme={scheme}>
