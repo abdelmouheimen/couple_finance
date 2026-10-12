@@ -81,7 +81,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                         style={[
                             styles.toast,
                             elevation.floating,
-                            { backgroundColor: colors.surface, borderColor: tone },
+                            { backgroundColor: colors.card, borderColor: tone },
                         ]}
                     >
                         <Icon name={toast.kind === "error" ? "error" : "check"} color={tone} />
@@ -98,6 +98,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                             />
                         ) : null}
                         <IconButton
+                            variant="plain"
                             icon="close"
                             label={strings.close}
                             onPress={() => setToast(null)}
@@ -115,9 +116,10 @@ const styles = StyleSheet.create({
         flexDirection: "row",
         alignItems: "center",
         gap: spacing.md,
-        borderRadius: radius.md,
-        borderWidth: borderWidth.thick,
-        padding: spacing.lg,
+        borderRadius: radius.lg,
+        borderWidth: borderWidth.hairline,
+        padding: spacing.md,
+        paddingLeft: spacing.lg,
     },
     message: { flex: 1 },
 });

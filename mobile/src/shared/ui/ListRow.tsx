@@ -2,6 +2,7 @@ import { type ReactNode } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { Icon } from "./Icon";
 import { Text } from "./Text";
+import { type IconName } from "./theme/icons";
 import { useColors } from "./theme/theme";
 import { minTouchTarget, spacing } from "./theme/tokens";
 
@@ -9,8 +10,10 @@ interface Props {
     title: string;
     subtitle?: string;
     trailing?: ReactNode;
-    /** Small decorative element before the text (e.g. a legend swatch). */
+    /** Small decorative element before the text (e.g. an icon tile or a legend dot). */
     leading?: ReactNode;
+    /** Outline icon before the text (settings rows). */
+    icon?: IconName;
     onPress?: () => void;
     testID?: string;
     accessibilityHint?: string;
@@ -21,6 +24,7 @@ export function ListRow({
     subtitle,
     trailing,
     leading,
+    icon,
     onPress,
     testID,
     accessibilityHint,
@@ -28,9 +32,10 @@ export function ListRow({
     const colors = useColors();
     const content = (
         <>
+            {icon ? <Icon name={icon} /> : null}
             {leading}
             <View style={styles.main}>
-                <Text bold>{title}</Text>
+                <Text weight="medium">{title}</Text>
                 {subtitle ? (
                     <Text variant="caption" tone="secondary">
                         {subtitle}
@@ -62,6 +67,12 @@ export function ListRow({
     );
 }
 
+/** Hairline between the rows of a grouped list card. */
+export function Divider() {
+    const colors = useColors();
+    return <View style={[styles.divider, { backgroundColor: colors.surface }]} />;
+}
+
 const styles = StyleSheet.create({
     row: {
         minHeight: minTouchTarget,
@@ -71,4 +82,5 @@ const styles = StyleSheet.create({
         paddingVertical: spacing.sm,
     },
     main: { flex: 1, gap: spacing.xs },
+    divider: { height: StyleSheet.hairlineWidth },
 });

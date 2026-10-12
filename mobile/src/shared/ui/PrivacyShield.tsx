@@ -25,7 +25,7 @@ export function PrivacyShield() {
             importantForAccessibility="no-hide-descendants"
             style={[styles.cover, { backgroundColor: colors.background }]}
         >
-            <Text bold variant="title">
+            <Text bold variant="h3">
                 {strings.appName}
             </Text>
         </View>

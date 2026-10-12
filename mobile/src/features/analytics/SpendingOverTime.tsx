@@ -90,10 +90,10 @@ export function SpendingOverTime({
 
     return (
         <Card>
-            <Text variant="title" accessibilityRole="header">
+            <Text variant="h3" accessibilityRole="header">
                 {strings.dashboard.overTimeTitle}
             </Text>
-            <Text variant="caption" tone="secondary" bold>
+            <Text variant="caption" tone="secondary">
                 {scopeLabel}
             </Text>
             {body}

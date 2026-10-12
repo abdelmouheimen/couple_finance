@@ -32,7 +32,7 @@ export default function Gallery() {
 
     return (
         <Screen>
-            <Text variant="headline" accessibilityRole="header">
+            <Text variant="h2" accessibilityRole="header">
                 Gallery
             </Text>
             <Card>

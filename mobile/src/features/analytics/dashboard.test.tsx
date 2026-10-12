@@ -16,7 +16,7 @@ const OTHER = "019a0000-0000-7000-8000-000000000012";
 
 const household = {
     id: "11111111-1111-7111-8111-111111111111",
-    name: "Home",
+    name: "Accueil",
     currency: "EUR",
     timezone: "Europe/Paris",
     periodStartDay: 1,
@@ -139,7 +139,7 @@ function ReadyGate() {
 }
 
 let client: QueryClient;
-async function mount(scheme: "light" | "dark" = "light") {
+async function mount(scheme: "dark" = "dark") {
     client = new QueryClient();
     await renderUi(
         <QueryClientProvider client={client}>
@@ -161,13 +161,15 @@ describe("dashboard", () => {
     test("BR-ANA-01 / BR-SCP-03: loaded state shows server figures verbatim with the scope label", async () => {
         const calls = mockApi(defaultHandler);
         await mount();
-        expect(await screen.findByText(fmt("1234.50"))).toBeTruthy();
-        expect(screen.getByText(fmt("765.50"))).toBeTruthy();
-        expect(screen.getByText(/-3\.1 %/)).toBeTruthy();
-        expect(screen.getAllByText("Household").length).toBeGreaterThan(0);
-        expect(screen.getAllByText("Groceries").length).toBeGreaterThan(0);
+        expect(await screen.findAllByText(fmt("1234.50"))).toBeTruthy();
+        expect(screen.getAllByText(fmt("765.50")).length).toBeGreaterThan(0);
+        // BR-SCP-03: each total carries its scope (visible segment above + accessible label).
+        expect(screen.getByLabelText(`${fmt("1234.50")}, Foyer`)).toBeTruthy();
+        expect(screen.getByText(/-3\.1%/)).toBeTruthy();
+        expect(screen.getAllByText("Foyer").length).toBeGreaterThan(0);
+        expect(screen.getAllByText("Courses").length).toBeGreaterThan(0);
         expect(screen.getAllByText("Pets").length).toBeGreaterThan(0);
-        expect(screen.getByText(/72\.9 %/)).toBeTruthy();
+        expect(screen.getByText(/72\.9%/)).toBeTruthy();
         expect(screen.getByTestId("period-header").children.join("")).toMatch(/2026/);
         expect(calls).toContain("/api/v1/analytics/periods/2026-03-01?scope=HOUSEHOLD");
     });
@@ -176,12 +178,12 @@ describe("dashboard", () => {
         mockApi(defaultHandler);
         await mount();
         const row = await screen.findByTestId(`category-row-${GROCERIES}`);
-        expect(row.props.accessibilityLabel).toContain("Groceries");
-        expect(row.props.accessibilityLabel).toContain("72.9 %");
+        expect(row.props.accessibilityLabel).toContain("Courses");
+        expect(row.props.accessibilityLabel).toContain("72.9%");
         const chart = screen.getByTestId("category-chart");
         expect(chart.props.accessibilityRole).toBe("image");
         expect(chart.props.accessibilityLabel).toBe(
-            "Spending by category, Household: Groceries 72.9 %, Pets 27.1 %",
+            "Dépenses par catégorie, Foyer : Courses 72.9%, Pets 27.1%",
         );
         expect(screen.getAllByTestId("donut-arc")).toHaveLength(2);
     });
@@ -189,8 +191,8 @@ describe("dashboard", () => {
     test("BR-ANA-06: negative categories are listed as provided and not charted", async () => {
         mockApi(defaultHandler);
         await mount();
-        await screen.findByText(fmt("1234.50"));
-        expect(screen.getByText("Net refunds")).toBeTruthy();
+        await screen.findAllByText(fmt("1234.50"));
+        expect(screen.getByText("Remboursements nets")).toBeTruthy();
         expect(screen.getAllByTestId("donut-arc")).toHaveLength(2); // refunds are not drawn
     });
 
@@ -201,7 +203,7 @@ describe("dashboard", () => {
                 : defaultHandler(url),
         );
         await mount();
-        fireEvent.press(await screen.findByRole("button", { name: "Set a budget" }));
+        fireEvent.press(await screen.findByRole("button", { name: "Définir un budget" }));
         expect(mockPush).toHaveBeenCalledWith("/budget");
     });
 
@@ -221,7 +223,7 @@ describe("dashboard", () => {
                 : defaultHandler(url),
         );
         await mount();
-        fireEvent.press(await screen.findByRole("button", { name: "Add an expense" }));
+        fireEvent.press(await screen.findByRole("button", { name: "Ajouter une dépense" }));
         expect(mockPush).toHaveBeenCalledWith("/add-expense");
         expect(screen.queryByTestId("category-chart")).toBeNull();
     });
@@ -229,14 +231,14 @@ describe("dashboard", () => {
     test("BR-SCP-01/02/03: scope toggle switches to personal data, labelled, without a budget block", async () => {
         const calls = mockApi(defaultHandler);
         await mount();
-        await screen.findByText(fmt("1234.50"));
-        fireEvent.press(screen.getByRole("radio", { name: "Personal" }));
-        expect(await screen.findByText(fmt("77.00"))).toBeTruthy();
+        await screen.findAllByText(fmt("1234.50"));
+        fireEvent.press(screen.getByRole("radio", { name: "Personnel" }));
+        expect((await screen.findAllByText(fmt("77.00"))).length).toBeGreaterThan(0);
         expect(screen.queryByText(fmt("1234.50"))).toBeNull();
-        expect(screen.queryByText("Budget remaining")).toBeNull();
-        expect(screen.getAllByText("Personal").length).toBeGreaterThan(1);
+        expect(screen.queryByText("Budget mensuel")).toBeNull();
+        expect(screen.getByLabelText(`${fmt("77.00")}, Personnel`)).toBeTruthy();
         expect(
-            screen.getByRole("radio", { name: "Personal" }).props.accessibilityState.selected,
+            screen.getByRole("radio", { name: "Personnel" }).props.accessibilityState.selected,
         ).toBe(true);
         expect(calls).toContain("/api/v1/analytics/periods/2026-03-01?scope=PERSONAL");
     });
@@ -264,11 +266,11 @@ describe("dashboard", () => {
                 : defaultHandler(url),
         );
         await mount();
-        expect(await screen.findByText(fmt("1234.50"))).toBeTruthy();
-        expect(await screen.findByText("Retry")).toBeTruthy();
+        expect(await screen.findAllByText(fmt("1234.50"))).toBeTruthy();
+        expect(await screen.findByText("Réessayer")).toBeTruthy();
         failing = false;
-        fireEvent.press(screen.getByText("Retry"));
-        expect((await screen.findAllByText("Groceries")).length).toBeGreaterThan(0);
+        fireEvent.press(screen.getByText("Réessayer"));
+        expect((await screen.findAllByText("Courses")).length).toBeGreaterThan(0);
     });
 
     test("analytics failure shows an error state with retry (e.g. 404 period)", async () => {
@@ -281,13 +283,13 @@ describe("dashboard", () => {
                 : defaultHandler(url),
         );
         await mount();
-        expect(await screen.findByText("Retry")).toBeTruthy();
+        expect(await screen.findByText("Réessayer")).toBeTruthy();
     });
 
     test("cache invalidation after an expense change reloads the dashboard", async () => {
         const calls = mockApi(defaultHandler);
         await mount();
-        await screen.findByText(fmt("1234.50"));
+        await screen.findAllByText(fmt("1234.50"));
         const before = calls.filter((c) => c.includes("/analytics/")).length;
         await client.invalidateQueries({ queryKey: ANALYTICS_QUERY_KEY });
         await waitFor(() =>
@@ -308,19 +310,18 @@ describe("dashboard charts (MOBILE-008)", () => {
             .map((h) => h.children.join(""))
             .filter((t) =>
                 [
-                    "Home",
-                    "Spent this period",
-                    "Where it goes",
-                    "Spending over time",
-                    "Recent expenses",
+                    "CoupleFinance",
+                    "Répartition par catégorie",
+                    "Dépenses récentes",
+                    "Évolution des dépenses",
                 ].includes(t),
             );
+        // MOBILE-009 reference order; the spending chart (not in the reference) comes last.
         expect(headers).toEqual([
-            "Home",
-            "Spent this period",
-            "Where it goes",
-            "Spending over time",
-            "Recent expenses",
+            "CoupleFinance",
+            "Répartition par catégorie",
+            "Dépenses récentes",
+            "Évolution des dépenses",
         ]);
     });
 
@@ -340,11 +341,9 @@ describe("dashboard charts (MOBILE-008)", () => {
             "/api/v1/analytics/periods/2026-03-01/daily-cumulative?scope=HOUSEHOLD",
         );
         expect(chart.props.accessibilityRole).toBe("image");
-        expect(chart.props.accessibilityLabel).toContain(
-            "Cumulative spending over time, Household",
-        );
+        expect(chart.props.accessibilityLabel).toContain("Dépenses cumulées, Foyer");
         expect(chart.props.accessibilityLabel).toContain(fmt("30.00"));
-        expect(chart.props.accessibilityLabel).toContain(`budget limit ${fmt("2000.00")}`);
+        expect(chart.props.accessibilityLabel).toContain(`plafond du budget ${fmt("2000.00")}`);
         expect(screen.getByTestId("chart-budget-line")).toBeTruthy();
         expect(screen.getByTestId("chart-baseline")).toBeTruthy();
         // Gap days (2-3) come already repeated by the server; vertex mapping is covered in chartModel.test.
@@ -356,10 +355,10 @@ describe("dashboard charts (MOBILE-008)", () => {
         const calls = mockApi(defaultHandler);
         await mount();
         await screen.findByTestId("spending-chart");
-        await fireEvent.press(screen.getByRole("radio", { name: "Personal" }));
+        await fireEvent.press(screen.getByRole("radio", { name: "Personnel" }));
         await waitFor(() =>
             expect(screen.getByTestId("spending-chart").props.accessibilityLabel).toContain(
-                "Personal",
+                "Personnel",
             ),
         );
         expect(screen.queryByTestId("chart-budget-line")).toBeNull();
@@ -395,11 +394,11 @@ describe("dashboard charts (MOBILE-008)", () => {
                 : defaultHandler(url),
         );
         await mount();
-        expect(await screen.findByText(fmt("1234.50"))).toBeTruthy();
-        expect(await screen.findByText("Retry")).toBeTruthy();
+        expect(await screen.findAllByText(fmt("1234.50"))).toBeTruthy();
+        expect(await screen.findByText("Réessayer")).toBeTruthy();
         expect(screen.getByTestId("category-chart")).toBeTruthy();
         failing = false;
-        await fireEvent.press(screen.getByText("Retry"));
+        await fireEvent.press(screen.getByText("Réessayer"));
         expect(await screen.findByTestId("spending-chart")).toBeTruthy();
     });
 
@@ -410,7 +409,9 @@ describe("dashboard charts (MOBILE-008)", () => {
                 : defaultHandler(url),
         );
         await mount();
-        expect(await screen.findByText("No daily data for this period yet.")).toBeTruthy();
+        expect(
+            await screen.findByText("Pas encore de données quotidiennes pour cette période."),
+        ).toBeTruthy();
         expect(screen.queryByTestId("spending-chart")).toBeNull();
     });
 
@@ -438,7 +439,7 @@ describe("dashboard charts (MOBILE-008)", () => {
         // donut: 5 slices + Other; list: 5 rows + an "Other (3 more)" row, nothing hidden
         expect(screen.getAllByTestId("donut-arc")).toHaveLength(6);
         expect(screen.getByTestId("category-chart").props.accessibilityLabel).toContain(
-            "Other 9.9 %",
+            "Autres 9.9%",
         );
         expect(screen.queryByTestId(`category-row-${ids[5]}`)).toBeNull();
         expect(screen.getByTestId("category-other-row")).toBeTruthy();
@@ -447,13 +448,13 @@ describe("dashboard charts (MOBILE-008)", () => {
         expect(screen.queryByTestId("category-other-row")).toBeNull();
         // each detailed row still carries its own server amount and percentage
         expect(screen.getByTestId(`category-row-${ids[7]}`).props.accessibilityLabel).toContain(
-            "1.8 %",
+            "1.8%",
         );
         await fireEvent.press(screen.getByTestId("category-toggle"));
         expect(screen.queryByTestId(`category-row-${ids[7]}`)).toBeNull();
     });
 
-    test("a single category fills the donut and is listed with 100.0 %", async () => {
+    test("a single category fills the donut and is listed with 100.0%", async () => {
         mockApi((url) =>
             isPeriod(url)
                 ? {
@@ -472,7 +473,7 @@ describe("dashboard charts (MOBILE-008)", () => {
         await screen.findByTestId("category-chart");
         expect(screen.getAllByTestId("donut-arc")).toHaveLength(1);
         expect(screen.getByTestId(`category-row-${GROCERIES}`).props.accessibilityLabel).toContain(
-            "100.0 %",
+            "100.0%",
         );
         expect(screen.queryByTestId("category-toggle")).toBeNull();
     });
@@ -494,7 +495,7 @@ describe("dashboard charts (MOBILE-008)", () => {
         await mount();
         expect(await screen.findByTestId("category-chart-empty")).toBeTruthy();
         expect(screen.queryByTestId("donut-arc")).toBeNull();
-        expect(screen.getByText("Net refunds")).toBeTruthy();
+        expect(screen.getByText("Remboursements nets")).toBeTruthy();
     });
 
     test("BR-MON-02: large amounts are formatted from the exact string (no number conversion)", async () => {
@@ -513,7 +514,7 @@ describe("dashboard charts (MOBILE-008)", () => {
                 : defaultHandler(url),
         );
         await mount();
-        expect(await screen.findByText(fmt(huge))).toBeTruthy();
+        expect(await screen.findAllByText(fmt(huge))).toBeTruthy();
         expect(fmt(huge)).toMatch(/90.?071.?992.?547.?409.?930/);
     });
 
@@ -530,7 +531,7 @@ describe("dashboard charts (MOBILE-008)", () => {
                     c.includes("dateTo=2026-03-31"),
             ),
         ).toBe(true);
-        await fireEvent.press(screen.getByRole("button", { name: "See all expenses" }));
+        await fireEvent.press(screen.getByRole("button", { name: "Voir toutes les dépenses" }));
         expect(mockPush).toHaveBeenCalledWith({
             pathname: "/expenses",
             params: { periodStart: "2026-03-01", scope: "HOUSEHOLD", nav: expect.any(String) },
@@ -561,7 +562,7 @@ describe("dashboard charts (MOBILE-008)", () => {
         );
         await mount();
         await screen.findByText("Bakery");
-        await fireEvent.press(screen.getByRole("radio", { name: "Personal" }));
+        await fireEvent.press(screen.getByRole("radio", { name: "Personnel" }));
         expect(await screen.findByText("Mine")).toBeTruthy();
         expect(screen.queryByText("Bakery")).toBeNull();
     });

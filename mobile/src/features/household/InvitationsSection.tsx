@@ -71,7 +71,7 @@ export function InvitationsSection({ readOnly }: { readOnly: boolean }) {
 
     return (
         <View style={{ gap: spacing.md }}>
-            <Text variant="title" accessibilityRole="header">
+            <Text variant="h3" accessibilityRole="header">
                 {strings.household.invitationsTitle}
             </Text>
             {list.isPending ? <Skeleton variant="row" /> : null}
@@ -136,7 +136,7 @@ export function InvitationsSection({ readOnly }: { readOnly: boolean }) {
                 {created ? (
                     <>
                         <Text
-                            variant="headline"
+                            variant="h2"
                             selectable
                             accessibilityLabel={`${strings.household.codeTitle}: ${created.code
                                 .split("")

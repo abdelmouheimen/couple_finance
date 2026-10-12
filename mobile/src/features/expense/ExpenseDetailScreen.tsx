@@ -115,7 +115,7 @@ export function ExpenseDetailScreen({ id }: { id: string }) {
 
     return (
         <Screen onClose={goBack}>
-            <Text variant="headline" accessibilityRole="header">
+            <Text variant="h2" accessibilityRole="header">
                 {data.merchant ?? strings.expense.untitled}
             </Text>
             <Card>
@@ -131,7 +131,7 @@ export function ExpenseDetailScreen({ id }: { id: string }) {
                 ) : null}
                 {data.note ? <Text>{data.note}</Text> : null}
             </Card>
-            <Text variant="title" accessibilityRole="header">
+            <Text variant="h3" accessibilityRole="header">
                 {strings.expense.items}
             </Text>
             <Card>
@@ -165,7 +165,7 @@ export function ExpenseDetailScreen({ id }: { id: string }) {
                     />
                 </View>
             )}
-            <Text variant="title" accessibilityRole="header">
+            <Text variant="h3" accessibilityRole="header">
                 {strings.expense.history}
             </Text>
             <Card>

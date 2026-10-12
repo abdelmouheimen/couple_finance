@@ -30,8 +30,8 @@ function minHeightOf(style: Parameters<typeof StyleSheet.flatten>[0]) {
 describe("Button", () => {
     test("press works and touch target is large enough", async () => {
         const onPress = jest.fn();
-        await renderUi(<Button label="Save" onPress={onPress} />);
-        const button = screen.getByRole("button", { name: "Save" });
+        await renderUi(<Button label="Enregistrer" onPress={onPress} />);
+        const button = screen.getByRole("button", { name: "Enregistrer" });
         await fireEvent.press(button);
         expect(onPress).toHaveBeenCalledTimes(1);
         const style = button.props.style;
@@ -41,8 +41,8 @@ describe("Button", () => {
 
     test("loading buttons ignore presses and expose state", async () => {
         const onPress = jest.fn();
-        await renderUi(<Button label="Save" loading onPress={onPress} />);
-        const button = screen.getByRole("button", { name: "Save" });
+        await renderUi(<Button label="Enregistrer" loading onPress={onPress} />);
+        const button = screen.getByRole("button", { name: "Enregistrer" });
         expect(button).toBeBusy();
         expect(button).toBeDisabled();
         await fireEvent.press(button);
@@ -68,7 +68,11 @@ test("IconButton has an accessible name and a minimum touch target", async () =>
     const button = screen.getByRole("button", { name: "Add" });
     await fireEvent.press(button);
     expect(onPress).toHaveBeenCalled();
-    expect(minHeightOf(button.props.style)).toBeGreaterThanOrEqual(minTouchTarget);
+    const style = button.props.style;
+    const resolved = typeof style === "function" ? style({ pressed: false }) : style;
+    expect((StyleSheet.flatten(resolved) as { height?: number }).height).toBeGreaterThanOrEqual(
+        minTouchTarget,
+    );
 });
 
 test("Card renders children", async () => {
@@ -81,8 +85,8 @@ test("Card renders children", async () => {
 });
 
 test("TextInput is labelled and shows an inline error", async () => {
-    await renderUi(<TextInput label="Merchant" error="Required" />);
-    expect(screen.getByLabelText("Merchant")).toBeTruthy();
+    await renderUi(<TextInput label="Commerçant" error="Required" />);
+    expect(screen.getByLabelText("Commerçant")).toBeTruthy();
     expect(screen.getByText("Required")).toBeTruthy();
 });
 
@@ -97,7 +101,7 @@ describe("MoneyInput", () => {
         const [value, setValue] = useState("");
         return (
             <MoneyInput
-                label="Amount"
+                label="Montant"
                 currency={currency}
                 locale="en-US"
                 value={value}
@@ -112,34 +116,34 @@ describe("MoneyInput", () => {
     test("BR_MON_01_accepts_digits_and_one_separator_and_emits_canonical_string", async () => {
         const emitted: string[] = [];
         await renderUi(<Harness onValue={(v) => emitted.push(v)} />);
-        const input = screen.getByLabelText("Amount (EUR)");
+        const input = screen.getByLabelText("Montant (EUR)");
         await fireEvent.changeText(input, "1a2,59x");
         expect(emitted.at(-1)).toBe("12.59");
         expect(typeof emitted.at(-1)).toBe("string");
         await fireEvent.changeText(input, "12.5");
         await fireEvent(input, "blur");
         expect(emitted.at(-1)).toBe("12.50");
-        expect(screen.getByLabelText("Amount (EUR)").props.value).toBe("12.50");
+        expect(screen.getByLabelText("Montant (EUR)").props.value).toBe("12.50");
     });
 
     test("BR_MON_03_limits_decimals_to_currency_and_shows_currency", async () => {
         const emitted: string[] = [];
         await renderUi(<Harness currency="JPY" onValue={(v) => emitted.push(v)} />);
-        await fireEvent.changeText(screen.getByLabelText("Amount (JPY)"), "12.5");
+        await fireEvent.changeText(screen.getByLabelText("Montant (JPY)"), "12.5");
         expect(emitted.at(-1)).toBe("125");
-        expect(screen.getByText("JPY")).toBeTruthy();
+        expect(screen.getByText("¥")).toBeTruthy();
     });
 
     test("trailing separator survives while typing", async () => {
         await renderUi(<Harness />);
-        await fireEvent.changeText(screen.getByLabelText("Amount (EUR)"), "12.");
-        expect(screen.getByLabelText("Amount (EUR)").props.value).toBe("12.");
+        await fireEvent.changeText(screen.getByLabelText("Montant (EUR)"), "12.");
+        expect(screen.getByLabelText("Montant (EUR)").props.value).toBe("12.");
     });
 
     test("shows error", async () => {
         await renderUi(
             <MoneyInput
-                label="Amount"
+                label="Montant"
                 currency="EUR"
                 value=""
                 onChangeValue={() => undefined}
@@ -154,7 +158,7 @@ test("Selector exposes radio state and changes selection", async () => {
     const onChange = jest.fn();
     await renderUi(
         <Selector
-            label="Scope"
+            label="Périmètre"
             value="A"
             onChange={onChange}
             options={[
@@ -171,27 +175,27 @@ test("Selector exposes radio state and changes selection", async () => {
 
 describe("ProgressBar", () => {
     test.each([
-        ["ON_TRACK", "On track"],
-        ["WARNING", "Warning"],
-        ["EXCEEDED", "Exceeded"],
+        ["ON_TRACK", "Dans les clous"],
+        ["WARNING", "À surveiller"],
+        ["EXCEEDED", "Dépassé"],
     ] as const)("%s conveys status with text and not color alone", async (status, text) => {
         await renderUi(<ProgressBar percent={50} status={status} />);
         expect(screen.getByText(text)).toBeTruthy();
-        expect(screen.getByRole("progressbar", { name: `${text}, 50 %` })).toBeTruthy();
+        expect(screen.getByRole("progressbar", { name: `${text}, 50%` })).toBeTruthy();
     });
 
     test("clamps the fill but reports the real percentage", async () => {
         await renderUi(<ProgressBar percent={130} status="EXCEEDED" />);
         const fill = StyleSheet.flatten(screen.getByTestId("progress-fill").props.style);
         expect(fill.width).toBe("100%");
-        expect(screen.getByText("130 %")).toBeTruthy();
+        expect(screen.getByText("130%")).toBeTruthy();
     });
 });
 
 test("ListRow is pressable with a combined label", async () => {
     const onPress = jest.fn();
-    await renderUi(<ListRow title="Groceries" subtitle="Today" onPress={onPress} />);
-    await fireEvent.press(screen.getByRole("button", { name: "Groceries, Today" }));
+    await renderUi(<ListRow title="Courses" subtitle="Today" onPress={onPress} />);
+    await fireEvent.press(screen.getByRole("button", { name: "Courses, Today" }));
     expect(onPress).toHaveBeenCalled();
 });
 
@@ -204,18 +208,18 @@ describe("ConfirmSheet", () => {
                 visible
                 title="Delete?"
                 message="Cannot be undone"
-                confirmLabel="Delete"
+                confirmLabel="Supprimer"
                 onConfirm={onConfirm}
                 onCancel={onCancel}
             />,
         );
         expect(screen.getByRole("header", { name: "Delete?" })).toBeTruthy();
         expect(onConfirm).not.toHaveBeenCalled();
-        await fireEvent.press(screen.getByRole("button", { name: "Cancel" }));
+        await fireEvent.press(screen.getByRole("button", { name: "Annuler" }));
         expect(onCancel).toHaveBeenCalledTimes(1);
-        await fireEvent.press(screen.getAllByRole("button", { name: "Close", hidden: true })[0]!);
+        await fireEvent.press(screen.getAllByRole("button", { name: "Fermer", hidden: true })[0]!);
         expect(onCancel).toHaveBeenCalledTimes(2);
-        await fireEvent.press(screen.getByRole("button", { name: "Delete" }));
+        await fireEvent.press(screen.getByRole("button", { name: "Supprimer" }));
         expect(onConfirm).toHaveBeenCalledTimes(1);
     });
 
@@ -237,7 +241,7 @@ describe("ConfirmSheet", () => {
 describe("states", () => {
     test("Skeleton announces loading", async () => {
         await renderUi(<Skeleton variant="row" />);
-        expect(screen.getByRole("progressbar", { name: "Loading" })).toBeBusy();
+        expect(screen.getByRole("progressbar", { name: "Chargement" })).toBeBusy();
     });
 
     test("EmptyState shows message and optional action", async () => {
@@ -263,8 +267,8 @@ describe("states", () => {
     test("ErrorState shows a friendly message and retries", async () => {
         const onRetry = jest.fn();
         await renderUi(<ErrorState onRetry={onRetry} />);
-        expect(screen.getByText("Something went wrong. Please try again.")).toBeTruthy();
-        await fireEvent.press(screen.getByRole("button", { name: "Retry" }));
+        expect(screen.getByText("Une erreur est survenue. Veuillez réessayer.")).toBeTruthy();
+        await fireEvent.press(screen.getByRole("button", { name: "Réessayer" }));
         expect(onRetry).toHaveBeenCalled();
     });
 });
@@ -279,8 +283,8 @@ describe("MoneyText", () => {
             />,
         );
         expect(screen.getByText("€1,234.50")).toBeTruthy();
-        expect(screen.getByText("Personal")).toBeTruthy();
-        expect(screen.getByLabelText("€1,234.50, Personal")).toBeTruthy();
+        expect(screen.getByText("Personnel")).toBeTruthy();
+        expect(screen.getByLabelText("€1,234.50, Personnel")).toBeTruthy();
     });
 
     test("uses tabular figures", async () => {
@@ -318,7 +322,7 @@ describe("Screen and Sheet accessibility", () => {
                 <Text>Body</Text>
             </Screen>,
         );
-        await fireEvent.press(screen.getByRole("button", { name: "Close" }));
+        await fireEvent.press(screen.getByRole("button", { name: "Fermer" }));
         expect(onClose).toHaveBeenCalledTimes(1);
     });
 
@@ -328,7 +332,7 @@ describe("Screen and Sheet accessibility", () => {
                 <Text>Body</Text>
             </Screen>,
         );
-        expect(screen.queryByRole("button", { name: "Close" })).toBeNull();
+        expect(screen.queryByRole("button", { name: "Fermer" })).toBeNull();
         expect(screen.getByText("Body")).toBeTruthy();
     });
 
@@ -339,7 +343,7 @@ describe("Screen and Sheet accessibility", () => {
                 <Text>Content</Text>
             </Sheet>,
         );
-        const buttons = screen.getAllByRole("button", { name: "Close" });
+        const buttons = screen.getAllByRole("button", { name: "Fermer" });
         await fireEvent.press(buttons[buttons.length - 1]!);
         expect(onClose).toHaveBeenCalled();
     });
