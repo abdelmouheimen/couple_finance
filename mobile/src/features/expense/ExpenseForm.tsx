@@ -177,7 +177,7 @@ export function ExpenseForm({
             )}
             {singleItem ? (
                 <View style={styles.group}>
-                    <Text variant="caption" tone="secondary" bold>
+                    <Text variant="caption" tone="secondary">
                         {strings.expense.category}
                     </Text>
                     <View
@@ -237,7 +237,7 @@ export function ExpenseForm({
                     />
                     {sharingEditable ? (
                         <View style={styles.group}>
-                            <Text variant="caption" tone="secondary" bold>
+                            <Text variant="caption" tone="secondary">
                                 {strings.expense.sharing}
                             </Text>
                             <Selector
@@ -265,11 +265,13 @@ export function ExpenseForm({
             {editing ? null : (
                 <Button
                     variant="secondary"
+                    size="lg"
                     label={more ? strings.expense.lessOptions : strings.expense.moreOptions}
                     onPress={() => setMore((m) => !m)}
                 />
             )}
             <Button
+                size="lg"
                 label={submitLabel}
                 loading={submitting}
                 onPress={submit}

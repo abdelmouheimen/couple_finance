@@ -46,7 +46,7 @@ export default function VerifyEmail() {
     };
     return (
         <Screen>
-            <Text variant="headline" accessibilityRole="header">
+            <Text variant="h2" accessibilityRole="header">
                 {strings.auth.verifyTitle}
             </Text>
             <Text tone="secondary">{strings.auth.verifyMessage}</Text>

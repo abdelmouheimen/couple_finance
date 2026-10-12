@@ -9,7 +9,7 @@ export default function CreateHousehold() {
     const queryClient = useQueryClient();
     return (
         <Screen>
-            <Text variant="headline" accessibilityRole="header">
+            <Text variant="h2" accessibilityRole="header">
                 {strings.household.createTitle}
             </Text>
             <Text tone="secondary">{strings.household.createMessage}</Text>

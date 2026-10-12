@@ -58,3 +58,20 @@ src/shared/config    typed environment configuration
 - The refresh token lives in secure storage (`expo-secure-store`) only — never AsyncStorage or logs.
 - Branch on `ApiError.code`, never on message text. Client validation is UX only.
 - No `any` without a justified, scoped `eslint-disable`.
+
+## Design system and visual validation (MOBILE-009)
+
+The UI follows the approved design in [`../design/`](../design): reference image (never modified), tokens
+(`design/tokens.json`, mirrored by `src/shared/ui/theme/tokens.ts`), `DESIGN-SPEC.md`, `SCREEN-SPEC.md` and
+`ACCEPTANCE.md`. Dark theme only, Inter, French labels, vector icons (`src/shared/ui/theme/icons.ts`).
+
+Visual check in the fixed Android reference viewport (Pixel 7, 412 × 915 dp), with API fixtures served by
+the harness (the app ships no sample data):
+
+```bash
+npx expo start --web --port 8081     # terminal 1
+node scripts/visual/capture.mjs      # terminal 2 -> ../design/screenshots (exit 1 if a criterion fails)
+```
+
+On web the refresh token is kept in memory only (`tokenStorage.web.ts`); `/design-preview` (dev builds
+only) renders the receipt screens, which have no backend yet.

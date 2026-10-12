@@ -27,6 +27,19 @@ export function currencyDecimals(currency: string): number {
         .maximumFractionDigits!;
 }
 
+/**
+ * Display symbol of a currency in the given locale ("€", "$US"), read from Intl with an exactly
+ * representable template value (never an amount).
+ */
+export function currencySymbol(currency: string, locale?: string): string {
+    assertCurrency(currency);
+    return (
+        new Intl.NumberFormat(locale, { style: "currency", currency })
+            .formatToParts(1)
+            .find((p) => p.type === "currency")?.value ?? currency
+    );
+}
+
 function assertCurrency(currency: string): void {
     if (!CURRENCY_RE.test(currency)) throw new MoneyError("Invalid currency code");
 }

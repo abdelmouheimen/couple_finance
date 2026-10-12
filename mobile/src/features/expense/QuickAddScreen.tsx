@@ -1,15 +1,31 @@
 import { useRouter } from "expo-router";
 import { useRef, useState } from "react";
 import { useHouseholdContext } from "@/features/household/HouseholdProvider";
+import {
+    RECEIPT_CAPTURE_AVAILABLE,
+    ReceiptCapturePanel,
+} from "@/features/receipt/ReceiptCapturePanel";
 import { errorMessage } from "@/shared/i18n/errorMessage";
 import { strings } from "@/shared/i18n/strings";
-import { ErrorState, Screen, Skeleton, Text, useToast } from "@/shared/ui";
+import { ErrorState, Screen, Segmented, Skeleton, Text, useToast } from "@/shared/ui";
 import { createExpense } from "./expenseApi";
 import { useCategories, useCurrentUserId, useInvalidateExpenses } from "./expenseQueries";
 import { buildCreateRequest, type ExpenseFormValues, IdempotencyKeys } from "./expenseRules";
 import { ExpenseForm } from "./ExpenseForm";
 
-/** Keyboard-first quick add: amount -> category -> Save, with the approved defaults prefilled. */
+type Mode = "SCAN" | "MANUAL" | "IMPORT";
+
+const MODES: readonly { value: Mode; label: string }[] = [
+    { value: "SCAN", label: strings.expense.modes.SCAN },
+    { value: "MANUAL", label: strings.expense.modes.MANUAL },
+    { value: "IMPORT", label: strings.expense.modes.IMPORT },
+];
+
+/**
+ * "Ajouter une dépense": Scanner / Manuel / Importer, as in the approved design. Manual entry is the
+ * keyboard-first quick add (amount -> category -> Save, approved defaults prefilled). It opens on
+ * manual entry for as long as receipt capture is not available; the design default is "Scanner".
+ */
 export function QuickAddScreen({ now }: { now?: () => Date }) {
     const router = useRouter();
     const toast = useToast();
@@ -19,15 +35,17 @@ export function QuickAddScreen({ now }: { now?: () => Date }) {
     const invalidate = useInvalidateExpenses();
     const keys = useRef(new IdempotencyKeys());
     const inFlight = useRef(false);
+    const [mode, setMode] = useState<Mode>(RECEIPT_CAPTURE_AVAILABLE ? "SCAN" : "MANUAL");
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<unknown>(undefined);
 
     const close = () => router.back();
+    const edges = ["top", "left", "right", "bottom"] as const;
 
     if (readOnly) {
         return (
-            <Screen edges={["top", "left", "right", "bottom"]} onClose={close}>
-                <Text tone="danger" bold>
+            <Screen edges={edges} title={strings.addExpense} onClose={close}>
+                <Text tone="danger" weight="semibold">
                     {strings.errors.readOnly}
                 </Text>
             </Screen>
@@ -62,11 +80,17 @@ export function QuickAddScreen({ now }: { now?: () => Date }) {
     };
 
     return (
-        <Screen edges={["top", "left", "right", "bottom"]} onClose={close}>
-            <Text variant="headline" accessibilityRole="header">
-                {strings.addExpense}
-            </Text>
-            {categories.isPending || me.isPending ? (
+        <Screen edges={edges} title={strings.addExpense} onClose={close}>
+            <Segmented
+                testID="entry-mode"
+                label={strings.expense.entryMode}
+                options={MODES}
+                value={mode}
+                onChange={setMode}
+            />
+            {mode !== "MANUAL" ? (
+                <ReceiptCapturePanel mode={mode} onUseManual={() => setMode("MANUAL")} />
+            ) : categories.isPending || me.isPending ? (
                 <Skeleton variant="card" />
             ) : categories.isError || me.isError ? (
                 <ErrorState

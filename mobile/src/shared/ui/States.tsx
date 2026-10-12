@@ -4,7 +4,7 @@ import { Button } from "./Button";
 import { Icon } from "./Icon";
 import { Text } from "./Text";
 import { useColors } from "./theme/theme";
-import { radius, spacing } from "./theme/tokens";
+import { radius, size, spacing } from "./theme/tokens";
 
 export function Skeleton({ variant }: { variant: "row" | "card" | "number" }) {
     const colors = useColors();
@@ -35,10 +35,13 @@ export function EmptyState({
     actionLabel?: string;
     onAction?: () => void;
 }) {
+    const colors = useColors();
     return (
         <View style={styles.state}>
-            <Icon name="empty" size="lg" />
-            <Text variant="title" accessibilityRole="header">
+            <View style={[styles.badge, { backgroundColor: colors.card }]}>
+                <Icon name="empty" size="lg" color={colors.textSecondary} />
+            </View>
+            <Text variant="h3" accessibilityRole="header" style={styles.centered}>
                 {title}
             </Text>
             <Text tone="secondary" style={styles.centered}>
@@ -57,10 +60,13 @@ export function ErrorState({
     message?: string;
     onRetry: () => void;
 }) {
+    const colors = useColors();
     return (
         <View style={styles.state} accessibilityLiveRegion="polite">
-            <Icon name="error" size="lg" />
-            <Text tone="danger" bold style={styles.centered}>
+            <View style={[styles.badge, { backgroundColor: colors.card }]}>
+                <Icon name="error" size="lg" color={colors.danger} />
+            </View>
+            <Text tone="danger" weight="semibold" style={styles.centered}>
                 {message}
             </Text>
             <Button label={strings.retry} variant="secondary" onPress={onRetry} />
@@ -71,7 +77,14 @@ export function ErrorState({
 const styles = StyleSheet.create({
     state: { alignItems: "center", gap: spacing.md, padding: spacing.xl },
     centered: { textAlign: "center" },
-    row: { height: spacing.xxl + spacing.lg, borderRadius: radius.md },
+    badge: {
+        width: size.controlLg,
+        height: size.controlLg,
+        borderRadius: radius.pill,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    row: { height: spacing.xxl + spacing.xl + spacing.lg, borderRadius: radius.lg },
     card: { height: spacing.xxl * 4, borderRadius: radius.lg },
     number: { height: spacing.xl, width: spacing.xxl * 4, borderRadius: radius.sm },
 });

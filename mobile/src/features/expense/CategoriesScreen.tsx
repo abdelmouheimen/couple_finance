@@ -101,7 +101,7 @@ export function CategoriesScreen() {
 
     return (
         <Screen onClose={() => router.back()}>
-            <Text variant="headline" accessibilityRole="header">
+            <Text variant="h2" accessibilityRole="header">
                 {strings.category.manageTitle}
             </Text>
             {readOnly ? null : (

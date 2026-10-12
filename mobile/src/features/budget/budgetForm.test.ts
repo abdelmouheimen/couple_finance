@@ -50,10 +50,8 @@ describe("budget form", () => {
     });
 
     test("category names: system codes are translated, custom names kept, archived flagged", () => {
-        expect(categoryName({ systemCode: "GROCERIES", archived: false } as never)).toBe(
-            "Groceries",
-        );
+        expect(categoryName({ systemCode: "GROCERIES", archived: false } as never)).toBe("Courses");
         expect(categoryName({ name: "Pets", archived: true } as never)).toContain("Pets");
-        expect(categoryName(undefined)).toBe("Category");
+        expect(categoryName(undefined)).toBe("Catégorie");
     });
 });

@@ -17,7 +17,7 @@ export function ReadOnlyBanner() {
             accessibilityRole="alert"
             style={[
                 styles.banner,
-                { backgroundColor: colors.surfaceMuted, paddingTop: insets.top + spacing.sm },
+                { backgroundColor: colors.surface, paddingTop: insets.top + spacing.sm },
             ]}
         >
             <Text bold>{strings.household.dissolvedBanner}</Text>

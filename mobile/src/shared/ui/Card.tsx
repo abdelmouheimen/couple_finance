@@ -1,8 +1,9 @@
 import { type ReactNode } from "react";
 import { View, type ViewProps } from "react-native";
 import { useColors } from "./theme/theme";
-import { elevation, radius, spacing } from "./theme/tokens";
+import { radius, spacing } from "./theme/tokens";
 
+/** Flat card of the approved design: card colour, 16 dp corners, 16 dp padding, no shadow. */
 export function Card({ children, style, ...rest }: ViewProps & { children: ReactNode }) {
     const colors = useColors();
     return (
@@ -10,12 +11,11 @@ export function Card({ children, style, ...rest }: ViewProps & { children: React
             {...rest}
             style={[
                 {
-                    backgroundColor: colors.surface,
+                    backgroundColor: colors.card,
                     borderRadius: radius.lg,
                     padding: spacing.lg,
                     gap: spacing.sm,
                 },
-                elevation.card,
                 style,
             ]}
         >

@@ -30,7 +30,7 @@ const PARTNER = "00000000-0000-7000-8000-00000000000b";
 
 const household = (status = "ACTIVE") => ({
     id: "11111111-1111-7111-8111-111111111111",
-    name: "Home",
+    name: "Accueil",
     currency: "EUR",
     timezone: "Europe/Paris",
     periodStartDay: 1,
@@ -154,10 +154,10 @@ describe("quick add", () => {
             "GET /api/v1/expenses": () => json(200, page([])),
         });
         await mount(<QuickAddScreen now={NOW} />);
-        const amount = await screen.findByLabelText("Amount (EUR)");
+        const amount = await screen.findByLabelText("Montant (EUR)");
         await fireEvent.changeText(amount, "12.50"); // 1: amount
-        await fireEvent.press(await screen.findByRole("radio", { name: "Groceries" })); // 2: category
-        await pressButton("Save"); // 3: save
+        await fireEvent.press(await screen.findByRole("radio", { name: "Courses" })); // 2: category
+        await pressButton("Enregistrer"); // 3: save
         await waitFor(() => expect(api.of("POST /api/v1/expenses")).toHaveLength(1));
         const call = api.of("POST /api/v1/expenses")[0]!;
         expect(call.body).toMatchObject({
@@ -170,7 +170,7 @@ describe("quick add", () => {
         });
         expect(call.headers.get("Idempotency-Key")).toBeTruthy();
         await waitFor(() => expect(mockRouter.back).toHaveBeenCalled());
-        expect(await screen.findByText("Expense saved")).toBeTruthy();
+        expect(await screen.findByText("Dépense enregistrée")).toBeTruthy();
     });
 
     test("BR_EXP_13_double_tap_sends_one_request", async () => {
@@ -184,9 +184,9 @@ describe("quick add", () => {
             "GET /api/v1/expenses": () => json(200, page([])),
         });
         await mount(<QuickAddScreen now={NOW} />);
-        await fireEvent.changeText(await screen.findByLabelText("Amount (EUR)"), "5.00");
-        await fireEvent.press(await screen.findByRole("radio", { name: "Groceries" }));
-        const save = screen.getByRole("button", { name: "Save" });
+        await fireEvent.changeText(await screen.findByLabelText("Montant (EUR)"), "5.00");
+        await fireEvent.press(await screen.findByRole("radio", { name: "Courses" }));
+        const save = screen.getByRole("button", { name: "Enregistrer" });
         await fireEvent.press(save);
         await fireEvent.press(save);
         release();
@@ -205,11 +205,11 @@ describe("quick add", () => {
             "GET /api/v1/expenses": () => json(200, page([])),
         });
         await mount(<QuickAddScreen now={NOW} />);
-        await fireEvent.changeText(await screen.findByLabelText("Amount (EUR)"), "5.00");
-        await fireEvent.press(await screen.findByRole("radio", { name: "Groceries" }));
-        await pressButton("Save");
-        expect(await screen.findByText(/Can't reach the server/)).toBeTruthy();
-        await pressButton("Save");
+        await fireEvent.changeText(await screen.findByLabelText("Montant (EUR)"), "5.00");
+        await fireEvent.press(await screen.findByRole("radio", { name: "Courses" }));
+        await pressButton("Enregistrer");
+        expect(await screen.findByText(/Serveur injoignable/)).toBeTruthy();
+        await pressButton("Enregistrer");
         await waitFor(() => expect(api.of("POST /api/v1/expenses")).toHaveLength(2));
         const [first, second] = api.of("POST /api/v1/expenses");
         expect(second!.headers.get("Idempotency-Key")).toBe(first!.headers.get("Idempotency-Key"));
@@ -218,10 +218,10 @@ describe("quick add", () => {
     test("client validation blocks an empty amount without a request", async () => {
         const api = installApi({});
         await mount(<QuickAddScreen now={NOW} />);
-        await screen.findByLabelText("Amount (EUR)");
-        await fireEvent.press(await screen.findByRole("radio", { name: "Groceries" }));
-        await pressButton("Save");
-        expect(await screen.findByText("Enter a valid amount.")).toBeTruthy();
+        await screen.findByLabelText("Montant (EUR)");
+        await fireEvent.press(await screen.findByRole("radio", { name: "Courses" }));
+        await pressButton("Enregistrer");
+        expect(await screen.findByText("Saisissez un montant valide.")).toBeTruthy();
         expect(api.of("POST /api/v1/expenses")).toHaveLength(0);
     });
 
@@ -230,10 +230,10 @@ describe("quick add", () => {
             "POST /api/v1/expenses": () => problem(400, "AMOUNT_EXCEEDS_MAXIMUM"),
         });
         await mount(<QuickAddScreen now={NOW} />);
-        await fireEvent.changeText(await screen.findByLabelText("Amount (EUR)"), "5.00");
-        await fireEvent.press(await screen.findByRole("radio", { name: "Groceries" }));
-        await pressButton("Save");
-        expect(await screen.findByText("This amount is too large.")).toBeTruthy();
+        await fireEvent.changeText(await screen.findByLabelText("Montant (EUR)"), "5.00");
+        await fireEvent.press(await screen.findByRole("radio", { name: "Courses" }));
+        await pressButton("Enregistrer");
+        expect(await screen.findByText("Ce montant est trop élevé.")).toBeTruthy();
     });
 
     test("BR_CAT_04_a_suggestion_is_shown_after_merchant_entry_and_applied_only_on_tap", async () => {
@@ -242,10 +242,10 @@ describe("quick add", () => {
                 json(200, { categoryId: PETS.id, source: "USER_RULE" }),
         });
         await mount(<QuickAddScreen now={NOW} />);
-        await screen.findByLabelText("Amount (EUR)");
-        await pressButton("More");
-        await fireEvent.changeText(screen.getByLabelText("Merchant"), "Vet");
-        const chip = await screen.findByRole("button", { name: "Suggested: Pets (your rule)" });
+        await screen.findByLabelText("Montant (EUR)");
+        await pressButton("Plus d'options");
+        await fireEvent.changeText(screen.getByLabelText("Commerçant"), "Vet");
+        const chip = await screen.findByRole("button", { name: "Suggestion : Pets (votre règle)" });
         expect(screen.getByRole("radio", { name: "Pets" }).props.accessibilityState.checked).toBe(
             false,
         );
@@ -261,15 +261,15 @@ describe("quick add", () => {
                 json(200, { items: [GROCERIES, { ...PETS, archived: true }] }),
         });
         await mount(<QuickAddScreen now={NOW} />);
-        await screen.findByRole("radio", { name: "Groceries" });
+        await screen.findByRole("radio", { name: "Courses" });
         expect(screen.queryByRole("radio", { name: "Pets" })).toBeNull();
     });
 
     test("BR_HH_10_a_dissolved_household_cannot_add", async () => {
         installApi({ "GET /api/v1/households/me": () => json(200, household("DISSOLVED")) });
         await mount(<QuickAddScreen now={NOW} />);
-        expect(await screen.findByText("This household is read-only.")).toBeTruthy();
-        expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+        expect(await screen.findByText("Ce foyer est en lecture seule.")).toBeTruthy();
+        expect(screen.queryByRole("button", { name: "Enregistrer" })).toBeNull();
     });
 });
 
@@ -298,13 +298,13 @@ describe("expense list", () => {
             "GET /api/v1/expenses": () => json(200, page([])),
         });
         await mount(<ExpenseListScreen />);
-        await fireEvent.press(await screen.findByText("Clear filters"));
+        await fireEvent.press(await screen.findByText("Effacer les filtres"));
         await waitFor(() => {
             const calls = api.of("GET /api/v1/expenses");
             expect(calls[calls.length - 1]!.url.searchParams.get("categoryId")).toBeNull();
         });
         mockParams = { ...mockParams, nav: "2" };
-        await fireEvent.changeText(screen.getByPlaceholderText("Merchant or note"), "x"); // re-render
+        await fireEvent.changeText(screen.getByPlaceholderText("Rechercher un commerçant..."), "x"); // re-render
         await waitFor(() => {
             const calls = api.of("GET /api/v1/expenses");
             expect(calls[calls.length - 1]!.url.searchParams.get("categoryId")).toBe("cat-1");
@@ -321,7 +321,8 @@ describe("expense list", () => {
         });
         await mount(<ExpenseListScreen />);
         expect(await screen.findByText(/Bakery/)).toBeTruthy();
-        expect(screen.getByText(/42[.,]00/)).toBeTruthy(); // total from the API, not summed on device
+        // MOBILE-009: the approved design shows no list total; nothing is ever summed on the device.
+        expect(screen.queryByText(/42[.,]00/)).toBeNull();
         const first = api.of("GET /api/v1/expenses")[0]!;
         expect(first.url.searchParams.get("scope")).toBe("HOUSEHOLD");
         expect(first.url.searchParams.get("dateFrom")).toBe("2026-03-01");
@@ -343,9 +344,9 @@ describe("expense list", () => {
         await mount(<ExpenseListScreen />);
         await screen.findByText(/Bakery/);
         expect(screen.queryByText("Secret")).toBeNull();
-        await fireEvent.press(screen.getByRole("radio", { name: "Personal" }));
+        await fireEvent.press(screen.getByRole("radio", { name: "Personnel" }));
         expect(await screen.findByText("Secret")).toBeTruthy();
-        expect(screen.getAllByText("Personal").length).toBeGreaterThan(1); // chip + badge
+        expect(screen.getAllByText("Personnel").length).toBeGreaterThan(1); // chip + badge
         expect(api.calls.at(-1)!.url.searchParams.get("scope")).toBe("PERSONAL");
         expect(screen.queryByText("Bakery")).toBeNull();
     });
@@ -354,31 +355,32 @@ describe("expense list", () => {
         installApi({ "GET /api/v1/expenses": () => json(200, page([expense()])) });
         await mount(<ExpenseListScreen />);
         const row = await screen.findByTestId("expense-row-e-1");
-        expect(row.props.accessibilityLabel).toMatch(/Bakery, 12 euros 50, .*, Household/);
+        expect(row.props.accessibilityLabel).toMatch(/Bakery, 12 euros 50, .*, Foyer/);
     });
 
     test("empty state offers to add the first expense", async () => {
         installApi({ "GET /api/v1/expenses": () => json(200, page([])) });
         await mount(<ExpenseListScreen />);
-        expect(await screen.findByText("No expenses yet")).toBeTruthy();
-        await pressButton("Add your first expense");
+        expect(await screen.findByText("Aucune dépense")).toBeTruthy();
+        await pressButton("Ajouter ma première dépense");
         expect(mockRouter.push).toHaveBeenCalledWith("/add-expense");
     });
 
     test("filtered-empty state offers Clear filters", async () => {
         installApi({ "GET /api/v1/expenses": () => json(200, page([])) });
         await mount(<ExpenseListScreen />);
-        await screen.findByText("No expenses yet");
-        await fireEvent.press(screen.getByRole("radio", { name: "All time" }));
-        expect(await screen.findByText("No matching expenses")).toBeTruthy();
-        await pressButton("Clear filters");
-        expect(await screen.findByText("No expenses yet")).toBeTruthy();
+        await screen.findByText("Aucune dépense");
+        await fireEvent.press(screen.getByRole("button", { name: "Filtres" }));
+        await fireEvent.press(await screen.findByRole("radio", { name: "Tout l'historique" }));
+        expect(await screen.findByText("Aucune dépense correspondante")).toBeTruthy();
+        await pressButton("Effacer les filtres");
+        expect(await screen.findByText("Aucune dépense")).toBeTruthy();
     });
 
     test("list errors show a retryable error state", async () => {
         installApi({ "GET /api/v1/expenses": () => problem(500, "INTERNAL_ERROR") });
         await mount(<ExpenseListScreen />);
-        expect(await screen.findByRole("button", { name: "Retry" })).toBeTruthy();
+        expect(await screen.findByRole("button", { name: "Réessayer" })).toBeTruthy();
     });
 });
 
@@ -386,7 +388,7 @@ describe("expense detail", () => {
     test("another household's or a partner-personal id shows not found (404 non-disclosure)", async () => {
         installApi({ "GET /api/v1/expenses/e-x": () => problem(404, "EXPENSE_NOT_FOUND") });
         await mount(<ExpenseDetailScreen id="e-x" />);
-        expect(await screen.findByText("Expense not found")).toBeTruthy();
+        expect(await screen.findByText("Dépense introuvable")).toBeTruthy();
     });
 
     test("BR_EXP_11_delete_needs_confirmation_and_offers_restore", async () => {
@@ -397,12 +399,12 @@ describe("expense detail", () => {
             "POST /api/v1/expenses/e-1/restore": () => json(200, expense()),
         });
         await mount(<ExpenseDetailScreen id="e-1" />);
-        await screen.findByText("Items");
-        await pressButton("Delete");
+        await screen.findByText("Lignes");
+        await pressButton("Supprimer");
         expect(api.of("DELETE /api/v1/expenses/e-1")).toHaveLength(0); // nothing before confirmation
-        await fireEvent.press(screen.getAllByRole("button", { name: "Delete" }).at(-1)!);
+        await fireEvent.press(screen.getAllByRole("button", { name: "Supprimer" }).at(-1)!);
         await waitFor(() => expect(api.of("DELETE /api/v1/expenses/e-1")).toHaveLength(1));
-        await fireEvent.press(await screen.findByRole("button", { name: "Restore" }));
+        await fireEvent.press(await screen.findByRole("button", { name: "Restaurer" }));
         await waitFor(() => expect(api.of("POST /api/v1/expenses/e-1/restore")).toHaveLength(1));
     });
 
@@ -413,11 +415,11 @@ describe("expense detail", () => {
             "DELETE /api/v1/expenses/e-1": () => problem(409, "EXPENSE_HAS_LIVE_REFUNDS"),
         });
         await mount(<ExpenseDetailScreen id="e-1" />);
-        await screen.findByText("Items");
-        await pressButton("Delete");
-        await fireEvent.press(screen.getAllByRole("button", { name: "Delete" }).at(-1)!);
+        await screen.findByText("Lignes");
+        await pressButton("Supprimer");
+        await fireEvent.press(screen.getAllByRole("button", { name: "Supprimer" }).at(-1)!);
         expect(
-            await screen.findByText("This expense has refunds. Delete the refunds first."),
+            await screen.findByText("Cette dépense a des remboursements. Supprimez-les d'abord."),
         ).toBeTruthy();
     });
 
@@ -428,9 +430,9 @@ describe("expense detail", () => {
             "GET /api/v1/expenses/e-1/audit": () => json(200, { items: [] }),
         });
         await mount(<ExpenseDetailScreen id="e-1" />);
-        await screen.findByText("Items");
-        expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
-        expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
+        await screen.findByText("Lignes");
+        expect(screen.queryByRole("button", { name: "Modifier" })).toBeNull();
+        expect(screen.queryByRole("button", { name: "Supprimer" })).toBeNull();
     });
 });
 
@@ -445,8 +447,8 @@ describe("edit expense", () => {
             "PUT /api/v1/expenses/e-1": () => problem(412, "VERSION_CONFLICT"),
         });
         await mount(<EditExpenseScreen id="e-1" />);
-        await fireEvent.changeText(await screen.findByLabelText("Merchant"), "Bakery 2");
-        await pressButton("Save changes");
+        await fireEvent.changeText(await screen.findByLabelText("Commerçant"), "Bakery 2");
+        await pressButton("Enregistrer les modifications");
         const put = await waitFor(() => {
             const calls = api.of("PUT /api/v1/expenses/e-1");
             expect(calls).toHaveLength(1);
@@ -455,12 +457,12 @@ describe("edit expense", () => {
         expect(put.headers.get("If-Match")).toBe('"3"');
         expect(
             await screen.findByText(
-                "This was changed elsewhere. Reload it before editing again; nothing was overwritten.",
+                "Modifié ailleurs entre-temps. Rechargez avant de modifier à nouveau ; rien n'a été écrasé.",
             ),
         ).toBeTruthy();
-        await pressButton("Reload");
+        await pressButton("Recharger");
         await waitFor(() => expect(gets).toBe(2));
-        expect(await screen.findByLabelText("Merchant")).toBeTruthy(); // form is back with fresh data
+        expect(await screen.findByLabelText("Commerçant")).toBeTruthy(); // form is back with fresh data
         expect(api.of("PUT /api/v1/expenses/e-1")).toHaveLength(1); // nothing re-sent silently
     });
 
@@ -470,8 +472,8 @@ describe("edit expense", () => {
             "PUT /api/v1/expenses/e-1": () => json(200, expense({ version: 4 })),
         });
         await mount(<EditExpenseScreen id="e-1" />);
-        await fireEvent.changeText(await screen.findByLabelText("Amount (EUR)"), "13.00");
-        await pressButton("Save changes");
+        await fireEvent.changeText(await screen.findByLabelText("Montant (EUR)"), "13.00");
+        await pressButton("Enregistrer les modifications");
         await waitFor(() => expect(api.of("PUT /api/v1/expenses/e-1")).toHaveLength(1));
         expect(api.of("PUT /api/v1/expenses/e-1")[0]!.body).toMatchObject({
             amount: { amount: "13.00", currency: "EUR" },
@@ -489,8 +491,8 @@ describe("edit expense", () => {
         });
         installApi({ "GET /api/v1/expenses/e-1": () => json(200, multi) });
         await mount(<EditExpenseScreen id="e-1" />);
-        expect(await screen.findByText(/several items/)).toBeTruthy();
-        expect(screen.queryByLabelText("Amount (EUR)")).toBeNull();
+        expect(await screen.findByText(/plusieurs lignes/)).toBeTruthy();
+        expect(screen.queryByLabelText("Montant (EUR)")).toBeNull();
     });
 
     test("BR_EXP_09_the_partner_cannot_switch_sharing", async () => {
@@ -498,8 +500,8 @@ describe("edit expense", () => {
             "GET /api/v1/expenses/e-1": () => json(200, expense({ paidByUserId: PARTNER })),
         });
         await mount(<EditExpenseScreen id="e-1" />);
-        expect(await screen.findByText("Only the payer can change this.")).toBeTruthy();
-        expect(screen.queryByRole("radio", { name: "Personal" })).toBeNull();
+        expect(await screen.findByText("Seul le payeur peut modifier ce réglage.")).toBeTruthy();
+        expect(screen.queryByRole("radio", { name: "Personnel" })).toBeNull();
     });
 });
 
@@ -511,7 +513,7 @@ describe("category management", () => {
         await mount(<CategoriesScreen />);
         await screen.findByText("Pets");
         expect(screen.queryByRole("button", { name: /Rename Groceries/ })).toBeNull();
-        await pressButton("Archive Pets");
+        await pressButton("Archiver Pets");
         await waitFor(() => expect(api.of("PATCH /api/v1/categories/c-pets")).toHaveLength(1));
         const patch = api.of("PATCH /api/v1/categories/c-pets")[0]!;
         expect(patch.headers.get("If-Match")).toBe('"1"');
@@ -523,9 +525,12 @@ describe("category management", () => {
             "POST /api/v1/categories": () => problem(409, "CATEGORY_NAME_ALREADY_EXISTS"),
         });
         await mount(<CategoriesScreen />);
-        await fireEvent.changeText(await screen.findByLabelText("New category name"), "Pets");
-        await pressButton("Add category");
-        expect(await screen.findByText("A category with this name already exists.")).toBeTruthy();
+        await fireEvent.changeText(
+            await screen.findByLabelText("Nom de la nouvelle catégorie"),
+            "Pets",
+        );
+        await pressButton("Ajouter la catégorie");
+        expect(await screen.findByText("Une catégorie porte déjà ce nom.")).toBeTruthy();
     });
 });
 
@@ -539,39 +544,41 @@ describe("expense list compact filters (MOBILE-008)", () => {
         await mount(<ExpenseListScreen />);
         await screen.findByText(/Bakery/);
         expect(screen.queryByRole("radio", { name: "Pets" })).toBeNull();
-        expect(screen.getByRole("button", { name: "Filters" })).toBeTruthy();
-        expect(screen.getByPlaceholderText("Merchant or note")).toBeTruthy();
-        expect(screen.getByRole("radio", { name: "Household" })).toBeTruthy();
-        expect(screen.getByRole("radio", { name: "This period" })).toBeTruthy();
+        expect(screen.getByRole("button", { name: "Filtres" })).toBeTruthy();
+        expect(screen.getByPlaceholderText("Rechercher un commerçant...")).toBeTruthy();
+        expect(screen.getByRole("radio", { name: "Foyer" })).toBeTruthy();
+        expect(screen.getByRole("button", { name: /^Période, / })).toBeTruthy();
     });
 
     test("BR-EXP-07: picking a category in the sheet filters server-side, closes the sheet and stays visible compactly", async () => {
         const api = installApi({ "GET /api/v1/expenses": () => json(200, page([expense()])) });
         await mount(<ExpenseListScreen />);
         await screen.findByText(/Bakery/);
-        await fireEvent.press(screen.getByRole("button", { name: "Filters" }));
+        await fireEvent.press(screen.getByRole("button", { name: "Filtres" }));
         await fireEvent.press(await screen.findByRole("radio", { name: "Pets" }));
         await waitFor(() => {
             const calls = api.of("GET /api/v1/expenses");
             expect(calls[calls.length - 1]!.url.searchParams.get("categoryId")).toBe(PETS.id);
         });
         // active filter chip stays visible and the entry point reflects it
-        expect(await screen.findByRole("button", { name: "Remove filter Pets" })).toBeTruthy();
-        expect(screen.getByRole("button", { name: "Filters, 1 active" })).toBeTruthy();
+        expect(await screen.findByRole("button", { name: "Retirer le filtre Pets" })).toBeTruthy();
+        expect(screen.getByRole("button", { name: "Filtres, 1 actif(s)" })).toBeTruthy();
         // removing the chip clears the category filter
-        await fireEvent.press(screen.getByRole("button", { name: "Remove filter Pets" }));
+        await fireEvent.press(screen.getByRole("button", { name: "Retirer le filtre Pets" }));
         await waitFor(() => {
             const calls = api.of("GET /api/v1/expenses");
             expect(calls[calls.length - 1]!.url.searchParams.get("categoryId")).toBeNull();
         });
-        expect(screen.queryByRole("button", { name: "Remove filter Pets" })).toBeNull();
+        expect(screen.queryByRole("button", { name: "Retirer le filtre Pets" })).toBeNull();
     });
 
     test("a drill-down from the dashboard shows its category as an active filter", async () => {
         mockParams = { categoryId: GROCERIES.id, periodStart: "2026-03-01", scope: "HOUSEHOLD" };
         installApi({ "GET /api/v1/expenses": () => json(200, page([expense()])) });
         await mount(<ExpenseListScreen />);
-        expect(await screen.findByRole("button", { name: "Remove filter Groceries" })).toBeTruthy();
+        expect(
+            await screen.findByRole("button", { name: "Retirer le filtre Courses" }),
+        ).toBeTruthy();
     });
 
     test("BR-SCP-03: switching Household / Personal reloads the list for that scope", async () => {
@@ -581,12 +588,12 @@ describe("expense list compact filters (MOBILE-008)", () => {
         });
         await mount(<ExpenseListScreen />);
         await screen.findByText(/Bakery/);
-        await fireEvent.press(screen.getByRole("radio", { name: "Personal" }));
+        await fireEvent.press(screen.getByRole("radio", { name: "Personnel" }));
         await waitFor(() =>
             expect(api.calls.at(-1)!.url.searchParams.get("scope")).toBe("PERSONAL"),
         );
         expect(
-            screen.getByRole("radio", { name: "Personal" }).props.accessibilityState.selected,
+            screen.getByRole("radio", { name: "Personnel" }).props.accessibilityState.selected,
         ).toBe(true);
     });
 });

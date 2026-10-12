@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { StyleSheet, TextInput as RNTextInput, type TextInputProps, View } from "react-native";
-import { currencyDecimals } from "@/shared/money/money";
+import { currencyDecimals, currencySymbol } from "@/shared/money/money";
 import { Text } from "./Text";
 import {
     canonicalAmount,
@@ -12,10 +12,12 @@ import {
 import { useColors } from "./theme/theme";
 import {
     borderWidth,
+    fontFamily,
     fontSize,
     maxFontScale,
     minTouchTarget,
     radius,
+    size,
     spacing,
     tabularFigures,
 } from "./theme/tokens";
@@ -58,14 +60,14 @@ export function MoneyInput({
 
     return (
         <View style={styles.field}>
-            <Text variant="caption" tone="secondary" bold>
+            <Text variant="caption" tone="secondary">
                 {label}
             </Text>
             <View
                 style={[
                     styles.row,
                     {
-                        backgroundColor: colors.surface,
+                        backgroundColor: colors.card,
                         borderColor: error ? colors.danger : colors.border,
                     },
                 ]}
@@ -93,9 +95,9 @@ export function MoneyInput({
                     }}
                     style={[styles.input, { color: colors.text }]}
                 />
-                <Text bold tone="secondary">
-                    {currency}
-                </Text>
+                <View style={[styles.suffix, { borderLeftColor: colors.border }]}>
+                    <Text weight="semibold">{currencySymbol(currency, locale)}</Text>
+                </View>
             </View>
             {error ? (
                 <Text variant="caption" tone="danger" accessibilityLiveRegion="polite">
@@ -107,20 +109,28 @@ export function MoneyInput({
 }
 
 const styles = StyleSheet.create({
-    field: { gap: spacing.xs },
+    field: { gap: spacing.sm },
     row: {
-        minHeight: minTouchTarget,
+        minHeight: Math.max(size.field, minTouchTarget),
         flexDirection: "row",
-        alignItems: "center",
+        alignItems: "stretch",
         borderWidth: borderWidth.hairline,
         borderRadius: radius.md,
-        paddingHorizontal: spacing.md,
-        gap: spacing.sm,
     },
     input: {
         flex: 1,
         minHeight: minTouchTarget,
-        fontSize: fontSize.amount,
+        paddingHorizontal: spacing.lg,
+        paddingVertical: spacing.none,
+        fontSize: fontSize.body,
+        fontFamily: fontFamily.medium,
         fontVariant: tabularFigures,
+    },
+    suffix: {
+        minWidth: size.field,
+        paddingHorizontal: spacing.md,
+        alignItems: "center",
+        justifyContent: "center",
+        borderLeftWidth: borderWidth.hairline,
     },
 });
