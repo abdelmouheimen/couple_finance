@@ -87,7 +87,7 @@ deletion. (Consent changes join this list when implemented.)
   (RECEIPT-007). Original PDFs are never served back (security.md §6): the re-encoded page images are what is
   retrievable.
 - Who may read: former members of a household left by dissolution (BR-HH-10, BR-HH-12) — and after a join, the
-  **joiner only** (decision 4).
+  **joiner only** (§4, D8).
 
 ### 4. End of the source household after a join — option C, hybrid (D8)
 
@@ -101,7 +101,7 @@ Per merge mode chosen by the joiner (BR-HH-13, BR-HH-14):
 3. **`SHARED_AS_SHARED` / `SHARED_AS_PERSONAL`.** Atomic transfer of the selected data, then **logical deletion** of S
    in the same transaction: `DISSOLVED`, `dissolved_at = purge_at =` approval instant, members' `left_at` set, **no**
    archive access. Physical purge is done by the purge job (HOUSEHOLD-008). The audit history of the moved entities is
-   **not** purged together with S (see decision 8, D12).
+   **not** purged together with S (see §8, D12).
 4. **S budgets** are never transferred (BR-HH-13) and are purged with S in every mode.
 5. **No physical deletion** before the end of the applicable window or retention obligation; nothing is lost silently.
 6. **Information before confirmation.** Before confirming, the joiner is shown, per mode, what will be transferred, what
