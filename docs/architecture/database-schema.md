@@ -205,7 +205,8 @@ Columns: `id uuid`, `user_id uuid`, `purpose text` (`EMAIL_VERIFY`, `PASSWORD_RE
 - **UQ** `uq_household_id_currency (id, currency)` — FK target that pins monetary rows to the household currency (§3).
 - **CK** status list; `status = 'ACTIVE' OR dissolved_at IS NOT NULL`; `status <> 'DISSOLVED' OR purge_at IS NOT NULL`.
 - **Index** `ix_household_purge (purge_at) WHERE status = 'DISSOLVED'` — purge job.
-- `DELETED` rows are kept briefly as tombstones only until every module has purged (then removed); see §12.
+- `DELETED` rows are kept briefly as tombstones only until every module has purged (then removed); see §12. A household
+  deleted by its single member (BR-HH-12) or left by a merge is `DISSOLVED` (not `DELETED`) until its `purge_at`.
 
 ### 5.3 `household.household_member`
 
@@ -216,7 +217,7 @@ Columns: `id uuid`, `user_id uuid`, `purpose text` (`EMAIL_VERIFY`, `PASSWORD_RE
 | `seat` | `smallint` | N | 1 or 2 (P6). |
 | `joined_at` | `timestamptz` | N | |
 | `left_at` | `timestamptz` | Y | Set on dissolution. |
-| `archive_access_until` | `timestamptz` | Y | Read-only access window (BR-HH-10). |
+| `archive_access_until` | `timestamptz` | Y | Read-only access window (BR-HH-10, BR-HH-19); null = no archive access (e.g. after a full merge, or for the partner after a join). |
 
 - **PK** `(household_id, user_id)` — also the composite-FK target used by all modules (§3); a membership exists once.
 - **FK** `household_id → household(id)`; `user_id → identity.user_account(id)`.
@@ -277,17 +278,22 @@ Columns: `id uuid`, `household_id uuid`, `code_hash bytea`, `created_by uuid`, `
 | `household_id` | `uuid` | N | Target household. |
 | `invitation_id` | `uuid` | N | |
 | `requester_user_id` | `uuid` | N | |
+| `source_household_id` | `uuid` | Y | Snapshot at redemption: the requester's active household S (null if none). |
 | `merge_mode` | `text` | N | `NONE`, `SHARED_AS_SHARED`, `SHARED_AS_PERSONAL`, `SHARED_DISCARD`. |
-| `status` | `text` | N | `PENDING`, `APPROVED`, `REJECTED`, `EXPIRED`, `CANCELLED`. |
-| `created_at`, `expires_at` | `timestamptz` | N | |
+| `status` | `text` | N | `PENDING`, `APPROVED`, `REJECTED`, `EXPIRED`, `CANCELLED`, `INVALIDATED`. |
+| `closure_reason` | `text` | Y | Set only for `INVALIDATED`: `TARGET_UNAVAILABLE`, `REQUESTER_INELIGIBLE`, `MERGE_NOT_POSSIBLE`. |
+| `created_at`, `expires_at` | `timestamptz` | N | `expires_at = created_at +` `couplefinance.household.join-request-validity` (default `P7D`, BR-HH-17). |
 | `decided_by` | `uuid` | Y | |
 | `decided_at` | `timestamptz` | Y | |
 
 - **PK** `(id)` · **FK** `household_id → household`; `invitation_id → invitation(id)`;
-  `requester_user_id → identity.user_account`; `(household_id, decided_by) → household_member`.
-- **UQ** `uq_join_request_invitation (invitation_id) WHERE status IN ('PENDING','APPROVED')` — single use;
+  `requester_user_id → identity.user_account`; `source_household_id → household`; `(household_id, decided_by) → household_member`.
+- **UQ** `uq_join_request_invitation (invitation_id)` (full, not partial) — single use: the invitation is consumed at
+  redemption, atomically with the insert of the `PENDING` request, and a refused, cancelled, expired or invalidated
+  request needs a new code (BR-HH-04, BR-HH-17);
   `uq_join_request_requester_pending (requester_user_id) WHERE status = 'PENDING'` — one pending request per user.
-- **CK** lists; `(status IN ('APPROVED','REJECTED')) = (decided_at IS NOT NULL AND decided_by IS NOT NULL)`.
+- **CK** lists; `(status IN ('APPROVED','REJECTED')) = (decided_at IS NOT NULL AND decided_by IS NOT NULL)`;
+  `(status = 'INVALIDATED') = (closure_reason IS NOT NULL)`.
 - **Index** `ix_join_request_household_pending (household_id) WHERE status = 'PENDING'` — approval inbox.
 
 ---
@@ -892,10 +898,14 @@ Completed event publications purged after 7 days.
 
 ### 12.4 Household purge order
 
-Because cross-module FKs are `RESTRICT`, a dissolved household is purged module by module (reverse dependency order):
-`receipt` (pages' storage objects first) → `expense` → `budget` → `savings` → `categorization` →
-`household` (members, periods, invitations, join requests, then the household row). Each step is idempotent and
-runs under `SystemHouseholdContext`; a partially purged household is simply retried.
+Because cross-module FKs are `RESTRICT`, a dissolved household is purged module by module (reverse dependency order),
+**through the `HouseholdPurgeParticipant` implementations** of each module ([ADR-009](adr/009-household-join-journey.md) §1),
+not by `household` calling other modules' repositories:
+`receipt` (pages' storage objects first, deleted outside any transaction) → `expense` → `budget` → `savings` →
+`categorization` → `household` (members, periods, invitations, join requests, then the household row). Each step is
+idempotent and runs under `SystemHouseholdContext`; a partially purged household is simply retried. A household is
+purged **never before its `purge_at`** and never while `ACTIVE`. How the audit of entities moved out of the household by
+a merge is treated by this purge is specified by DOC-006 (issue #118).
 
 ---
 

@@ -29,9 +29,12 @@ Phases: **MVP** → **V1** → **V2** (see [vision.md](vision.md#7-scope-by-phas
 - As a member, I can invite my partner with a single-use code/link, and I **approve** the join request
   before my partner sees anything.
 - As an invited user who already tracks expenses alone, I can **join with my data** or join without it.
+- As a requester, I can preview the household I am about to join (its name and who invited me), follow my request and
+  cancel it while it is pending; if it is refused, expires or becomes impossible I need a new code.
 - As a member, I can dissolve the household (e.g. after a separation) without my partner's consent.
-- As a former member, I can browse and export the dissolved household for 90 days, and start a new
-  household seeded with my configuration and my personal expenses.
+- As a former member, I can browse and export the dissolved household for 90 days (30 days when I left my solo
+  household by joining, or deleted it), retrieve its receipts and documents, see until when I have access, and start a
+  new household seeded with my configuration and my personal expenses.
 
 **Acceptance criteria**
 - At most two active members (BR-HH-01); one active household per user (BR-HH-02).
@@ -39,8 +42,15 @@ Phases: **MVP** → **V1** → **V2** (see [vision.md](vision.md#7-scope-by-phas
   period start day default to EUR, Europe/Paris and 1.
 - Invitation rules BR-HH-04 (≥ 128-bit code, 7 days, approval step, rate limits).
 - Merge rules BR-HH-13; the joiner explicitly chooses what happens to their SHARED expenses and is told
-  the partner will see anything brought as SHARED.
-- Dissolution rules BR-HH-09 … BR-HH-11; a new partner can never see a former partner's data.
+  the partner will see anything brought as SHARED. **Before confirming**, the joiner is shown per mode what will be
+  transferred, what will be kept read-only and until when, and what will be deleted (including the budgets of the
+  household they leave, which are never transferred).
+- Join request rules BR-HH-17 and BR-HH-18: nothing financial is shown before approval; only the inviter approves; any
+  active member may refuse; the requester may cancel.
+- Archive rules BR-HH-19 (read-only, end date shown, joiner-only archive after a join, none after a full merge).
+- Dissolution rules BR-HH-09 … BR-HH-11; a new partner can never see a former partner's data. MVP limits: the partner
+  is told of a dissolution by an in-app banner at next app open (push/e-mail in V1); the "budget template" of BR-HH-11
+  is deferred until it is defined.
 - Onboarding asks early whether the user will share with a partner, to encourage one household from the start.
 
 ## F3. Expense entry — MVP
@@ -185,6 +195,9 @@ Phases: **MVP** → **V1** → **V2** (see [vision.md](vision.md#7-scope-by-phas
 ## F15. Data export & privacy controls — V1 (export of dissolved household: MVP)
 
 - CSV export of household (SHARED) expenses and of one's own personal expenses; personal data export.
+- **Dissolved-household archive (MVP)**: read-only consultation until `archive_access_until`, CSV export of expenses
+  (formula-injection safe) and document retrieval, per page (5-minute links) or as a ZIP of the re-encoded page images
+  (original PDFs are never served back); export and downloads require a recent login (BR-HH-19, security.md §3.1).
 - Per-user AI consents: receipt analysis; insights & assistant (BR-AI-05).
 - Separate opt-in to contribute receipts to the quality dataset (BR-AI-09).
 

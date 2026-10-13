@@ -177,23 +177,41 @@ Household because they derive only from household settings; other modules refere
 
 ```
 create (creator = seat 1) ─▶ ACTIVE ──approve join──▶ ACTIVE (2 members)
-                              │  ▲ merge (BR-HH-13): source household → DELETED after moving data
+                              │  ▲ merge (BR-HH-13): source household → DISSOLVED (archive per ADR-009 §4),
+                              │  │   purged afterwards — never set directly to DELETED
                               ▼
                        dissolve (either member, unilateral)
                               ▼
-                          DISSOLVED (read-only, archive access 90 d; 30 d for solo household left by join)
-                              ▼ purge job
-                           DELETED
+                          DISSOLVED (read-only; archive access 90 d; 30 d for a solo household left by a join
+                              │      without data or with SHARED_DISCARD, or deleted under BR-HH-12; none after
+                              │      a full merge, where purge_at = approval instant)
+                              ▼ purge job (never before purge_at)
+                           DELETED (short tombstone while modules purge, then removed)
 ```
 
 **Authorisation.** Active members: read household, update settings (name, timezone, period start day; currency only
-while unreferenced), create/revoke invitations, approve/reject join requests, dissolve. Archive readers: read and
-export only. Nobody else: 404.
+while unreferenced), create/revoke invitations, consult and refuse join requests (approve: invitation creator only, BR-HH-18), dissolve. Archive readers: read and
+export only, through the explicit archive routes and only until `archiveAccessUntil` (after a join, the joiner only).
+Nobody else: 404.
 
 **Related aggregates**
 - `Invitation`: id, householdId, codeHash, createdBy, expiresAt, revokedAt, status. Single-use, 7 days (BR-HH-04).
-- `JoinRequest`: id, householdId, invitationId, requesterUserId, mergeMode, status (`PENDING`, `APPROVED`,
-  `REJECTED`, `EXPIRED`), decidedBy/At. Approval executes membership (+ merge) atomically.
+- `JoinRequest`: id, householdId (target T), invitationId, requesterUserId, `sourceHouseholdId` (the requester's
+  active household at redemption, snapshot; null if none), mergeMode, status (`PENDING`, `APPROVED`, `REJECTED`,
+  `EXPIRED`, `CANCELLED`, `INVALIDATED`), `closureReason` (for `INVALIDATED`: `TARGET_UNAVAILABLE`,
+  `REQUESTER_INELIGIBLE`, `MERGE_NOT_POSSIBLE`), createdAt, expiresAt, decidedBy/At. Terminal states are final.
+  Created by redemption, which consumes the invitation (BR-HH-04, BR-HH-17). Rights (BR-HH-18): the requester may
+  cancel a `PENDING` request; any active member of the target may consult the inbox and refuse; only the creator of
+  the redeemed invitation, still an active member of the `ACTIVE` target, may approve; the requester never decides.
+  Approval executes membership (+ merge) atomically.
+
+**Lifecycle participants** ([ADR-009](adr/009-household-join-journey.md) §1). To keep `household` free of
+dependencies on business modules, `household.api` defines two SPIs that the modules implement:
+`HouseholdMergeParticipant` (moves the joiner's data of S to T inside the approval transaction; no network call) and
+`HouseholdPurgeParticipant` (purges a household's data; idempotent, own short transactions, external calls outside
+them). `household` calls them in a fixed order and never sees other modules' types: merge `categorization` →
+`expense` → `receipt` → (`savings`, V1); purge `receipt` → `expense` → `budget` → (`savings`) → `categorization` →
+`household`. `budget` takes no part in the merge (S budgets are discarded, BR-HH-13).
 
 **Events.** `HouseholdCreated`, `MemberJoined`, `HouseholdMerged`, `HouseholdDissolved`, `HouseholdSettingsChanged`.
 
@@ -563,7 +581,7 @@ Supporting unique keys required as FK targets: `household (id, currency)`, `hous
 | One active household per user (BR-HH-02) | `UNIQUE (user_id) WHERE left_at IS NULL` |
 | Max 2 active members (BR-HH-01) | `CHECK (seat IN (1,2))` + `UNIQUE (household_id, seat) WHERE left_at IS NULL` (P6) |
 | Household settings | `CHECK (period_start_day BETWEEN 1 AND 28)`, `CHECK (currency ~ '^[A-Z]{3}$')`, `CHECK (status IN …)` |
-| Invitation single use | `UNIQUE (code_hash)`; `UNIQUE (invitation_id) WHERE status IN ('PENDING','APPROVED')` on `join_request` |
+| Invitation single use | `UNIQUE (code_hash)`; full `UNIQUE (invitation_id)` on `join_request` (the code is consumed at redemption) |
 | User email unique | `UNIQUE (lower(email)) WHERE status <> 'DELETED'` |
 | Category name unique per household | `UNIQUE NULLS NOT DISTINCT (household_id, lower(name))`; FK `household_id → household` |
 | Merchant rule unique | `UNIQUE NULLS NOT DISTINCT (household_id, owner_user_id, merchant_key)` |
