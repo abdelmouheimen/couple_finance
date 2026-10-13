@@ -79,7 +79,8 @@ participant operates only on its own schema, with scoped `UPDATE`s, inside the c
 (`Propagation.MANDATORY`) and makes no network call. `budget` takes no part: S budgets are never transferred and are
 purged with S (BR-HH-13). Every table carries `household_id`, so the move is a set of scoped `UPDATE`s; storage keys
 contain no household id, so images are not moved. Member rows for the joiner must exist in T before moved rows are
-updated (composite member FKs). Both household rows are locked `FOR UPDATE` in id order to avoid deadlocks; mutating
+updated (composite member FKs), and the joiner's S membership must be ended (`left_at`) **before** the T membership is
+inserted: `uq_member_user_active` is a partial unique index, which PostgreSQL cannot defer (order in ADR-009 §5). Both household rows are locked `FOR UPDATE` in id order to avoid deadlocks; mutating
 use cases take `FOR KEY SHARE` on their household row first (write guard). Both households must share the currency
 (composite currency FKs would otherwise reject the move).
 
@@ -93,7 +94,8 @@ full-rollback tests) before any changeset; this document does not list constrain
 (`archive_access_until` = 30 days, configurable), then the purge job removes it. `SHARED_AS_SHARED` / `SHARED_AS_PERSONAL`:
 S is logically deleted in the same transaction (`DISSOLVED`, `dissolved_at = purge_at` = approval instant, members'
 `left_at` set, no `archive_access_until`) and physically purged by the purge job through the purge participants
-(database-schema.md §12.4). The audit of the moved entities is handled by DOC-006 (#118).
+(database-schema.md §12.4). The audit of the moved entities stays in S, unchanged; each participant writes a `MERGED`
+event in T and a provenance row (database-schema.md §11.1, ADR-009 §9). A moved expense keeps its original `source`.
 
 **Savings extension (V1).** `savings` implements the same two SPIs (its goals move to T on merge; it is purged in the
 order of database-schema.md §12.4); no change to `household` is required.

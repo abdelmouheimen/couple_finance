@@ -27,7 +27,8 @@ implementation exposed gaps that ADR-002 does not settle:
 
 ## Decision
 
-Numbers A1 and D1 … D20 refer to the decision register of issue #113. Items not listed here (D2, D3, D4, D5, D10,
+Numbers A1 and D1 … D20 refer to the decision register of issue #113. They are **local to this ADR** and unrelated to
+the architecture decision log D1 … D18 of architecture.md §11 (where this whole ADR is entry D18). Items not listed here (D2, D3, D4, D5, D10,
 D11, D14, D16, D18, D19, D20) are recorded in the business rules and documents named in "Where recorded" below.
 
 ### 1. Lifecycle participants (A1, D14) — dependency inversion
@@ -101,7 +102,7 @@ Per merge mode chosen by the joiner (BR-HH-13, BR-HH-14):
 3. **`SHARED_AS_SHARED` / `SHARED_AS_PERSONAL`.** Atomic transfer of the selected data, then **logical deletion** of S
    in the same transaction: `DISSOLVED`, `dissolved_at = purge_at =` approval instant, members' `left_at` set, **no**
    archive access. Physical purge is done by the purge job (HOUSEHOLD-008). The audit history of the moved entities is
-   **not** purged together with S (see §8, D12).
+   **not** purged together with S (see §8 and §9, D12).
 4. **S budgets** are never transferred (BR-HH-13) and are purged with S in every mode.
 5. **No physical deletion** before the end of the applicable window or retention obligation; nothing is lost silently.
 6. **Information before confirmation.** Before confirming, the joiner is shown, per mode, what will be transferred, what
@@ -124,6 +125,11 @@ Per merge mode chosen by the joiner (BR-HH-13, BR-HH-14):
   `FOR UPDATE` locks on the households (ascending id) and then on the request. Stable errors: 409
   `JOIN_REQUEST_NOT_PENDING`, `JOIN_REQUEST_EXPIRED`, `JOIN_TARGET_UNAVAILABLE`, `JOIN_REQUESTER_INELIGIBLE`,
   `JOIN_MERGE_NOT_POSSIBLE`; 403 `JOIN_APPROVAL_NOT_ALLOWED`.
+- **Membership order in the approval transaction.** `uq_member_user_active (user_id) WHERE left_at IS NULL` is a
+  partial unique index, which PostgreSQL never defers: the joiner's membership of S must be ended (`left_at`) **before**
+  the membership of T is inserted, and the T membership must exist before any participant moves a row (composite member
+  FKs). Order: lock households and request → re-validate → end the S membership → insert the T membership → merge
+  participants → S status per §4 → request `APPROVED`.
 - **Rights (D15).** Approve: the creator of the redeemed invitation, only while an active `MEMBER` of the `ACTIVE`
   target. Consult the inbox: any active member of the target. Refuse: any active member of the target (refusal only
   narrows access). The requester never decides.
@@ -167,9 +173,109 @@ systematically duplicated. **Mandatory conditions:**
 7. future RLS policies stay consistent;
 8. tests prove that an unauthorised user cannot read the history.
 
-The **realisation** that meets these conditions without weakening household isolation or purge consistency (a minimal
-adaptation of option A, or option B with provenance) is **not decided here**: it is documented by DOC-006 (issue #118),
-pending Tech Lead confirmation. It blocks only the Issues that write or purge the audit of moved entities.
+The realisation is option **A′** (§9), decided by the Tech Lead on 2026-10-13 (DOC-006, issue #118).
+
+### 9. Realisation of D12 — option A′: audit kept in place, persistent provenance (DOC-006)
+
+**Why not option A as first worded.** Reading a history "by `entity_id` across households" was a cross-household read
+keyed only by an id (an exception to security.md §4.1 point 2) that the GA RLS policy `household_id = app.household_id`
+cannot express; and the expense purge (BR-EXP-11, `JdbcExpensePurgeRepository`) deletes audit rows with
+`household_id = <current household of the expense>`, so the rows left in S would never be purged with their expense
+(BR-DAT "always purged together with its expense"). A′ removes both problems with an explicit provenance link.
+
+**Scope.** Modules whose entities move by an `UPDATE` of `household_id` **and** that keep an audit trail: `expense`
+(entity `EXPENSE`; items and refunds are audited on their expense / are expenses themselves) and `receipt` (entity
+`RECEIPT`); `savings` in V1. Categories are mapped or created, not moved; budgets are not transferred; the household
+audit stays with its household.
+
+**Merge (inside the participant, same transaction).** For each moved entity: (1) the scoped `UPDATE` of
+`household_id` S → T; (2) one row in `<module>.audit_provenance`; (3) one `MERGED` audit event written **in T**
+(`household_id = T`, `entity_id`, owner per the entity's visibility in T, `actor_type = 'SYSTEM'`,
+`actor_system = 'SYSTEM:household-merge'`, `changes` = origin household, mode, visibility before/after). Historical
+events are never updated, never copied. The household module also writes one household audit event in S and one in T
+(source, target, mode, number of moved entities per type), so condition 4 is met at both levels. Idempotent: a rerun
+inserts nothing (`ON CONFLICT DO NOTHING` on the provenance key; the `MERGED` event is written only with a new
+provenance row).
+
+**Provenance model.** One table per participating module, in its own schema (ADR-001):
+`expense.audit_provenance`, `receipt.audit_provenance` — see database-schema.md §11.1. Key facts:
+
+- `(household_id, entity_id)` primary key: `household_id` is the household that received the entity (T); one
+  provenance per entity.
+- `origin_household_id` (S), `merged_at`, `merge_mode`; check `origin_household_id <> household_id`.
+- **Depth 1 by construction.** A merge source is the sole member of an `ACTIVE` household; a merge target ends with
+  two members and can only leave `ACTIVE` by dissolution (BR-HH-09). A household that received a merge can therefore
+  never be the source of another one, and an entity moves at most once. The participant asserts it (no provenance row
+  with `household_id = S`) and fails the merge otherwise; any future rule allowing chains requires a new ADR.
+- `expense.audit_provenance (household_id, entity_id) → expense.expense (household_id, id)` (`NO ACTION`, not
+  deferrable): a provenance row can never outlive its expense, and any hard-delete path that forgets the provenance
+  (and therefore the origin audit rows) fails loudly instead of leaving orphans.
+- `receipt.audit_provenance` has **no** FK to `receipt.receipt`: a receipt can be hard-deleted by its uploader while
+  its audit is deliberately kept until retention (database-schema.md §11 "No FK to the entity"), so its provenance must
+  live as long as that audit.
+- No FK to `household.household` for either household id (cross-module, and S is purged while the link must stay),
+  mirroring `audit_event`.
+- Clients never send provenance: it is written only by the merge participant and read only server-side.
+
+**Reading a history (conditions 1, 2, 6).** The client sends only the id of an entity of its current context. One
+query per module, in its own schema:
+
+```sql
+-- expense; served by the provenance PK and ix_expense_audit_entity (household_id, entity_id, occurred_at DESC)
+SELECT a.* FROM expense.audit_event a
+JOIN expense.expense e
+  ON e.id = :entityId AND e.household_id = :contextHousehold
+ AND (e.owner_user_id IS NULL OR e.owner_user_id = :user)          -- 1. entity visible in the caller's context
+WHERE a.entity_type = 'EXPENSE' AND a.entity_id = e.id
+  AND (a.household_id = :contextHousehold
+       OR a.household_id = (SELECT p.origin_household_id FROM expense.audit_provenance p
+                            WHERE p.household_id = :contextHousehold AND p.entity_id = e.id))  -- 2. recorded origin
+  AND (a.owner_user_id IS NULL OR a.owner_user_id = :user)          -- 3. row owner (BR-EXP-07, BR-EXP-10)
+ORDER BY a.occurred_at DESC
+```
+
+The use case first loads the entity through its existing scoped read (404 otherwise); the query repeats the check so a
+history can never be returned for an entity the caller cannot see. Every household id in the predicate is the
+caller's own context or an origin recorded **by** that context: no unscoped method, no new ArchUnit exception, and no
+other event of S is ever read (the predicate is per entity). Archive readers of T use the same query with the archive
+context. Archive readers of S cannot reach moved entities (they no longer exist in S). Receipt audit rows are always
+owned by the uploader, so they stay uploader-only.
+
+**Purge (condition 5, BR-DAT).** Only in the dedicated purge classes (security.md §4.4):
+
+| Event | Audit rows deleted | Provenance |
+|---|---|---|
+| Physical purge of S (HOUSEHOLD-008 / RECEIPT-008) | S rows **except** those of entities recorded as moved out of S (`NOT EXISTS` provenance with `origin_household_id = S`) | untouched (belongs to T) |
+| Hard delete of a moved expense (BR-EXP-11 after 90 days; DATA-001 erasure) | its rows in T **and** in its recorded origin, in the same statement | deleted with them (required by the FK) |
+| User deletion of a moved receipt | none (receipt audit is kept until retention, as today) | kept |
+| Physical purge of T | T rows and the origin rows of every entity recorded by T | deleted |
+| 24-month retention (`occurred_at`) | unchanged, any household | rows with `merged_at` older than the retention period, once no origin audit row of the entity remains (all of them are older than `merged_at`) |
+| Account deletion (DATA-001) | erasure/redaction of the user's rows also covers the origin rows of their moved entities | as above |
+
+Consequences: no orphan — an audit row whose household no longer exists is necessarily referenced by a provenance row,
+which an integrity test asserts; no premature deletion — the S purge never touches moved entities' history; no
+over-retention — every row still ends with its entity, its target household or the 24-month limit; foreign keys —
+`audit_event` and provenance have no FK to `household.household`, so kept origin rows never block the deletion of the
+S household row, and S is never referenced by a live row of another table.
+
+**RLS (condition 7, GA).** `<module>.audit_provenance`: `household_id = app.household_id`. `expense.audit_event`:
+`(household_id = app.household_id OR EXISTS (provenance row of app.household_id for the same entity whose origin is
+household_id, and expense of app.household_id visible to app.user_id)) AND (owner_user_id IS NULL OR owner_user_id =
+app.user_id)`; `receipt.audit_event` the same without the entity join (rows are uploader-owned). Purge classes keep the
+`BYPASSRLS` role.
+
+**Source of a moved expense.** A moved expense keeps its original `source` (`MANUAL`, `RECEIPT`); the merge never sets
+`MERGE`. The transfer is traced by the `MERGED` event and the provenance row only. `MERGE` stays an unused value of
+`ck_expense_source` (not in `ExpenseSource`); removing it would be a separate expand/contract change.
+
+**Tests required (condition 8).** Another household, the partner on a PERSONAL (or `SHARED_AS_PERSONAL`) entity, a
+former member of S without access, and a forged entity id each get 404 / no rows; originals byte-for-byte unchanged
+after a merge; every purge row of the table above, including "S purged then expense purged in T leaves no row" and the
+orphan integrity check; idempotent rerun of the merge.
+
+**Option B (copy with provenance columns) — fallback, not chosen.** Simpler purge, but it duplicates history and
+needs columns plus a unique index on every audited table; A′ keeps the history in one place with one small table per
+module and a bounded (depth-1) lookup.
 
 ## Where recorded
 
@@ -182,6 +288,7 @@ pending Tech Lead confirmation. It blocks only the Issues that write or purge th
 | Recent authentication, archive routes | security.md §3, §4.3 |
 | Routes, flow, MVP dissolution notification (D18) | architecture.md §6.4, §7 |
 | User-facing journey and information before confirming | features.md F2, F15 |
+| D12 realisation (A′): provenance, history read, purge, RLS; `source` of moved expenses | database-schema.md §7.1, §11, §12.4; security.md §4.1, §4.4; business-rules.md §11 (BR-DAT) |
 
 ## Consequences
 

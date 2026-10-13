@@ -381,7 +381,7 @@ the row is deleted when a rule is created or the streak breaks.
 | `note` | `text` | Y | ≤ 500 chars. |
 | `receipt_id` | `uuid` | Y | Evidence link (P4). |
 | `refund_of_expense_id` | `uuid` | Y | REFUND only. |
-| `source` | `text` | N | `MANUAL`, `RECEIPT`, `MERGE`, `COPY`. |
+| `source` | `text` | N | `MANUAL`, `RECEIPT`, `MERGE`, `COPY` (check `ck_expense_source`). How the expense was **created**; a merge never changes it (a moved expense keeps `MANUAL` / `RECEIPT`; the transfer is traced by §11.1). `MERGE` is never written (not in `ExpenseSource`); `COPY` is for BR-HH-11 seeding. |
 | `created_at`, `created_by`, `updated_at`, `updated_by` | | N | |
 | `deleted_at` | `timestamptz` | Y | Soft delete. |
 | `deleted_by` | `uuid` | Y | |
@@ -847,6 +847,49 @@ Design choices:
 - Row-level `created_by`/`updated_by` columns remain for cheap "last modified by" display; `audit_event` is the history.
 - Partitioning by month on `occurred_at` is planned when volume warrants it (retention by partition drop); not at MVP.
 
+### 11.1 Audit of entities moved by a merge — `<module>.audit_provenance` (D12, option A′)
+
+[ADR-009](adr/009-household-join-journey.md) §9. When a merge moves an entity from S to T, its historical audit rows stay
+in S unchanged (never updated, never copied); the merge participant writes one `MERGED` event in T and one provenance
+row. Tables (created by EXPENSE-010 and RECEIPT-006, each in its own module changelog): `expense.audit_provenance`,
+`receipt.audit_provenance`; `savings` in V1.
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| `household_id` | `uuid` | N | Household that **received** the entity (T). |
+| `entity_id` | `uuid` | N | Moved entity (`EXPENSE` / `RECEIPT`). |
+| `origin_household_id` | `uuid` | N | Household the entity was moved out of (S). |
+| `merge_mode` | `text` | N | `SHARED_AS_SHARED`, `SHARED_AS_PERSONAL`, `SHARED_DISCARD`. |
+| `merged_at` | `timestamptz` | N | Approval instant; equals the `occurred_at` of the `MERGED` event. |
+
+- **PK** `(household_id, entity_id)` — one provenance per entity (an entity moves at most once, ADR-009 §9); serves the
+  history read and the purge of T.
+- **CK** `origin_household_id <> household_id`; mode list.
+- **FK** `expense.audit_provenance (household_id, entity_id) → expense.expense (household_id, id)` (`NO ACTION`, not
+  deferrable): the row cannot outlive its expense, so every hard-delete path must also handle the origin audit rows.
+  `receipt.audit_provenance` has **no** FK to the receipt (receipt audit outlives a deleted receipt until retention).
+  Neither table has an FK to `household.household` (cross-module; S is purged while the link stays), like
+  `audit_event`.
+- **Index** `ix_<module>_audit_provenance_origin (origin_household_id)` — the S purge (`NOT EXISTS` provenance with
+  `origin_household_id = S`). No index on `merged_at`: the retention step scans a table with one row per moved entity.
+- Grants: application role `INSERT` / `SELECT` (written only by the merge participant); `DELETE` only through the purge
+  classes. Never exposed to clients.
+
+**History read.** Entity visible in the caller's context first (existing scoped read, 404 otherwise); then audit rows
+with `entity_id = :e AND household_id IN (:context, origin recorded by :context for :e)` and the row-owner predicate,
+in one query that repeats the entity visibility join (ADR-009 §9). Served by `ix_audit_entity` and the provenance PK.
+
+**Purge and retention.**
+- S physical purge: deletes S audit rows except those of entities with a provenance row whose
+  `origin_household_id = S`.
+- Hard delete of a moved expense (BR-EXP-11, DATA-001): its rows in T and in its origin, and its provenance row, in one
+  statement.
+- T physical purge: T rows, the origin rows of every entity recorded by T, then T's provenance rows.
+- 24-month retention: unchanged on `audit_event`; a provenance row is deleted once `merged_at` is older than the
+  retention period and no origin audit row of its entity remains.
+- Integrity check (test, then a periodic query): every audit row whose household no longer exists is referenced by a
+  provenance row; otherwise it is an orphan (defect).
+
 ---
 
 ## 12. Technical schemas and cross-cutting tables
@@ -904,8 +947,9 @@ not by `household` calling other modules' repositories:
 `receipt` (pages' storage objects first, deleted outside any transaction) → `expense` → `budget` → `savings` →
 `categorization` → `household` (members, periods, invitations, join requests, then the household row). Each step is
 idempotent and runs under `SystemHouseholdContext`; a partially purged household is simply retried. A household is
-purged **never before its `purge_at`** and never while `ACTIVE`. How the audit of entities moved out of the household by
-a merge is treated by this purge is specified by DOC-006 (issue #118).
+purged **never before its `purge_at`** and never while `ACTIVE`. The `expense` and `receipt` steps keep the audit rows of
+entities moved out of the household by a merge and delete the origin rows and provenance of entities moved **into** it
+(§11.1).
 
 ---
 

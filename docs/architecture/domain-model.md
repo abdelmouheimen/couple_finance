@@ -402,7 +402,7 @@ categorisation into items; its visibility; its audit; the single source for all 
 | `items` | `List<ExpenseItem>` | 1..10 for `EXPENSE`/`REFUND`; **0 for `TRANSFER`**. |
 | `receiptId` | `ReceiptId?` | Evidence link; unique. |
 | `refundOf` | `ExpenseId?` | `REFUND` only. |
-| `source` | `MANUAL`, `RECEIPT`, `MERGE`, `COPY` | Provenance. |
+| `source` | `MANUAL`, `RECEIPT`, `MERGE`, `COPY` | How the expense was created. A merge never changes it: a moved expense keeps `MANUAL` / `RECEIPT`, and the transfer is traced by a `MERGED` audit event and a provenance row (ADR-009 §9). `MERGE` is never written; `COPY` is for BR-HH-11 seeding. |
 | `createdBy`, `createdAt`, `updatedBy`, `updatedAt` | | |
 | `deletedAt`, `deletedBy` | `Instant?`, `UserId?` | Soft delete. |
 | `version` | `long` | |

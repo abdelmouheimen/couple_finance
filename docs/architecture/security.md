@@ -76,6 +76,10 @@ implemented). True step-up / MFA is V1.
    `HouseholdContext currentHousehold()` → `{householdId, userId, status, role: MEMBER | ARCHIVE_READER}`.
 2. Every use case receives a `HouseholdContext`; every repository query on household data is scoped by
    `household_id`. Repositories expose only scoped methods (`findByIdAndHouseholdId`); ArchUnit enforces it.
+   The audit history of an entity moved by a merge is **not** an exception: it is read only after the entity is
+   authorised in the caller's context, and only from the caller's household and the origin household that the caller's
+   own household recorded for that entity (database-schema.md §11.1, ADR-009 §9); a client never supplies a household
+   id or a provenance, and an entity id alone opens nothing. The GA RLS policy of audit tables expresses the same rule.
 3. **All** household tables carry `household_id`, including child tables (database.md §1).
 4. Another household's resource → **404**.
 5. UUIDv7 identifiers.
@@ -126,7 +130,8 @@ implemented). True step-up / MFA is V1.
 Background jobs, schedulers and event listeners have no user token. They run with a
 `SystemHouseholdContext(householdId, reason)` built from the job's stored `household_id`; audit actor =
 `SYSTEM:<job>`. Only purge jobs may use unscoped repository methods, isolated in dedicated classes and allowed by
-an explicit ArchUnit exception.
+an explicit ArchUnit exception. Deleting the origin audit rows of a moved entity (another household id than the one
+being purged) is part of those purge classes and of nothing else (database-schema.md §11.1).
 
 ## 5. Input validation & API hardening
 
