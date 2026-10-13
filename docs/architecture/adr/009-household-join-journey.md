@@ -144,6 +144,17 @@ Per merge mode chosen by the joiner (BR-HH-13, BR-HH-14):
 Every mutating use case takes `FOR KEY SHARE` on its household row first and re-reads the status; lifecycle transitions
 (dissolution, merge, deletion) take `FOR UPDATE`. Lock order: households (ascending id), then module rows.
 
+- **No lock upgrade.** The first lock a transaction takes on its household row is the strongest it will need. A use
+  case that already serialises on the household row (e.g. invitation creation, which locks it `FOR UPDATE` to keep the
+  member count stable) takes `FOR UPDATE` through the guard instead of `FOR KEY SHARE`: two transactions holding
+  `FOR KEY SHARE` and both upgrading to `FOR UPDATE` would deadlock. A later `UPDATE` of the household row by the same
+  transaction (`FOR NO KEY UPDATE`) does not conflict with other writers' `FOR KEY SHARE` and is allowed.
+- **Fresh re-read.** Under READ COMMITTED, a locking `SELECT` re-reads only the locked row after waiting; the guard
+  therefore reads the household status from the locked row and the caller's active membership in a **separate**
+  statement afterwards.
+- Only in a read-write transaction (PostgreSQL rejects row locks in read-only transactions); reads take no lock.
+- Statements that touch no household data (e.g. claiming an `Idempotency-Key` in `infra`) may precede the guard.
+
 ### 7. Asynchronous analyses and categories during a merge (D9, D10, D11)
 
 - **Analyses (D9).** The merge never waits on a job. Receipts are moved with their jobs; `RUNNING` / `PENDING` jobs are
