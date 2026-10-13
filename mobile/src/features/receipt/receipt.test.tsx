@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { configure, fireEvent, screen, waitFor } from "@testing-library/react-native";
+import { convertFormDataAsync } from "expo/src/winter/fetch/convertFormData";
 import { type ReactNode } from "react";
 import { HouseholdProvider, useHouseholdState } from "@/features/household/HouseholdProvider";
 import { QuickAddScreen } from "@/features/expense/QuickAddScreen";
@@ -25,6 +26,11 @@ jest.mock("./receiptDevice", () => ({
     pickPdf: jest.fn(),
     discard: jest.fn(),
     sharePage: jest.fn(),
+    // Stands for expo-file-system's File (a Blob read from disk).
+    uploadPart: jest.fn(
+        (file: { uri: string; mimeType: string }) =>
+            new Blob([`bytes of ${file.uri}`], { type: file.mimeType }),
+    ),
 }));
 const mocked = jest.mocked(device);
 
@@ -494,6 +500,19 @@ describe("pure helpers", () => {
     test("the multipart body carries one files part per page, in order", () => {
         const body = receiptFormData([photo(1), photo(2)]);
         expect(body.getAll("files")).toHaveLength(2);
+    });
+
+    test("the multipart body is encodable by expo/fetch, the app's global fetch", async () => {
+        const { body, boundary } = await convertFormDataAsync(
+            receiptFormData([photo(1), photo(2)]),
+        );
+
+        // Each page is a Blob read from disk, never React Native's {uri, name, type} descriptor.
+        expect(mocked.uploadPart.mock.calls.map(([file]) => file)).toEqual([photo(1), photo(2)]);
+        const text = new TextDecoder().decode(body);
+        expect(text.split(`--${boundary}\r\n`)).toHaveLength(3);
+        expect(text).toContain('name="files"; filename="page-1.jpg"');
+        expect(text).toContain("bytes of file:///cache/page-2.jpg");
     });
 
     test.each<[KindFilter, number]>([

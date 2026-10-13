@@ -82,6 +82,14 @@ export async function pickPdf(): Promise<PickOutcome> {
     };
 }
 
+/**
+ * A local file as a multipart part. The app's global fetch is `expo/fetch`, which reads parts through the Blob
+ * interface and rejects React Native's `{uri, name, type}` descriptors before anything is sent.
+ */
+export function uploadPart(file: LocalReceiptFile): Blob {
+    return new File(file.uri);
+}
+
 /** Deletes local copies (best effort): captured, picked or downloaded receipt files never linger in the cache. */
 export function discard(uris: readonly string[]): void {
     for (const uri of uris) {
