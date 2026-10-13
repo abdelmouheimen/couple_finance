@@ -41,7 +41,7 @@ Verification target: OWASP ASVS Level 2 (backend), OWASP MASVS (mobile).
 | Password storage | Argon2id; breached-password check (k-anonymity) **[proposal]**; min 10 chars. |
 | Access token | JWT signed with **ES256** (EdDSA may be added later), **15 min**, claims `sub`, `sid`, `iat`, `exp`, `aud`. **No household id** — membership resolved per request. |
 | Validation (implemented) | Resource server with keys from a JWKS endpoint (`couplefinance.security.jwt.jwk-set-uri`; none configured = the public part of the signing key is trusted). Required: valid ES256 signature, `exp` present and not past (60 s skew), `sub` = user id, `aud` contains `couplefinance-api`, `iss` when configured. The user must exist and not be deleted (else 401) and be `ACTIVE` (else 403 `EMAIL_NOT_VERIFIED`). Issuance (`POST /api/v1/auth/login`, Issue #75): ES256 signed by `couplefinance.security.jwt.signing-jwk` (deployment secret, private P-256 JWK; unset = ephemeral key, local only), 15 min, claims `sub`, `sid` (session id), `iat`, `exp`, `aud`, `iss` when configured, no household id. A session and a first refresh token (opaque 256-bit, SHA-256 stored, 30 days) are created; passwords are verified with Argon2id; unknown email, wrong password and deleted account are indistinguishable (`INVALID_CREDENTIALS`). Refresh/logout: not implemented yet. |
-| Revocation window | Access tokens stay valid up to 15 min after logout-all / password reset / account deletion (accepted). **Sensitive endpoints** (export, account deletion, dissolution, join approval, consent changes) additionally check that `sid` is not revoked. |
+| Revocation window | Access tokens stay valid up to 15 min after logout-all / password reset / account deletion (accepted). **Sensitive operations** additionally require a **recent authentication** (§3.1). |
 | Refresh token | Opaque 256-bit, stored hashed, 30-day sliding, rotated on each use. **Reuse detection with a 30 s grace window**: presenting a token rotated less than 30 s ago rotates forward again in the same chain so only the newest token stays valid, instead of revoking (handles parallel refreshes; ADR-007). Reuse outside the window revokes the session. |
 | Client | **Single-flight refresh** in the app: concurrent 401s wait on one refresh call. |
 | Logout | Revokes the session; "log out everywhere" revokes all sessions. |
@@ -49,6 +49,24 @@ Verification target: OWASP ASVS Level 2 (backend), OWASP MASVS (mobile).
 | Brute force | Rate limits per IP and account on login, reset, verification and invitation redemption; no permanent lockout; progressive delays deferred (ADR-007). |
 | Biometrics | Local app unlock only. |
 | MFA | Not in MVP; TOTP or passkeys in V1. |
+
+### 3.1 Recent authentication for sensitive operations
+
+([ADR-009](adr/009-household-join-journey.md) §2.) A sensitive operation requires (1) the token's `sid` to be an
+existing session of the caller, not revoked and not expired, **and** (2) that session to have been created by a
+credential login less than `couplefinance.security.recent-auth-window` ago (default `PT15M`).
+`identity.session.created_at` is the instant of the last effective authentication of the session: login verifies the
+password; token refresh never changes it. Re-authentication is an explicit login (a new session); the mobile app then
+revokes the superseded session. No new credential flow (ADR-007).
+
+| Failure | Response |
+|---|---|
+| Session missing, revoked or expired | 401 `SESSION_REVOKED` |
+| Session valid but older than the window | **403** `REAUTHENTICATION_REQUIRED` (403 rather than 401, so the single-flight refresh does not loop) |
+
+Sensitive operations: join approval; archive export and archive document download; redemption by a requester who owns
+an `ACTIVE` household; dissolution; single-member household deletion; account deletion (consent changes when
+implemented). True step-up / MFA is V1.
 
 ## 4. Authorisation
 
@@ -86,8 +104,22 @@ Verification target: OWASP ASVS Level 2 (backend), OWASP MASVS (mobile).
 - Joining requires a valid invitation **and** approval by the inviting member (BR-HH-04). Until approval,
   the requester has no access.
 - A `DISSOLVED` household is read-only: `ARCHIVE_READER` role allows GET and export only, until
-  `household_archive_access.expires_at` (BR-HH-10).
-- Dissolution, account deletion and join approval require recent authentication (sensitive endpoint check).
+  `household_member.archive_access_until` (BR-HH-10, BR-HH-19).
+- **Archive routes** `/api/v1/archives` and `/api/v1/archives/{archiveId}/...`: `household.api` resolves an
+  `ARCHIVE_READER` context only if the caller has a membership of that household with `left_at` set and
+  `archive_access_until > now`; otherwise **404** (no disclosure). No write route exists; the routes do not alter the
+  resolution of the caller's active household. Archive readers: former members of a household left by dissolution; after
+  a join, the **joiner only** (the partner never reads the joiner's archived S); none after a full merge (ADR-009 §4).
+  CSV export protects against formula injection. Documents are retrievable per page through 5-minute presigned URLs
+  issued after the archive check, and as a bulk ZIP of the re-encoded page images; original PDFs are never served back
+  (§6). Export and document download require recent authentication (§3.1).
+- **Join request.** Until approval nothing financial is visible to anyone (BR-HH-18); the requester only sees the target
+  name and the inviter's display name. The code is consumed at redemption; approval is limited to the invitation
+  creator; consulting and refusing to any active member of the target. Redemption by an owner of an `ACTIVE`
+  household, dissolution, single-member deletion, account deletion and join approval require recent authentication
+  (§3.1).
+- **Write guard.** Mutating use cases take `FOR KEY SHARE` on their household row and re-read its status; lifecycle
+  transitions take `FOR UPDATE`, so a write cannot land in a household dissolved or merged concurrently (ADR-009 §6).
 
 ### 4.4 System (non-user) execution
 

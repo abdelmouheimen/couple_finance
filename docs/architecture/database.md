@@ -71,13 +71,32 @@ Full definitions in [database-schema.md](database-schema.md).
 
 ## 4. Household merge (BR-HH-13)
 
-One transaction orchestrated by `household`, calling module APIs that each operate on their own schema:
-`categorization.remap(S→T)` (returns category id map), `expense.moveHousehold(S→T, categoryMap, mergeMode)`,
-`receipt.moveHousehold`, `savings.moveHousehold`, `budget.discard(S)`. Every table carries `household_id`, so the
-move is a set of scoped `UPDATE`s; storage keys contain no household id, so images are not moved. Member rows for the
-joiner must exist in T before moved rows are updated (composite member FKs). Both household rows are locked
-`FOR UPDATE` in id order to avoid deadlocks. Both households must share the currency (composite currency FKs would
-otherwise reject the move).
+One transaction orchestrated by `household` ([ADR-009](adr/009-household-join-journey.md)). `household` does not call
+other modules: it invokes the `HouseholdMergeParticipant` implementations that `categorization`, `expense`, `receipt`
+and, in V1, `savings` provide, in this fixed order (`household.api` holds only the SPI, so there is no module cycle):
+`categorization` (category id map) → `expense` (receives the map and the mode) → `receipt` → (`savings`). Each
+participant operates only on its own schema, with scoped `UPDATE`s, inside the caller's transaction
+(`Propagation.MANDATORY`) and makes no network call. `budget` takes no part: S budgets are never transferred and are
+purged with S (BR-HH-13). Every table carries `household_id`, so the move is a set of scoped `UPDATE`s; storage keys
+contain no household id, so images are not moved. Member rows for the joiner must exist in T before moved rows are
+updated (composite member FKs). Both household rows are locked `FOR UPDATE` in id order to avoid deadlocks; mutating
+use cases take `FOR KEY SHARE` on their household row first (write guard). Both households must share the currency
+(composite currency FKs would otherwise reject the move).
+
+**Deferrable foreign keys (intent only).** Moving rows may require intra-module composite foreign keys to be checked
+at commit rather than per statement (e.g. `expense_item` → `expense`, the refund self-reference, receipt child
+tables), with the constraint deferred only inside the participant. The exact constraints, and whether `DEFERRABLE
+INITIALLY IMMEDIATE` is needed or feasible, are **verified on PostgreSQL by EXPENSE-010 and RECEIPT-006** (with
+full-rollback tests) before any changeset; this document does not list constraints as deferrable.
+
+**End of S (BR-HH-13, ADR-009 §4).** `NONE` and `SHARED_DISCARD`: S becomes `DISSOLVED` with a joiner-only archive
+(`archive_access_until` = 30 days, configurable), then the purge job removes it. `SHARED_AS_SHARED` / `SHARED_AS_PERSONAL`:
+S is logically deleted in the same transaction (`DISSOLVED`, `dissolved_at = purge_at` = approval instant, members'
+`left_at` set, no `archive_access_until`) and physically purged by the purge job through the purge participants
+(database-schema.md §12.4). The audit of the moved entities is handled by DOC-006 (#118).
+
+**Savings extension (V1).** `savings` implements the same two SPIs (its goals move to T on merge; it is purged in the
+order of database-schema.md §12.4); no change to `household` is required.
 
 ## 5. Liquibase organisation
 

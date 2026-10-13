@@ -66,7 +66,7 @@ Related: [security.md](security.md) · [ai.md](ai.md) · [database.md](database.
 |---|---|---|---|
 | `shared` (kernel) | `Money`, `CurrencyCode`, ids, `BudgetPeriod`, clock, error model, `HouseholdContext` types. No persistence. | — | — |
 | `identity` | Registration, credentials, sessions & tokens, password reset, account deletion (tombstones), **per-user AI consents**, personal data export. | `identity` | shared |
-| `household` | Household, members, invitations, **join requests & approval**, settings, **budget period calendar**, **dissolution & archive access**, **merge orchestration**. Provides `HouseholdContext`. | `household` | identity; orchestrates merge via APIs of categorization, expense, receipt, savings, budget |
+| `household` | Household, members, invitations, **join requests & approval**, settings, **budget period calendar**, **dissolution & archive access**, **merge and purge orchestration**. Provides `HouseholdContext`. | `household` | identity; orchestrates merge and purge through the `HouseholdMergeParticipant` / `HouseholdPurgeParticipant` SPIs it defines and the modules implement (ADR-009) |
 | `expense` | Ledger: kinds (expense/refund/transfer), **expense items**, sharing & **visibility**, audit, idempotency, restore, search, **spending query API** (BR-SCP). | `expense` | household, categorization |
 | `categorization` | Categories (archive-only), merchant normalisation (versioned), household & user merchant rules, suggestion (rules → AI). | `categorization` | household, identity (consent), ai |
 | `receipt` | Evidence: multi-page upload, storage, analysis jobs, extraction pipeline, parsing & ambiguity, validation, drafts, review contract, exactly-once confirmation, attach-to-expense, duplicates. | `receipt` | household, identity (consent), expense, categorization, ai, storage port |
@@ -165,13 +165,23 @@ Scheduler (daily per household, + at period close) — SystemHouseholdContext
 
 ```
 Invite:    member A creates invitation (code shown once)
-Join:      user B redeems code → join_request PENDING (+ merge mode if B owns a solo household)
-Approve:   A approves (recent auth) → tx: lock households (ordered) → member count check →
-           [merge per BR-HH-13 via module APIs] → membership → MemberJoined / HouseholdMerged
+Join:      user B redeems code (recent auth if B owns an ACTIVE household) → tx: code consumed +
+           join_request PENDING (+ merge mode if B owns a solo household); B may preview, follow and cancel
+Approve:   the inviter A approves (recent auth) → tx: lock households (ordered) → re-validate → member count
+           check → [merge per BR-HH-13 through the HouseholdMergeParticipant SPI, ADR-009] → membership →
+           MemberJoined / HouseholdMerged; any active member may instead refuse
+End of S:  per merge mode (BR-HH-13): S DISSOLVED with a joiner-only 30-day archive (NONE, SHARED_DISCARD), or
+           logically deleted at approval, no archive (SHARED_AS_SHARED / SHARED_AS_PERSONAL)
 Dissolve:  either member (recent auth) → status=DISSOLVED, archive access 90 days for both,
-           HouseholdDissolved → notifications; each may create a new household seeded per BR-HH-11
-Purge:     scheduler deletes dissolved households after purge_at
+           HouseholdDissolved → in-app banner for the partner at next app open (MVP; push/e-mail in V1, BR-NOT);
+           each may create a new household seeded per BR-HH-11
+Purge:     scheduler purges dissolved households after purge_at through the HouseholdPurgeParticipant SPI
 ```
+
+`household` depends on no business module: the merge and the purge are driven through two small SPIs defined in
+`household.api` and implemented by `categorization`, `expense`, `receipt`, `budget` (purge only) and, in V1, `savings`
+([ADR-009](adr/009-household-join-journey.md)). The resulting merge/purge order and the sensitive-operation check
+(recent authentication, security.md §3.1) are specified there.
 
 ## 7. API design
 
@@ -179,7 +189,8 @@ Purge:     scheduler deletes dissolved households after purge_at
 - **OpenAPI 3.1** generated from code (springdoc), committed to `api/openapi.yaml`, diffed in CI; breaking-change
   check (e.g. `oasdiff`) against the last release; TypeScript client generated from it.
 - Resources: `POST /households` (create), `/households/me`, `/households/me/invitations`, `/households/me/join-requests`,
-  `/households/me/dissolution`, `/expenses`, `/receipts`, `/categories`, `/budgets/{periodStart}`,
+  `/households/me/dissolution`, requester-side `/me/join-requests` (`/preview`, `POST`, `/current`, `/{id}/cancel`),
+  archive routes `/archives` and `/archives/{archiveId}/...` (read-only, CSV export, documents), `/expenses`, `/receipts`, `/categories`, `/budgets/{periodStart}`,
   `/savings-goals`, `/analytics/periods/{periodStart}?scope=HOUSEHOLD|PERSONAL`, `/insights`, `/me/consents`.
   The household is **derived from the authenticated user**.
 - Money: `{"amount": "12.50", "currency": "EUR"}` (string amount).
@@ -272,6 +283,7 @@ Purge:     scheduler deletes dissolved households after purge_at
 | D15 | Receipt = evidence, Expense = financial data; single link `expense.receipt_id` | ADR-006 |
 | D16 | Database-level invariants: composite household FKs, currency pinning, member seats, Σ items trigger | ADR-006, database-schema.md |
 | D17 | Receipt `status` and `analysis_status` as separate dimensions | ADR-006 |
+| D18 | Household join journey: lifecycle participant SPIs (no module cycle), recent authentication, archive routes, end of the source household per merge mode | ADR-009 |
 
 ## 12. Open questions
 
