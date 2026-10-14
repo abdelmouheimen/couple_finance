@@ -175,7 +175,7 @@ Related decisions: [ADR-002 household lifecycle](../architecture/adr/002-househo
 | Profile, credentials, tokens, device tokens | Deleted immediately | Unchanged |
 | User's PERSONAL expenses, their receipts and audit | Purged within 30 days | Stay with owner; can be copied to their new household (BR-HH-11) |
 | SHARED expenses | Remain in the dissolved household's read-only archive for the partner; payer/creator shown as "Former member"; **notes written by the deleted user are redacted** | Read-only archive 90 days, then deleted |
-| Audit rows | Actor → "Former member"; free-text values redacted | Deleted with the archive |
+| Audit rows | Actor → "Former member"; free-text values redacted (including the rows kept in the origin household of entities moved by a merge) | Deleted with the archive, **except** the history of entities moved to another household by a merge: it stays unchanged in the origin household, readable only through the moved entity, and is purged together with that entity, its new household or the 24-month limit (ADR-009 §9) |
 | User-level merchant rules, consents | Deleted | Stay with the user |
 | Raw AI output | 90 days max (BR-RCP-18) | same |
 | `ai_call` log (no content) | Kept 13 months, pseudonymous | same |
